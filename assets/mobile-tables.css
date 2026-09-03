@@ -1,4 +1,9 @@
 @media(max-width:600px){
+  .content{max-width:100%;overflow-x:hidden}
+  .card{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .card>*{max-width:100%}
+  .table-card{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
   .sales-history{padding:14px;overflow:hidden}
   .sales-history h2{margin-bottom:12px}
   .sales-history .mobile-card-table{display:block;width:100%;min-width:0;border-collapse:separate}
