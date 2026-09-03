@@ -1,0 +1,18 @@
+<?php
+declare(strict_types=1);
+
+function data_quality_checks(): array{
+    $pdo=db();$checks=[];
+    $add=function(string $key,string $title,string $severity,int $count,string $message,string $action)use(&$checks){$checks[]=['key'=>$key,'title'=>$title,'severity'=>$severity,'count'=>$count,'message'=>$message,'action'=>$action];};
+    try{$count=(int)$pdo->query("SELECT COUNT(*) FROM products p WHERE p.active=1 AND NOT EXISTS(SELECT 1 FROM recipe_items ri WHERE ri.product_id=p.id)")->fetchColumn();$add('products_without_recipe','Активные товары без техкарты',$count>0?'critical':'ok',$count,'Без техкарты себестоимость и складские списания будут неполными.','Добавить техкарты всем продаваемым позициям.');}catch(Throwable $e){}
+    try{$count=(int)$pdo->query("SELECT COUNT(*) FROM sale_items WHERE unit_cost<=0 AND quantity>0")->fetchColumn();$add('sales_without_cost','Продажи с нулевой себестоимостью',$count>0?'warning':'ok',$count,'Такие чеки искажают food cost, валовую и операционную прибыль.','Проверить техкарты и дату их создания относительно импортированных продаж.');}catch(Throwable $e){}
+    try{$count=(int)$pdo->query("SELECT COUNT(*) FROM ingredients WHERE stock_quantity<0")->fetchColumn();$add('negative_stock','Отрицательные остатки',$count>0?'critical':'ok',$count,'Отрицательный склад обычно означает пропущенную закупку, неверное списание или начальный остаток.','Провести инвентаризацию и сверить движения.');}catch(Throwable $e){}
+    try{$count=(int)$pdo->query("SELECT COUNT(*) FROM ingredients WHERE purchase_quantity<=0 OR purchase_price<0")->fetchColumn();$add('invalid_purchase_cost','Некорректная закупочная база',$count>0?'critical':'ok',$count,'Нулевая закупочная фасовка делает расчёт себестоимости невозможным.','Исправить цену и количество закупочной единицы ингредиента.');}catch(Throwable $e){}
+    try{$count=(int)$pdo->query("SELECT COUNT(*) FROM products WHERE sale_price<=0 AND active=1")->fetchColumn();$add('zero_prices','Активные товары с нулевой ценой',$count>0?'warning':'ok',$count,'Нулевая цена может искажать выручку и маржинальность.','Проверить цены или отключить служебные позиции.');}catch(Throwable $e){}
+    try{$count=(int)$pdo->query("SELECT COUNT(*) FROM sales WHERE total_amount<0")->fetchColumn();$add('negative_sales','Продажи с отрицательной суммой',$count>0?'warning':'ok',$count,'Возвраты должны обрабатываться отдельно и не маскироваться отрицательной продажей.','Проверить источник и импорт таких записей.');}catch(Throwable $e){}
+    try{$count=(int)$pdo->query("SELECT COUNT(*) FROM expenses WHERE amount<=0")->fetchColumn();$add('invalid_expenses','Расходы с нулевой/отрицательной суммой',$count>0?'warning':'ok',$count,'Такие записи ухудшают качество управленческой отчётности.','Исправить или удалить ошибочные расходы.');}catch(Throwable $e){}
+    try{$count=(int)$pdo->query("SELECT COUNT(*) FROM purchases WHERE quantity<=0 OR total_amount<0")->fetchColumn();$add('invalid_purchases','Некорректные закупки',$count>0?'warning':'ok',$count,'Закупки с неверным количеством/суммой ломают цену и склад.','Проверить документы закупок.');}catch(Throwable $e){}
+    try{$count=(int)$pdo->query("SELECT COUNT(*) FROM users WHERE active=0")->fetchColumn();$add('disabled_users','Отключённые пользователи','info',$count,'Отключённые аккаунты не могут войти в Kapouch.','Периодически проверять, что доступы бывших сотрудников закрыты.');}catch(Throwable $e){}
+    return $checks;
+}
+function data_quality_summary(): array{$c=data_quality_checks();$r=['critical'=>0,'warning'=>0,'info'=>0,'ok'=>0,'total_issues'=>0];foreach($c as $x){$r[$x['severity']]++;if($x['severity']!=='ok')$r['total_issues']+=$x['count'];}return $r;}
