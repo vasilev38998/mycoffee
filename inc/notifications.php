@@ -32,7 +32,8 @@ function send_telegram_message(string $text): void
     $row=telegram_notification_settings();
     if(!$row||!(int)$row['enabled']||empty($row['destination'])||empty($row['secret_ciphertext']))throw new RuntimeException('Telegram-уведомления не настроены.');
     $token=decrypt_notification_secret($row);
-    $url='https://api.telegram.org/bot'.rawurlencode($token).'/sendMessage';
+    if(!preg_match('/^[0-9]+:[A-Za-z0-9_-]+$/',$token))throw new RuntimeException('Некорректный Telegram bot token.');
+    $url='https://api.telegram.org/bot'.$token.'/sendMessage';
     $ch=curl_init($url);
     curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_TIMEOUT=>30,CURLOPT_POSTFIELDS=>http_build_query(['chat_id'=>$row['destination'],'text'=>$text,'disable_web_page_preview'=>1])]);
     $body=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
