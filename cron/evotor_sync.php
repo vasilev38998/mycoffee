@@ -10,10 +10,12 @@ require dirname(__DIR__) . '/inc/bootstrap.php';
 $migration = file_get_contents(dirname(__DIR__) . '/database/migrations/002_evotor.sql');
 if ($migration !== false) db()->exec($migration);
 require_once dirname(__DIR__) . '/inc/evotor.php';
+require_once dirname(__DIR__) . '/inc/cash_register.php';
 require_once dirname(__DIR__) . '/inc/automatic_expenses.php';
 require_once dirname(__DIR__) . '/inc/inventory.php';
 ensure_automatic_expense_tables();
 ensure_inventory_tables();
+ensure_cash_register_tables();
 
 $connections = db()->query('SELECT * FROM evotor_connections WHERE enabled=1 ORDER BY id')->fetchAll();
 $failed = false;
@@ -21,7 +23,8 @@ $failed = false;
 foreach ($connections as $connection) {
     try {
         $result = evotor_run_sync($connection, 'full');
-        echo sprintf("[%s] %s: processed %d\n", date('c'), $connection['store_id'], $result['processed']);
+        $cash = sync_evotor_cash_register(evotor_connection((int)$connection['id']) ?? $connection);
+        echo sprintf("[%s] %s: processed %d, cash documents %d\n", date('c'), $connection['store_id'], $result['processed'], $cash);
     } catch (Throwable $e) {
         $failed = true;
         fwrite(STDERR, sprintf("[%s] %s: %s\n", date('c'), $connection['store_id'], $e->getMessage()));

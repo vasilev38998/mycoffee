@@ -6,6 +6,8 @@ require_auth();
 $migration = file_get_contents(__DIR__ . '/database/migrations/002_evotor.sql');
 if ($migration !== false) db()->exec($migration);
 require_once __DIR__ . '/inc/evotor.php';
+require_once __DIR__ . '/inc/cash_register.php';
+ensure_cash_register_tables();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
@@ -44,7 +46,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $connection=evotor_connection($id);
             if(!$connection) throw new RuntimeException('Подключение не найдено.');
             $result=evotor_run_sync($connection,$type);
+            $cashProcessed=0;
+            if($type==='full'||$type==='documents')$cashProcessed=sync_evotor_cash_register(evotor_connection($id)??$connection);
             $message='Синхронизация завершена. Обработано объектов: '.$result['processed'];
+            if($cashProcessed)$message.=' · кассовых документов: '.$cashProcessed;
             if(!empty($result['cleaned'])) $message.=' · удалено дублей: '.$result['cleaned'];
             flash('success',$message);
         }
@@ -65,8 +70,8 @@ page_header('Интеграции');
 <div class="card">
     <div class="integration-hero"><div><div class="eyebrow">Автоматическая интеграция</div><h2 style="font-size:24px;margin:5px 0 4px"><?=e($c['store_name'] ?: 'Мой магазин')?></h2><div class="muted"><?=e($c['store_id'])?></div></div><span class="pill connected">● Подключено</span></div>
     <div class="section"><div class="muted" style="font-size:12px;margin-bottom:7px">Токен Эвотор</div><div class="token-box">••••••••••••••••••••</div><div class="muted" style="font-size:11px;margin-top:7px">Токен закреплён за интеграцией и хранится зашифрованным. Повторный ввод не требуется.</div></div>
-    <div class="sync-status"><div><small>Номенклатура</small><strong><?=$c['last_products_sync_ms']?e(date('d.m.Y H:i',(int)($c['last_products_sync_ms']/1000))):'ещё не синхронизировалась'?></strong></div><div><small>Чеки и возвраты</small><strong><?=$c['last_documents_sync_ms']?e(date('d.m.Y H:i',(int)($c['last_documents_sync_ms']/1000))):'ещё не синхронизировались'?></strong></div></div>
-    <div class="actions"><form method="post"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="sync"><input type="hidden" name="connection_id" value="<?=$c['id']?>"><input type="hidden" name="sync_type" value="full"><button class="btn primary">↻ Синхронизировать всё</button></form><form method="post"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="sync"><input type="hidden" name="connection_id" value="<?=$c['id']?>"><input type="hidden" name="sync_type" value="documents"><button class="btn ghost">Только новые чеки</button></form></div>
+    <div class="sync-status"><div><small>Номенклатура</small><strong><?=$c['last_products_sync_ms']?e(date('d.m.Y H:i',(int)($c['last_products_sync_ms']/1000))):'ещё не синхронизировалась'?></strong></div><div><small>Чеки и возвраты</small><strong><?=$c['last_documents_sync_ms']?e(date('d.m.Y H:i',(int)($c['last_documents_sync_ms']/1000))):'ещё не синхронизировались'?></strong></div><div><small>Касса</small><strong><?=$c['last_cash_sync_ms']?e(date('d.m.Y H:i',(int)($c['last_cash_sync_ms']/1000))):'ещё не синхронизировалась'?></strong></div></div>
+    <div class="actions"><form method="post"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="sync"><input type="hidden" name="connection_id" value="<?=$c['id']?>"><input type="hidden" name="sync_type" value="full"><button class="btn primary">↻ Синхронизировать всё</button></form><form method="post"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="sync"><input type="hidden" name="connection_id" value="<?=$c['id']?>"><input type="hidden" name="sync_type" value="documents"><button class="btn ghost">Новые чеки + касса</button></form><a class="btn ghost" href="cash.php">Открыть кассу</a></div>
 </div>
 <?php endforeach; ?>
 
