@@ -3,26 +3,34 @@ declare(strict_types=1);
 function page_header(string $title): void {
     $user=current_user(); $flash=pull_flash();
     $current=basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
-    $nav=[
-        ['index.php','Дашборд'],
-        ['control.php','Контроль'],
-        ['analytics.php','Аналитика'],
-        ['daily_report.php','Отчёт дня'],
-        ['planning.php','Планирование'],
-        ['cash.php','Касса'],
-        ['ingredients.php','Ингредиенты'],
-        ['products.php','Меню и техкарты'],
-        ['inventory.php','Склад'],
-        ['purchases.php','Закупки'],
-        ['sales.php','Продажи'],
-        ['expenses.php','Расходы'],
-        ['automatic_expenses.php','Авторасходы'],
-        ['integrations.php','Интеграции'],
-        ['settings.php','Настройки'],
-        ['updates.php','Обновления'],
+    $navGroups=[
+        ['label'=>'Обзор','items'=>[
+            ['index.php','Дашборд'],
+            ['control.php','Контроль'],
+            ['analytics.php','Аналитика'],
+            ['daily_report.php','Отчёт дня'],
+            ['planning.php','Планирование'],
+        ]],
+        ['label'=>'Операции','items'=>[
+            ['cash.php','Касса'],
+            ['sales.php','Продажи'],
+            ['expenses.php','Расходы'],
+            ['automatic_expenses.php','Авторасходы'],
+        ]],
+        ['label'=>'Меню и склад','items'=>[
+            ['products.php','Меню и техкарты'],
+            ['ingredients.php','Ингредиенты'],
+            ['inventory.php','Склад'],
+            ['purchases.php','Закупки'],
+        ]],
+        ['label'=>'Система','items'=>[
+            ['integrations.php','Интеграции'],
+            ['settings.php','Настройки'],
+            ['updates.php','Обновления'],
+        ]],
     ];
     $coffeeName=(string)app_setting('coffee_name','Kapouch');
-    ?><!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#111827"><title><?=e($title)?> — <?=e($coffeeName)?></title><link rel="stylesheet" href="assets/style.css?v=20260903-10"></head><body><div class="app"><aside class="sidebar"><a class="brand" href="index.php"><span class="brand-mark">K</span><span class="brand-copy"><strong><?=e($coffeeName)?></strong><small>управление кофейней</small></span></a><nav><?php foreach($nav as [$href,$label]):?><a class="<?=$current===$href?'active':''?>" href="<?=e($href)?>"><span class="nav-dot"></span><span class="nav-label"><?=e($label)?></span></a><?php endforeach;?></nav><div class="sidebar-foot"><a class="user-badge" href="settings.php"><span><?=e(mb_strtoupper(mb_substr($user['name'] ?? 'U',0,1)))?></span><div><strong><?=e($user['name'] ?? '')?></strong><small>Профиль и настройки</small></div></a><a class="logout-link" href="logout.php">Выйти</a></div></aside><main class="content"><header class="topbar"><div><div class="eyebrow">Панель владельца · <?=e(date_default_timezone_get())?></div><h1><?=e($title)?></h1></div><div class="topbar-date"><?=e(date('d.m.Y H:i'))?></div></header><?php foreach($flash as $m): ?><div class="alert <?=e($m['type'])?>"><?=e($m['message'])?></div><?php endforeach; ?><?php
+    ?><!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#111827"><title><?=e($title)?> — <?=e($coffeeName)?></title><link rel="stylesheet" href="assets/style.css?v=20260903-10"><link rel="stylesheet" href="assets/sidebar-groups.css?v=20260903-1"></head><body><div class="app"><aside class="sidebar"><a class="brand" href="index.php"><span class="brand-mark">K</span><span class="brand-copy"><strong><?=e($coffeeName)?></strong><small>управление кофейней</small></span></a><nav class="sidebar-groups"><?php foreach($navGroups as $group):$groupActive=false;foreach($group['items'] as $item){if($current===$item[0]){$groupActive=true;break;}}?><details class="nav-group" <?=$groupActive?'open':''?>><summary><span class="group-icon"></span><span class="group-label"><?=e($group['label'])?></span><span class="group-chevron">›</span></summary><div class="nav-submenu"><?php foreach($group['items'] as [$href,$label]):?><a class="<?=$current===$href?'active':''?>" href="<?=e($href)?>"><span class="nav-dot"></span><span class="nav-label"><?=e($label)?></span></a><?php endforeach;?></div></details><?php endforeach;?></nav><div class="sidebar-foot"><a class="user-badge" href="settings.php"><span><?=e(mb_strtoupper(mb_substr($user['name'] ?? 'U',0,1)))?></span><div><strong><?=e($user['name'] ?? '')?></strong><small>Профиль и настройки</small></div></a><a class="logout-link" href="logout.php">Выйти</a></div></aside><main class="content"><header class="topbar"><div><div class="eyebrow">Панель владельца · <?=e(date_default_timezone_get())?></div><h1><?=e($title)?></h1></div><div class="topbar-date"><?=e(date('d.m.Y H:i'))?></div></header><?php foreach($flash as $m): ?><div class="alert <?=e($m['type'])?>"><?=e($m['message'])?></div><?php endforeach; ?><?php
     $updateError=$GLOBALS['kapouch_update_error']??null;
     if($updateError && $current!=='updates.php'){?><div class="alert danger"><strong>Обновление базы не завершено.</strong> <a href="updates.php">Открыть «Обновления»</a> и посмотреть причину.</div><?php }
     if($current==='index.php'){
@@ -41,4 +49,4 @@ function page_header(string $title): void {
         }catch(Throwable $e){}
     }
 }
-function page_footer(): void { ?></main></div></body></html><?php }
+function page_footer(): void { ?><script>(function(){var groups=document.querySelectorAll('.sidebar .nav-group');groups.forEach(function(group){group.addEventListener('toggle',function(){if(!group.open)return;groups.forEach(function(other){if(other!==group)other.open=false;});});});})();</script></main></div></body></html><?php }
