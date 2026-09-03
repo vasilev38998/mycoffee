@@ -3,8 +3,11 @@ declare(strict_types=1);
 
 function ensure_settings_tables(): void
 {
+    static $ready = false;
+    if ($ready) return;
     $migration = file_get_contents(__DIR__ . '/../database/migrations/005_settings.sql');
     if ($migration !== false) db()->exec($migration);
+    $ready = true;
 }
 
 function app_setting(string $key, mixed $default = null): mixed
@@ -55,7 +58,9 @@ function set_system_meta(string $key, string $value): void
 
 function migrate_evotor_times_to_irkutsk_once(): int
 {
+    ensure_settings_tables();
     if (system_meta('evotor_time_rebased_to_irkutsk') === '1') return 0;
+
     $pdo = db();
     $pdo->beginTransaction();
     try {
@@ -65,11 +70,12 @@ function migrate_evotor_times_to_irkutsk_once(): int
         } catch (Throwable $e) {
             // Интеграция может ещё не быть установлена.
         }
-        set_system_meta('evotor_time_rebased_to_irkutsk','1');
+        $meta = $pdo->prepare('INSERT INTO system_meta(meta_key,meta_value) VALUES(?,?) ON DUPLICATE KEY UPDATE meta_value=VALUES(meta_value)');
+        $meta->execute(['evotor_time_rebased_to_irkutsk','1']);
         $pdo->commit();
         return (int)$sales;
     } catch (Throwable $e) {
-        $pdo->rollBack();
+        if ($pdo->inTransaction()) $pdo->rollBack();
         throw $e;
     }
 }
