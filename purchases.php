@@ -2,6 +2,8 @@
 require __DIR__ . '/inc/bootstrap.php';
 require __DIR__ . '/inc/layout.php';
 require_auth();
+require_once __DIR__ . '/inc/inventory.php';
+ensure_inventory_tables();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
@@ -18,9 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $stmt = $pdo->prepare('INSERT INTO purchases(purchased_at, ingredient_id, quantity, total_amount, supplier) VALUES(?,?,?,?,?)');
             $stmt->execute([$purchasedAt, $ingredientId, $quantity, $totalAmount, $supplier]);
+            $purchaseId = (int)$pdo->lastInsertId();
 
             $update = $pdo->prepare('UPDATE ingredients SET stock_quantity = stock_quantity + ?, purchase_price = ?, purchase_quantity = ? WHERE id = ?');
             $update->execute([$quantity, $totalAmount, $quantity, $ingredientId]);
+
+            $movement = $pdo->prepare('INSERT INTO inventory_movements(ingredient_id,movement_type,quantity_delta,reference_type,reference_id,occurred_at,note) VALUES(?,?,?,?,?,?,?)');
+            $movement->execute([$ingredientId,'purchase',$quantity,'purchase',$purchaseId,$purchasedAt.' 12:00:00',$supplier !== '' ? 'Закупка: '.$supplier : 'Закупка']);
 
             $pdo->commit();
             flash('success', 'Закупка сохранена, остаток и закупочная цена обновлены.');
@@ -59,19 +65,8 @@ page_header('Закупки');
 
 <div class="card section">
     <h2>История закупок</h2>
-    <table>
-        <thead><tr><th>Дата</th><th>Ингредиент</th><th>Количество</th><th>Сумма</th><th>Поставщик</th></tr></thead>
-        <tbody>
-        <?php foreach($rows as $r): ?>
-            <tr>
-                <td><?=e(date('d.m.Y', strtotime($r['purchased_at'])))?></td>
-                <td><?=e($r['ingredient_name'])?></td>
-                <td><?=e((string)$r['quantity'])?> <?=e($r['unit'])?></td>
-                <td><?=money((float)$r['total_amount'])?></td>
-                <td><?=e((string)$r['supplier'])?></td>
-            </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
+    <table><thead><tr><th>Дата</th><th>Ингредиент</th><th>Количество</th><th>Сумма</th><th>Поставщик</th></tr></thead><tbody>
+    <?php foreach($rows as $r): ?><tr><td><?=e(date('d.m.Y', strtotime($r['purchased_at'])))?></td><td><?=e($r['ingredient_name'])?></td><td><?=e((string)$r['quantity'])?> <?=e($r['unit'])?></td><td><?=money((float)$r['total_amount'])?></td><td><?=e((string)$r['supplier'])?></td></tr><?php endforeach; ?>
+    </tbody></table>
 </div>
 <?php page_footer(); ?>
