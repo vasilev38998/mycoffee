@@ -1,5 +1,3 @@
-ALTER TABLE evotor_connections ADD COLUMN IF NOT EXISTS last_cash_sync_ms BIGINT NULL AFTER last_documents_sync_ms;
-
 CREATE TABLE IF NOT EXISTS cash_register_documents (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     connection_id INT UNSIGNED NOT NULL,
