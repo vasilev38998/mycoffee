@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__.'/automatic_expenses.php';
+
 function budget_month_start(?string $month=null): string{
     $month=$month?:date('Y-m');
     return preg_match('/^\d{4}-\d{2}$/',$month)?$month.'-01':date('Y-m-01');
@@ -32,22 +34,28 @@ function budget_save(string $monthStart,float $revenue,float $profit,float $purc
 
 function budget_actual_expense_categories(string $from,string $to): array{
     $stmt=db()->prepare('SELECT category,COALESCE(SUM(amount),0) amount FROM expenses WHERE spent_at BETWEEN ? AND ? GROUP BY category ORDER BY amount DESC');$stmt->execute([$from,$to]);$rows=$stmt->fetchAll();
-    $out=[];foreach($rows as $r)$out[(string)$r['category']]=(float)$r['amount'];return $out;
+    $out=[];foreach($rows as $r)$out[(string)$r['category']]=(float)$r['amount'];
+    try{
+        refresh_automatic_expenses($from,$to);
+        $auto=db()->prepare('SELECT r.category,COALESCE(SUM(a.amount),0) amount FROM automatic_expense_accruals a JOIN automatic_expense_rules r ON r.id=a.rule_id WHERE a.accrual_date BETWEEN ? AND ? GROUP BY r.category');$auto->execute([$from,$to]);
+        foreach($auto->fetchAll() as $r)$out[(string)$r['category']]=($out[(string)$r['category']]??0)+(float)$r['amount'];
+    }catch(Throwable $e){}
+    arsort($out,SORT_NUMERIC);return $out;
 }
 
 function budget_fact(string $monthStart,?string $asOf=null): array{
     $monthEnd=date('Y-m-t',strtotime($monthStart));$today=$asOf?:date('Y-m-d');$to=min($monthEnd,$today);if($to<$monthStart)$to=$monthStart;
     $metrics=dashboard_metrics($monthStart,$to);
     $p=db()->prepare('SELECT COALESCE(SUM(total_amount),0) FROM purchases WHERE purchased_at BETWEEN ? AND ?');$p->execute([$monthStart,$to]);$purchases=(float)$p->fetchColumn();
-    $manual=budget_actual_expense_categories($monthStart,$to);
-    return ['from'=>$monthStart,'to'=>$to,'metrics'=>$metrics,'purchases'=>$purchases,'manual_categories'=>$manual];
+    $categories=budget_actual_expense_categories($monthStart,$to);
+    return ['from'=>$monthStart,'to'=>$to,'metrics'=>$metrics,'purchases'=>$purchases,'expense_categories'=>$categories];
 }
 
 function budget_plan_fact(string $monthStart): array{
     $budget=budget_get($monthStart);$lines=budget_expense_lines((int)$budget['id']);$fact=budget_fact($monthStart);$daysTotal=(int)date('t',strtotime($monthStart));$elapsed=max(1,(int)date('j',strtotime($fact['to'])));if(substr($fact['to'],0,7)!==substr($monthStart,0,7))$elapsed=$daysTotal;
     $progress=min(1,$elapsed/max(1,$daysTotal));
     $forecastRevenue=$progress>0?$fact['metrics']['revenue']/$progress:0;$forecastProfit=$progress>0?$fact['metrics']['operating_profit']/$progress:0;$forecastPurchases=$progress>0?$fact['purchases']/$progress:0;
-    $expenseRows=[];$actualCats=$fact['manual_categories'];
+    $expenseRows=[];$actualCats=$fact['expense_categories'];
     foreach($lines as $line){$plan=(float)$line['planned_amount'];$actual=(float)($actualCats[$line['category']]??0);$forecast=$progress>0?$actual/$progress:0;$expenseRows[]=['category'=>$line['category'],'plan'=>$plan,'actual'=>$actual,'forecast'=>$forecast,'used_pct'=>$plan>0?$actual/$plan*100:null,'forecast_pct'=>$plan>0?$forecast/$plan*100:null];unset($actualCats[$line['category']]);}
     foreach($actualCats as $cat=>$actual)$expenseRows[]=['category'=>$cat,'plan'=>0.0,'actual'=>$actual,'forecast'=>$progress>0?$actual/$progress:0,'used_pct'=>null,'forecast_pct'=>null];
     usort($expenseRows,fn($a,$b)=>$b['forecast']<=>$a['forecast']);
@@ -62,6 +70,7 @@ function budget_scenario(array $pf,float $revenueChangePct,float $expenseChangeP
 function budget_risks(array $pf): array{
     $warning=(float)app_setting('budget_warning_pct','90');$critical=(float)app_setting('budget_critical_pct','110');$risks=[];
     foreach($pf['expense_rows'] as $r){if($r['plan']<=0)continue;$pct=(float)$r['forecast_pct'];if($pct>=$warning)$risks[]=['severity'=>$pct>=$critical?'critical':'warning','title'=>'Риск перерасхода: '.$r['category'],'message'=>'Прогноз '.money($r['forecast']).' при бюджете '.money($r['plan']).' ('.number_format($pct,0,',',' ').'%).'];}
+    if((float)$pf['budget']['purchases_plan']>0&&$pf['forecast_purchases']>(float)$pf['budget']['purchases_plan'])$risks[]=['severity'=>$pf['forecast_purchases']>(float)$pf['budget']['purchases_plan']*1.1?'critical':'warning','title'=>'Прогноз закупок выше плана','message'=>'Прогноз '.money($pf['forecast_purchases']).' при плане '.money((float)$pf['budget']['purchases_plan']).'.'];
     if((float)$pf['budget']['revenue_plan']>0&&$pf['forecast_revenue']<(float)$pf['budget']['revenue_plan'])$risks[]=['severity'=>'warning','title'=>'Прогноз выручки ниже плана','message'=>'Прогноз '.money($pf['forecast_revenue']).' при плане '.money((float)$pf['budget']['revenue_plan']).'.'];
     if((float)$pf['budget']['profit_plan']>0&&$pf['forecast_profit']<(float)$pf['budget']['profit_plan'])$risks[]=['severity'=>$pf['forecast_profit']<0?'critical':'warning','title'=>'Прогноз прибыли ниже плана','message'=>'Прогноз '.money($pf['forecast_profit']).' при плане '.money((float)$pf['budget']['profit_plan']).'.'];
     return $risks;
