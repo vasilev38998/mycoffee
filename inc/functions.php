@@ -67,7 +67,23 @@ function dashboard_metrics(string $from, string $to): array
     $salesStmt->execute([$from . ' 00:00:00', $to]);
     $sales = $salesStmt->fetch();
 
-    $cogsStmt = $pdo->prepare('SELECT COALESCE(SUM(si.quantity * si.unit_cost),0) FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE s.sold_at >= ? AND s.sold_at < DATE_ADD(?, INTERVAL 1 DAY)');
+    // Для продаж, импортированных до заполнения техкарты, unit_cost мог сохраниться как 0.
+    // Историческую себестоимость не переписываем: если она есть (>0), используем её.
+    // Только для нулевых значений берём текущую стоимость техкарты как резервную оценку.
+    $cogsStmt = $pdo->prepare("SELECT COALESCE(SUM(
+        si.quantity * CASE
+            WHEN si.unit_cost > 0 THEN si.unit_cost
+            ELSE COALESCE((
+                SELECT SUM(ri.quantity * (i.purchase_price / NULLIF(i.purchase_quantity,0)))
+                FROM recipe_items ri
+                JOIN ingredients i ON i.id=ri.ingredient_id
+                WHERE ri.product_id=si.product_id
+            ),0)
+        END
+    ),0)
+    FROM sale_items si
+    JOIN sales s ON s.id=si.sale_id
+    WHERE s.sold_at >= ? AND s.sold_at < DATE_ADD(?, INTERVAL 1 DAY)");
     $cogsStmt->execute([$from . ' 00:00:00', $to]);
     $cogs = (float)$cogsStmt->fetchColumn();
 
