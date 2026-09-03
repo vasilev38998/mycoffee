@@ -21,10 +21,7 @@ function control_upsert(array $a): void
     $stmt->execute([$a['key'],$a['severity'],$a['category'],$a['title'],$a['message'],$a['recommendation']??null,$a['value']??null,$a['threshold']??null,json_encode($a['context']??[],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)]);
 }
 
-function control_metric_day(string $date): array
-{
-    return dashboard_metrics($date,$date);
-}
+function control_metric_day(string $date): array{return dashboard_metrics($date,$date);}
 
 function control_weekday_baseline(string $date): array
 {
@@ -35,33 +32,28 @@ function control_weekday_baseline(string $date): array
         if($m['checks']>0)$values[]=$m;
     }
     if(!$values)return ['revenue'=>0.0,'avg_check'=>0.0,'checks'=>0];
-    return [
-        'revenue'=>array_sum(array_column($values,'revenue'))/count($values),
-        'avg_check'=>array_sum(array_column($values,'avg_check'))/count($values),
-        'checks'=>(int)round(array_sum(array_column($values,'checks'))/count($values)),
-    ];
+    return ['revenue'=>array_sum(array_column($values,'revenue'))/count($values),'avg_check'=>array_sum(array_column($values,'avg_check'))/count($values),'checks'=>(int)round(array_sum(array_column($values,'checks'))/count($values))];
 }
 
 function evaluate_business_control(?string $date=null): array
 {
     ensure_control_tables();
     $date=$date?:date('Y-m-d',strtotime('-1 day'));
-    $seen=[];$alerts=[];
-    $push=function(array $a)use(&$seen,&$alerts){$seen[]=$a['key'];$alerts[]=$a;control_upsert($a);};
+    $runStarted=date('Y-m-d H:i:s');
+    $alerts=[];
+    $push=function(array $a)use(&$alerts){$alerts[]=$a;control_upsert($a);};
 
     $day=control_metric_day($date);$base=control_weekday_baseline($date);
-    $revenueDrop=(float)app_setting('control_revenue_drop_pct','15');
-    $avgDrop=(float)app_setting('control_avg_check_drop_pct','10');
-    if($base['revenue']>0){$drop=($base['revenue']-$day['revenue'])/$base['revenue']*100;if($drop>=$revenueDrop)$push(['key'=>'revenue_drop_'.$date,'severity'=>$drop>=30?'critical':'warning','category'=>'sales','title'=>'Выручка заметно ниже обычной','message'=>'Выручка за '.date('d.m',strtotime($date)).' ниже среднего такого же дня недели за 4 недели на '.number_format($drop,1,',',' ').'%.','recommendation'=>'Проверь трафик, часы работы, доступность популярных позиций и работу смены.','value'=>$drop,'threshold'=>$revenueDrop]);}
-    if($base['avg_check']>0){$drop=($base['avg_check']-$day['avg_check'])/$base['avg_check']*100;if($drop>=$avgDrop)$push(['key'=>'avg_check_drop_'.$date,'severity'=>'warning','category'=>'sales','title'=>'Снижение среднего чека','message'=>'Средний чек ниже своей 4-недельной базы на '.number_format($drop,1,',',' ').'%.','recommendation'=>'Посмотри структуру заказов, допродажи и долю дешёвых позиций.','value'=>$drop,'threshold'=>$avgDrop]);}
+    $revenueDrop=(float)app_setting('control_revenue_drop_pct','15');$avgDrop=(float)app_setting('control_avg_check_drop_pct','10');
+    if($base['revenue']>0){$drop=($base['revenue']-$day['revenue'])/$base['revenue']*100;if($drop>=$revenueDrop)$push(['key'=>'revenue_drop','severity'=>$drop>=30?'critical':'warning','category'=>'sales','title'=>'Выручка заметно ниже обычной','message'=>'Выручка за '.date('d.m',strtotime($date)).' ниже среднего такого же дня недели за 4 недели на '.number_format($drop,1,',',' ').'%.','recommendation'=>'Проверь трафик, часы работы, доступность популярных позиций и работу смены.','value'=>$drop,'threshold'=>$revenueDrop,'context'=>['date'=>$date]]);}
+    if($base['avg_check']>0){$drop=($base['avg_check']-$day['avg_check'])/$base['avg_check']*100;if($drop>=$avgDrop)$push(['key'=>'avg_check_drop','severity'=>'warning','category'=>'sales','title'=>'Снижение среднего чека','message'=>'Средний чек ниже своей 4-недельной базы на '.number_format($drop,1,',',' ').'%.','recommendation'=>'Посмотри структуру заказов, допродажи и долю дешёвых позиций.','value'=>$drop,'threshold'=>$avgDrop,'context'=>['date'=>$date]]);}
 
-    $targetFood=(float)app_setting('target_food_cost','30');
-    $food=$day['revenue']>0?$day['cogs']/$day['revenue']*100:0;
-    if($day['revenue']>0&&$food>$targetFood)$push(['key'=>'food_cost_'.$date,'severity'=>$food>$targetFood+10?'critical':'warning','category'=>'margin','title'=>'Food cost выше нормы','message'=>'Food cost за день — '.number_format($food,1,',',' ').'% при цели '.number_format($targetFood,1,',',' ').'%.','recommendation'=>'Проверь закупочные цены, техкарты, списания и позиции с низкой маржой.','value'=>$food,'threshold'=>$targetFood]);
+    $targetFood=(float)app_setting('target_food_cost','30');$food=$day['revenue']>0?$day['cogs']/$day['revenue']*100:0;
+    if($day['revenue']>0&&$food>$targetFood)$push(['key'=>'food_cost','severity'=>$food>$targetFood+10?'critical':'warning','category'=>'margin','title'=>'Food cost выше нормы','message'=>'Food cost за день — '.number_format($food,1,',',' ').'% при цели '.number_format($targetFood,1,',',' ').'%.','recommendation'=>'Проверь закупочные цены, техкарты, списания и позиции с низкой маржой.','value'=>$food,'threshold'=>$targetFood,'context'=>['date'=>$date]]);
 
     try{
         $cash=cash_period_summary($date,$date);$gross=$cash['cash_sales']+$cash['cash_returns'];$refundShare=$gross>0?$cash['cash_returns']/$gross*100:0;$refundLimit=(float)app_setting('control_refund_share_pct','8');
-        if($refundShare>$refundLimit)$push(['key'=>'cash_refunds_'.$date,'severity'=>$refundShare>$refundLimit*2?'critical':'warning','category'=>'cash','title'=>'Высокая доля наличных возвратов','message'=>'Возвраты наличными составили '.number_format($refundShare,1,',',' ').'% наличного оборота.','recommendation'=>'Проверь причины возвратов и конкретные чеки/смены.','value'=>$refundShare,'threshold'=>$refundLimit]);
+        if($refundShare>$refundLimit)$push(['key'=>'cash_refunds','severity'=>$refundShare>$refundLimit*2?'critical':'warning','category'=>'cash','title'=>'Высокая доля наличных возвратов','message'=>'Возвраты наличными составили '.number_format($refundShare,1,',',' ').'% наличного оборота.','recommendation'=>'Проверь причины возвратов и конкретные чеки/смены.','value'=>$refundShare,'threshold'=>$refundLimit,'context'=>['date'=>$date]]);
         $balance=current_cash_balance();$cashLimit=(float)app_setting('control_cash_limit','20000');
         if($cashLimit>0&&$balance['balance']>$cashLimit)$push(['key'=>'cash_limit','severity'=>'warning','category'=>'cash','title'=>'В кассе много наличных','message'=>'Расчётный остаток '.money((float)$balance['balance']).' выше лимита '.money($cashLimit).'.','recommendation'=>'Рассмотри инкассацию и проверь фактический остаток.','value'=>$balance['balance'],'threshold'=>$cashLimit]);
     }catch(Throwable $e){}
@@ -77,7 +69,8 @@ function evaluate_business_control(?string $date=null): array
         if($now>=$open&&$now<=$close){$last=(int)db()->query('SELECT COALESCE(MAX(last_documents_sync_ms),0) FROM evotor_connections WHERE enabled=1')->fetchColumn();if($last>0&&time()-(int)($last/1000)>7200)$push(['key'=>'evotor_stale','severity'=>'critical','category'=>'integration','title'=>'Эвотор давно не синхронизировался','message'=>'Новые документы не загружались больше 2 часов в рабочее время.','recommendation'=>'Проверь cron, токен и раздел «Интеграции».','value'=>(time()-(int)($last/1000))/3600,'threshold'=>2]);}
     }catch(Throwable $e){}
 
-    if($seen){$marks=implode(',',array_fill(0,count($seen),'?'));$stmt=db()->prepare("UPDATE control_alerts SET status='resolved',resolved_at=NOW() WHERE status<>'resolved' AND alert_key NOT IN ($marks) AND alert_key NOT LIKE '%_'.? ");$params=$seen;$params[]=$date;$stmt->execute($params);}else db()->exec("UPDATE control_alerts SET status='resolved',resolved_at=NOW() WHERE status<>'resolved'");
+    $stmt=db()->prepare("UPDATE control_alerts SET status='resolved',resolved_at=NOW() WHERE status<>'resolved' AND last_seen_at<?");
+    $stmt->execute([$runStarted]);
     return $alerts;
 }
 
