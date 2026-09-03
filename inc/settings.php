@@ -5,6 +5,16 @@ function ensure_settings_tables(): void
 {
     static $ready = false;
     if ($ready) return;
+
+    try {
+        db()->query('SELECT setting_key FROM app_settings LIMIT 1');
+        db()->query('SELECT meta_key FROM system_meta LIMIT 1');
+        $ready = true;
+        return;
+    } catch (Throwable $e) {
+        // Первая загрузка после обновления — создаём таблицы ниже.
+    }
+
     $migration = file_get_contents(__DIR__ . '/../database/migrations/005_settings.sql');
     if ($migration !== false) db()->exec($migration);
     $ready = true;
