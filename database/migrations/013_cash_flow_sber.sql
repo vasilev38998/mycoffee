@@ -40,6 +40,26 @@ INSERT IGNORE INTO cash_flow_accounts(name,account_type,provider,opening_balance
 ('Сбер Расчётный счёт','bank','Sberbank',0,1),
 ('Владелец','owner',NULL,0,1);
 
+SET @kapouch_expense_cash_account_exists := (
+ SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='expenses' AND COLUMN_NAME='cash_flow_account_id'
+);
+SET @kapouch_expense_cash_account_sql := IF(@kapouch_expense_cash_account_exists=0,
+ 'ALTER TABLE expenses ADD COLUMN cash_flow_account_id INT UNSIGNED NULL, ADD KEY idx_expenses_cash_flow_account (cash_flow_account_id), ADD CONSTRAINT fk_expenses_cash_flow_account FOREIGN KEY (cash_flow_account_id) REFERENCES cash_flow_accounts(id) ON DELETE SET NULL',
+ 'SELECT 1');
+PREPARE kapouch_expense_cash_account_stmt FROM @kapouch_expense_cash_account_sql;
+EXECUTE kapouch_expense_cash_account_stmt;
+DEALLOCATE PREPARE kapouch_expense_cash_account_stmt;
+
+SET @kapouch_purchase_cash_account_exists := (
+ SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='purchases' AND COLUMN_NAME='cash_flow_account_id'
+);
+SET @kapouch_purchase_cash_account_sql := IF(@kapouch_purchase_cash_account_exists=0,
+ 'ALTER TABLE purchases ADD COLUMN cash_flow_account_id INT UNSIGNED NULL, ADD KEY idx_purchases_cash_flow_account (cash_flow_account_id), ADD CONSTRAINT fk_purchases_cash_flow_account FOREIGN KEY (cash_flow_account_id) REFERENCES cash_flow_accounts(id) ON DELETE SET NULL',
+ 'SELECT 1');
+PREPARE kapouch_purchase_cash_account_stmt FROM @kapouch_purchase_cash_account_sql;
+EXECUTE kapouch_purchase_cash_account_stmt;
+DEALLOCATE PREPARE kapouch_purchase_cash_account_stmt;
+
 INSERT INTO app_settings(setting_key,setting_value) VALUES
 ('sber_acquiring_enabled','1'),
 ('sber_acquiring_fee_pct','0'),
