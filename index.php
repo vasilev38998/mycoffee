@@ -16,7 +16,7 @@ page_header('Дашборд');
 <div class="card metric"><div class="muted">Средний чек</div><div class="value"><?=money($m['avg_check'])?></div></div>
 <div class="card metric"><div class="muted">Себестоимость</div><div class="value"><?=money($m['cogs'])?></div></div>
 <div class="card metric"><div class="muted">Валовая прибыль</div><div class="value"><?=money($m['gross_profit'])?></div></div>
-<div class="card metric"><div class="muted">Расходы</div><div class="value"><?=money($m['expenses'])?></div></div>
+<div class="card metric"><div class="muted">Расходы всего</div><div class="value"><?=money($m['expenses'])?></div><div class="muted">ручные <?=money($m['manual_expenses'])?> · автоматические <?=money($m['automatic_expenses'])?></div></div>
 <div class="card metric"><div class="muted">Операционная прибыль</div><div class="value"><?=money($m['operating_profit'])?></div></div>
 <div class="card metric"><div class="muted">Маржинальность</div><div class="value"><?=number_format($m['margin'],1,',',' ')?>%</div></div>
 </div>
