@@ -13,8 +13,13 @@ if (!file_exists($configFile)) {
 }
 
 $config = require $configFile;
-date_default_timezone_set($config['app']['timezone'] ?? 'Europe/Moscow');
+
+// Иркутск — безопасный системный дефолт ещё до подключения БД.
+date_default_timezone_set('Asia/Irkutsk');
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/settings.php';
+ensure_settings_tables();
+date_default_timezone_set(app_timezone());
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/auth.php';
