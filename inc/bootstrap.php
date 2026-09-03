@@ -18,6 +18,18 @@ $config = require $configFile;
 date_default_timezone_set('Asia/Irkutsk');
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/updater.php';
+
+$GLOBALS['kapouch_update_result'] = ['applied'=>[],'failed'=>null];
+$GLOBALS['kapouch_update_error'] = null;
+try {
+    $GLOBALS['kapouch_update_result'] = kapouch_apply_pending_migrations(db(), true);
+} catch (Throwable $e) {
+    // Не считаем неудачную миграцию применённой и сохраняем ошибку для экрана «Обновления».
+    // Приложение продолжает загружаться, чтобы владелец мог увидеть статус и повторить обновление.
+    $GLOBALS['kapouch_update_error'] = $e->getMessage();
+}
+
 require_once __DIR__ . '/settings.php';
 ensure_settings_tables();
 
