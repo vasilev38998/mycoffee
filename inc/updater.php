@@ -22,6 +22,31 @@ function kapouch_migration_number(string $file): int
     return preg_match('/^(\d+)_/', $name, $m) ? (int)$m[1] : 0;
 }
 
+function kapouch_normalize_sql_line_endings(string $sql): string
+{
+    return str_replace(["\r\n", "\r"], "\n", $sql);
+}
+
+function kapouch_migration_checksum(string $sql): string
+{
+    // Канонический checksum не зависит от ОС/FTP text mode: LF и CRLF означают тот же SQL.
+    return hash('sha256', kapouch_normalize_sql_line_endings($sql));
+}
+
+function kapouch_migration_checksum_matches(string $recorded, string $sql): bool
+{
+    $normalized = kapouch_normalize_sql_line_endings($sql);
+    $candidates = array_unique([
+        hash('sha256', $sql),
+        hash('sha256', $normalized),
+        hash('sha256', str_replace("\n", "\r\n", $normalized)),
+    ]);
+    foreach ($candidates as $candidate) {
+        if (hash_equals($recorded, $candidate)) return true;
+    }
+    return false;
+}
+
 function kapouch_ensure_migration_registry(PDO $pdo): void
 {
     $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -80,7 +105,7 @@ function kapouch_baseline_legacy_migrations(PDO $pdo): int
         $sql = file_get_contents($file);
         if ($sql === false) continue;
         $stmt = $pdo->prepare("INSERT IGNORE INTO schema_migrations(migration,migration_number,checksum,status,execution_ms,applied_at,app_version) VALUES(?,?,?,'baseline',0,NOW(),?)");
-        $stmt->execute([basename($file), $number, hash('sha256', $sql), KAPOUCH_APP_VERSION]);
+        $stmt->execute([basename($file), $number, kapouch_migration_checksum($sql), KAPOUCH_APP_VERSION]);
         $baselined += $stmt->rowCount();
     }
     return $baselined;
@@ -100,10 +125,10 @@ function kapouch_migration_status(PDO $pdo): array
         $name = basename($file);
         $sql = file_get_contents($file);
         if ($sql === false) continue;
-        $checksum = hash('sha256', $sql);
+        $checksum = kapouch_migration_checksum($sql);
         if (!isset($applied[$name])) {
             $pending[] = ['name'=>$name,'number'=>kapouch_migration_number($file),'file'=>$file,'checksum'=>$checksum];
-        } elseif (!hash_equals((string)$applied[$name]['checksum'], $checksum)) {
+        } elseif (!kapouch_migration_checksum_matches((string)$applied[$name]['checksum'], $sql)) {
             $changed[] = ['name'=>$name,'recorded'=>$applied[$name]['checksum'],'current'=>$checksum];
         }
     }
