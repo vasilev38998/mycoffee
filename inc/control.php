@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__.'/intelligence.php';
 require_once __DIR__.'/cash_register.php';
+require_once __DIR__.'/suppliers.php';
 
 function ensure_control_tables(): void
 {
@@ -60,6 +61,13 @@ function evaluate_business_control(?string $date=null): array
 
     $stockDays=(float)app_setting('control_stock_days_warning','3');
     foreach(array_slice(purchase_forecast(14,7),0,30) as $row){if($row['days_left']!==null&&$row['days_left']<$stockDays)$push(['key'=>'stock_'.(int)$row['id'],'severity'=>$row['days_left']<1?'critical':'warning','category'=>'stock','title'=>'Заканчивается '.$row['name'],'message'=>'Остатка хватит примерно на '.number_format((float)$row['days_left'],1,',',' ').' дн.','recommendation'=>'Рекомендуемый заказ: '.number_format((float)$row['suggested_order'],2,',',' ').' '.$row['unit'].'.','value'=>$row['days_left'],'threshold'=>$stockDays]);}
+
+    try{
+        foreach(array_slice(purchase_price_alerts(),0,20) as $row){
+            $change=(float)$row['change_pct'];
+            $push(['key'=>'purchase_price_'.(int)$row['ingredient_id'],'severity'=>$row['severity'],'category'=>'purchases','title'=>'Подорожал ингредиент: '.$row['name'],'message'=>'Последняя закупочная цена выросла на '.number_format($change,1,',',' ').'%: '.money((float)$row['previous_price']).' → '.money((float)$row['latest_price']).' за '.$row['unit'].'.','recommendation'=>'Открой «Закупочные цены», сравни поставщиков и проверь влияние на себестоимость меню.','value'=>$change,'threshold'=>(float)app_setting('purchase_price_warning_pct','10'),'context'=>['ingredient_id'=>$row['ingredient_id'],'supplier'=>$row['supplier_name'],'latest_date'=>$row['latest_date']]]);
+        }
+    }catch(Throwable $e){}
 
     $varianceLimit=(float)app_setting('control_inventory_variance_value','1000');
     foreach(inventory_variances(20) as $row){$value=(float)$row['variance_value'];if($value>=$varianceLimit)$push(['key'=>'inventory_variance_'.(int)$row['count_id'].'_'.md5($row['name']),'severity'=>$value>=$varianceLimit*3?'critical':'warning','category'=>'stock','title'=>'Крупное расхождение: '.$row['name'],'message'=>'Расхождение по инвентаризации оценивается в '.money($value).'.','recommendation'=>'Проверь списания, техкарту, единицы измерения и фактический учёт.','value'=>$value,'threshold'=>$varianceLimit]);}
