@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__.'/intelligence.php';
+require_once __DIR__.'/control.php';
 
 function daily_owner_report(string $date): array
 {
@@ -25,8 +26,9 @@ function daily_owner_report(string $date): array
     if($expenseLoad>$targetExpenses)$alerts[]='Расходы занимают '.number_format($expenseLoad,1,',',' ').'% выручки';
     $urgent=array_values(array_filter(purchase_forecast(14,7),fn($r)=>$r['days_left']!==null&&$r['days_left']<3));
     if($urgent)$alerts[]='Скоро закончится: '.implode(', ',array_slice(array_column($urgent,'name'),0,3));
+    $controlAlerts=array_slice(control_open_alerts(),0,5);
 
-    return ['date'=>$date,'metrics'=>$m,'previous'=>$prev,'food_cost'=>$foodCost,'expense_load'=>$expenseLoad,'top'=>$topRow,'peak'=>$peak,'alerts'=>$alerts,'urgent'=>$urgent];
+    return ['date'=>$date,'metrics'=>$m,'previous'=>$prev,'food_cost'=>$foodCost,'expense_load'=>$expenseLoad,'top'=>$topRow,'peak'=>$peak,'alerts'=>$alerts,'urgent'=>$urgent,'control_alerts'=>$controlAlerts];
 }
 
 function daily_owner_report_text(string $date): string
@@ -40,6 +42,7 @@ function daily_owner_report_text(string $date): string
     if($r['top'])$lines[]='Лидер: '.$r['top']['name'].' · валовая прибыль '.money((float)$r['top']['profit']);
     if($r['peak'])$lines[]='Пиковый час: '.sprintf('%02d:00–%02d:00',(int)$r['peak']['h'],((int)$r['peak']['h']+1)%24).' · '.money((float)$r['peak']['revenue']);
     if($r['alerts']){$lines[]='';$lines[]='Внимание:';foreach($r['alerts'] as $a)$lines[]='• '.$a;}
-    else{$lines[]='';$lines[]='Критичных отклонений не обнаружено.';}
+    if($r['control_alerts']){$lines[]='';$lines[]='Центр контроля:';foreach($r['control_alerts'] as $a)$lines[]='• '.($a['severity']==='critical'?'КРИТИЧНО: ':'').$a['title'].' — '.$a['message'];}
+    if(!$r['alerts']&&!$r['control_alerts']){$lines[]='';$lines[]='Критичных отклонений не обнаружено.';}
     return implode("\n",$lines);
 }
