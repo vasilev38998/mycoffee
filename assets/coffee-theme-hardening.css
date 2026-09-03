@@ -1,0 +1,84 @@
+:root{
+  --bg:#f3f2ef;
+  --surface:#ffffff;
+  --surface-soft:#f8f6f3;
+  --ink:#171411;
+  --muted:#625a53;
+  --line:#ded8d2;
+  --line-strong:#cfc6be;
+  --shadow:0 7px 22px rgba(48,36,28,.055);
+}
+
+html,body{max-width:100%;overflow-x:hidden}
+body{background:#f3f2ef;font-weight:500;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.app,.content{max-width:100%;min-width:0}
+.content>*{min-width:0;max-width:100%}
+.grid,.dashboard-grid,.two-col,.three-col,.form-grid,.sync-status{min-width:0}
+.grid>*,.dashboard-grid>*,.two-col>*,.three-col>*,.form-grid>*,.sync-status>*{min-width:0;max-width:100%}
+
+.card{background:#fff;box-shadow:var(--shadow);min-width:0;max-width:100%;overflow-x:auto;overflow-y:visible}
+.metric{overflow:hidden}
+.card>*{min-width:0;max-width:100%}
+.card p,.card .meta,.chart-head p,.insight-card p,.alert-item p,.period-note,.muted{color:var(--muted)}
+
+.topbar h1,.card h2,.chart-head h2{color:#171411;font-weight:800}
+.topbar-subtitle{margin-top:6px;color:#625a53;font-size:13px;font-weight:600}
+.eyebrow{color:#6d645c;font-weight:800}
+.metric .label{color:#4d4640;font-weight:750}
+.metric .value{color:#15120f;font-weight:820}
+.metric .meta{font-weight:600}
+.insight-card .kicker{color:#655c54;font-weight:750}
+.insight-card strong{font-weight:800;color:#1b1714}
+.alert-item strong{font-weight:800;color:#241e19}
+label{color:#514941;font-weight:700}
+input,select,textarea{color:#1a1714;font-weight:600;background:#fff}
+.btn{font-weight:800}
+th{color:#5e554d;font-weight:800}
+td{color:#29231e;font-weight:560}
+td strong{font-weight:800;color:#1d1915}
+
+/* Компактные двухколоночные сводки не должны наследовать десктопный min-width таблиц. */
+.two-col>.card>table,
+.three-col>.card>table,
+.insight-card>table,
+.metric>table{
+  min-width:0;
+  width:100%;
+  table-layout:fixed;
+}
+.two-col>.card>table td:first-child,
+.three-col>.card>table td:first-child{width:58%;overflow-wrap:anywhere}
+.two-col>.card>table td:last-child,
+.three-col>.card>table td:last-child{width:42%;text-align:right;overflow-wrap:anywhere;word-break:break-word}
+
+/* Любой реально широкий контент остаётся внутри своей карточки. */
+.table-card,.card{scrollbar-width:thin;scrollbar-color:#c9beb5 transparent}
+.table-card::-webkit-scrollbar,.card::-webkit-scrollbar{height:7px}
+.table-card::-webkit-scrollbar-thumb,.card::-webkit-scrollbar-thumb{background:#c9beb5;border-radius:999px}
+.chart-head,.legend-row,.alert-item,.integration-hero,.actions,.quick-action-strip{min-width:0;max-width:100%}
+.chart-head>*:first-child,.alert-item>div,.integration-hero>*{min-width:0}
+.chart-summary,.legend-row strong{max-width:48%;overflow-wrap:anywhere;text-align:right}
+
+@media(max-width:1180px){
+  .content{width:auto}
+  .two-col>.card>table td{font-size:12px}
+}
+
+@media(max-width:840px){
+  body{font-size:15px}
+  .content{width:100%;max-width:100%}
+  .card{overflow-x:auto}
+  .chart-head{flex-wrap:wrap}
+  .chart-summary{max-width:100%;text-align:left}
+}
+
+@media(max-width:600px){
+  body{font-weight:520}
+  .content{width:100%;overflow-x:hidden}
+  .card{max-width:100%;padding:15px}
+  .metric .label{font-size:11px}
+  .metric .meta,.chart-head p,.insight-card p,.alert-item p{font-size:11px;line-height:1.5}
+  td{font-size:12.5px}
+  .two-col>.card>table td:first-child,.three-col>.card>table td:first-child{width:55%}
+  .two-col>.card>table td:last-child,.three-col>.card>table td:last-child{width:45%}
+}
