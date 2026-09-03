@@ -45,18 +45,38 @@ function kapouch_table_exists(PDO $pdo, string $table): bool
     return (int)$stmt->fetchColumn() > 0;
 }
 
+function kapouch_column_exists(PDO $pdo, string $table, string $column): bool
+{
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?');
+    $stmt->execute([$table,$column]);
+    return (int)$stmt->fetchColumn() > 0;
+}
+
+function kapouch_legacy_migration_present(PDO $pdo, int $number): bool
+{
+    return match($number) {
+        2 => kapouch_table_exists($pdo,'evotor_connections') && kapouch_table_exists($pdo,'evotor_documents'),
+        3 => kapouch_table_exists($pdo,'automatic_expense_rules') && kapouch_table_exists($pdo,'automatic_expense_accruals'),
+        4 => kapouch_table_exists($pdo,'inventory_movements') && kapouch_table_exists($pdo,'inventory_counts'),
+        5 => kapouch_table_exists($pdo,'app_settings') && kapouch_table_exists($pdo,'system_meta'),
+        6 => kapouch_table_exists($pdo,'notification_settings'),
+        7 => kapouch_table_exists($pdo,'cash_register_documents') && kapouch_column_exists($pdo,'evotor_connections','last_cash_sync_ms'),
+        8 => kapouch_table_exists($pdo,'control_alerts'),
+        default => false,
+    };
+}
+
 function kapouch_baseline_legacy_migrations(PDO $pdo): int
 {
     kapouch_ensure_migration_registry($pdo);
-    $count = (int)$pdo->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn();
-    if ($count > 0 || !kapouch_table_exists($pdo, 'users')) return 0;
+    if (!kapouch_table_exists($pdo, 'users')) return 0;
 
-    // Existing Kapouch installations before the updater already applied migrations 002-008
-    // through feature-specific ensure_* helpers / install.php. We register them without rerunning SQL.
+    // Старые установки до появления центра обновлений могли применять миграции через ensure_*.
+    // Отмечаем baseline только когда ожидаемые таблицы/колонки реально существуют.
     $baselined = 0;
     foreach (kapouch_migration_files() as $file) {
         $number = kapouch_migration_number($file);
-        if ($number <= 0 || $number > KAPOUCH_LEGACY_BASELINE_MAX) continue;
+        if ($number <= 0 || $number > KAPOUCH_LEGACY_BASELINE_MAX || !kapouch_legacy_migration_present($pdo,$number)) continue;
         $sql = file_get_contents($file);
         if ($sql === false) continue;
         $stmt = $pdo->prepare("INSERT IGNORE INTO schema_migrations(migration,migration_number,checksum,status,execution_ms,applied_at,app_version) VALUES(?,?,?,'baseline',0,NOW(),?)");
