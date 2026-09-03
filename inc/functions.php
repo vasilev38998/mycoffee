@@ -74,7 +74,11 @@ function dashboard_metrics(string $from, string $to): array
 
     $expenseStmt = $pdo->prepare('SELECT COALESCE(SUM(amount),0) FROM expenses WHERE spent_at BETWEEN ? AND ?');
     $expenseStmt->execute([$from, $to]);
-    $expenses = (float)$expenseStmt->fetchColumn();
+    $manualExpenses = (float)$expenseStmt->fetchColumn();
+
+    require_once __DIR__ . '/automatic_expenses.php';
+    $automaticExpenses = automatic_expenses_total($from, $to);
+    $expenses = $manualExpenses + $automaticExpenses;
 
     $revenue = (float)$sales['revenue'];
     $checks = (int)$sales['checks'];
@@ -87,6 +91,8 @@ function dashboard_metrics(string $from, string $to): array
         'avg_check' => $checks > 0 ? $revenue / $checks : 0,
         'cogs' => $cogs,
         'gross_profit' => $grossProfit,
+        'manual_expenses' => $manualExpenses,
+        'automatic_expenses' => $automaticExpenses,
         'expenses' => $expenses,
         'operating_profit' => $operatingProfit,
         'margin' => $revenue > 0 ? ($operatingProfit / $revenue) * 100 : 0,
