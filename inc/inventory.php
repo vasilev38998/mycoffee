@@ -73,6 +73,23 @@ function apply_sale_inventory(int $saleId): int
     return $count;
 }
 
+function sync_inventory_from_sales(?string $from = null): int
+{
+    ensure_inventory_tables();
+    $sql = 'SELECT DISTINCT s.id FROM sales s JOIN sale_items si ON si.sale_id=s.id';
+    $params = [];
+    if ($from !== null) {
+        $sql .= ' WHERE s.sold_at >= ?';
+        $params[] = $from . ' 00:00:00';
+    }
+    $sql .= ' ORDER BY s.id';
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    $count = 0;
+    foreach ($stmt as $row) $count += apply_sale_inventory((int)$row['id']);
+    return $count;
+}
+
 function ingredient_expected_stock(int $ingredientId): float
 {
     $stmt = db()->prepare('SELECT stock_quantity FROM ingredients WHERE id=?');
