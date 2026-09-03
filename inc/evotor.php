@@ -49,7 +49,7 @@ function evotor_request(array $connection, string $path, array $query = []): arr
         CURLOPT_TIMEOUT => 45,
         CURLOPT_HTTPHEADER => [
             'Accept: application/vnd.evotor.v2+json;charset=UTF-8',
-            'X-Authorization: ' . evotor_decrypt_token($connection),
+            'Authorization: ' . evotor_decrypt_token($connection),
         ],
     ]);
 
