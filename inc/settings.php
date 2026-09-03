@@ -70,6 +70,11 @@ function migrate_evotor_times_to_irkutsk_once(): int
         } catch (Throwable $e) {
             // Интеграция может ещё не быть установлена.
         }
+        try {
+            $pdo->exec("UPDATE inventory_movements SET occurred_at=DATE_ADD(occurred_at, INTERVAL 5 HOUR) WHERE reference_type='sale_item'");
+        } catch (Throwable $e) {
+            // Склад может ещё не быть установлен.
+        }
         $meta = $pdo->prepare('INSERT INTO system_meta(meta_key,meta_value) VALUES(?,?) ON DUPLICATE KEY UPDATE meta_value=VALUES(meta_value)');
         $meta->execute(['evotor_time_rebased_to_irkutsk','1']);
         $pdo->commit();
