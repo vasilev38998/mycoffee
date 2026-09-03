@@ -96,10 +96,10 @@ function kapouch_migration_status(PDO $pdo): array
     return ['current_version'=>$latest,'available_version'=>$available,'pending'=>$pending,'changed'=>$changed,'applied'=>$applied];
 }
 
-function kapouch_apply_pending_migrations(PDO $pdo): array
+function kapouch_apply_pending_migrations(PDO $pdo, bool $baselineLegacy=true): array
 {
     kapouch_ensure_migration_registry($pdo);
-    kapouch_baseline_legacy_migrations($pdo);
+    if ($baselineLegacy) kapouch_baseline_legacy_migrations($pdo);
     $status = kapouch_migration_status($pdo);
     if ($status['changed']) {
         throw new RuntimeException('Обнаружено изменение уже применённой миграции: ' . $status['changed'][0]['name'] . '. Обновление остановлено для защиты данных.');
