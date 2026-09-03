@@ -5,7 +5,7 @@ function page_header(string $title): void {
     $current=basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
     $navGroups=[
         ['label'=>'Обзор','items'=>[
-            ['index.php','Дашборд'],['control.php','Контроль'],['analytics.php','Аналитика'],['economics.php','Экономика'],['budget.php','Бюджет и план-факт'],['daily_report.php','Отчёт дня'],['planning.php','Планирование'],['data_quality.php','Качество данных'],
+            ['index.php','Дашборд'],['owner_brief.php','Утро владельца'],['control.php','Контроль'],['analytics.php','Аналитика'],['economics.php','Экономика'],['budget.php','Бюджет и план-факт'],['daily_report.php','Отчёт дня'],['planning.php','Планирование'],['data_quality.php','Качество данных'],
         ]],
         ['label'=>'Операции','items'=>[
             ['cash.php','Касса'],['cash_flow.php','Денежный поток'],['sales.php','Продажи'],['expenses.php','Расходы'],['automatic_expenses.php','Авторасходы'],
