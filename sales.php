@@ -37,9 +37,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $products = db()->query('SELECT id,name,sale_price FROM products WHERE active=1 ORDER BY name')->fetchAll();
-$rows = db()->query("SELECT s.*,p.name,si.quantity,si.unit_price,si.unit_cost FROM sales s JOIN sale_items si ON si.sale_id=s.id JOIN products p ON p.id=si.product_id ORDER BY s.sold_at DESC LIMIT 100")->fetchAll();
+$rows = db()->query("SELECT s.*,p.name,si.quantity,si.unit_price,si.unit_cost,
+    CASE
+        WHEN si.unit_cost > 0 THEN si.unit_cost
+        ELSE COALESCE((
+            SELECT SUM(ri.quantity * (i.purchase_price / NULLIF(i.purchase_quantity,0)))
+            FROM recipe_items ri
+            JOIN ingredients i ON i.id=ri.ingredient_id
+            WHERE ri.product_id=si.product_id
+        ),0)
+    END AS display_unit_cost,
+    CASE WHEN si.unit_cost > 0 THEN 0 ELSE 1 END AS cost_estimated
+    FROM sales s
+    JOIN sale_items si ON si.sale_id=s.id
+    JOIN products p ON p.id=si.product_id
+    ORDER BY s.sold_at DESC LIMIT 100")->fetchAll();
 page_header('Продажи');
 ?>
 <div class="card"><h2>Добавить продажу</h2><form method="post" class="form-grid"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><label>Позиция<select name="product_id" required><?php foreach($products as $p):?><option value="<?=$p['id']?>"><?=e($p['name'])?> — <?=money((float)$p['sale_price'])?></option><?php endforeach;?></select></label><label>Количество<input type="number" step="0.01" min="0.01" name="quantity" value="1" required></label><label>Дата и время<input type="datetime-local" name="sold_at" value="<?=date('Y-m-d\TH:i')?>" required></label><label>Оплата<select name="payment_method"><option value="card">Карта</option><option value="cash">Наличные</option><option value="other">Другое</option></select></label><div><button class="btn primary">Добавить продажу</button></div></form></div>
-<div class="card section sales-history"><h2>Последние продажи</h2><table class="mobile-card-table"><thead><tr><th>Дата</th><th>Позиция</th><th>Кол-во</th><th>Выручка</th><th>Себестоимость</th><th>Валовая прибыль</th></tr></thead><tbody><?php foreach($rows as $r):$rev=(float)$r['unit_price']*(float)$r['quantity'];$cost=(float)$r['unit_cost']*(float)$r['quantity'];?><tr><td data-label="Дата"><?=e(date('d.m.Y H:i',strtotime($r['sold_at'])))?></td><td data-label="Позиция"><strong><?=e($r['name'])?></strong></td><td data-label="Кол-во"><?=e((string)$r['quantity'])?></td><td data-label="Выручка"><?=money($rev)?></td><td data-label="Себестоимость"><?=money($cost)?></td><td data-label="Валовая прибыль"><strong><?=money($rev-$cost)?></strong></td></tr><?php endforeach;?></tbody></table></div>
+<div class="card section sales-history"><div class="chart-head"><div><h2>Последние продажи</h2><p>Если историческая себестоимость отсутствует, Kapouch показывает текущую техкарту как оценку.</p></div></div><table class="mobile-card-table"><thead><tr><th>Дата</th><th>Позиция</th><th>Кол-во</th><th>Выручка</th><th>Себестоимость</th><th>Валовая прибыль</th></tr></thead><tbody><?php foreach($rows as $r):$rev=(float)$r['unit_price']*(float)$r['quantity'];$cost=(float)$r['display_unit_cost']*(float)$r['quantity'];?><tr><td data-label="Дата"><?=e(date('d.m.Y H:i',strtotime($r['sold_at'])))?></td><td data-label="Позиция"><strong><?=e($r['name'])?></strong></td><td data-label="Кол-во"><?=e((string)$r['quantity'])?></td><td data-label="Выручка"><?=money($rev)?></td><td data-label="Себестоимость"><?=$r['cost_estimated']?'≈ ':''?><?=money($cost)?></td><td data-label="Валовая прибыль"><strong><?=money($rev-$cost)?></strong></td></tr><?php endforeach;?></tbody></table></div>
 <?php page_footer(); ?>
