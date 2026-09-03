@@ -1,0 +1,15 @@
+@media(max-width:600px){
+  .sales-history{padding:14px;overflow:hidden}
+  .sales-history h2{margin-bottom:12px}
+  .sales-history .mobile-card-table{display:block;width:100%;min-width:0;border-collapse:separate}
+  .sales-history .mobile-card-table thead{display:none}
+  .sales-history .mobile-card-table tbody{display:grid;gap:10px}
+  .sales-history .mobile-card-table tr{display:grid;width:100%;min-width:0;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--surface-soft)}
+  .sales-history .mobile-card-table tr:hover{background:var(--surface-soft)}
+  .sales-history .mobile-card-table td{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;width:100%;min-width:0;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;text-align:right;overflow-wrap:anywhere}
+  .sales-history .mobile-card-table td:last-child{border-bottom:0;padding-bottom:0}
+  .sales-history .mobile-card-table td:first-child{padding-top:0}
+  .sales-history .mobile-card-table td::before{content:attr(data-label);flex:0 0 42%;max-width:42%;font-size:9px;line-height:1.4;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;text-align:left}
+  .sales-history .mobile-card-table td[data-label="Позиция"]{font-size:14px}
+  .sales-history .mobile-card-table td[data-label="Валовая прибыль"] strong{color:var(--green)}
+}
