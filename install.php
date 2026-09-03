@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $config = "<?php\nreturn " . var_export([
-                'app' => ['name' => 'MyCoffee', 'timezone' => 'Asia/Irkutsk', 'currency' => '₽'],
+                'app' => ['name' => 'Kapouch', 'timezone' => 'Asia/Irkutsk', 'currency' => '₽'],
                 'db' => ['host' => $dbHost, 'name' => $dbName, 'user' => $dbUser, 'pass' => $dbPass, 'charset' => 'utf8mb4'],
                 'security' => ['encryption_key' => bin2hex(random_bytes(32))],
             ], true) . ";\n";
@@ -52,11 +52,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Установка MyCoffee</title><link rel="stylesheet" href="assets/style.css"></head><body class="auth-body">
-<div class="auth-card"><div class="brand">☕ MyCoffee</div><h1>Установка</h1><p class="muted">Укажите базу MySQL, созданную в панели Beget, и данные владельца.</p>
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Установка Kapouch</title><link rel="stylesheet" href="assets/style.css?v=20260903-6"></head><body class="auth-body">
+<div class="auth-card"><div style="font-size:22px;font-weight:800;margin-bottom:20px">Kapouch</div><h1>Установка</h1><p class="muted">Укажите базу MySQL, созданную в панели Beget, и данные владельца.</p>
 <?php if ($error): ?><div class="alert danger"><?=htmlspecialchars($error,ENT_QUOTES,'UTF-8')?></div><?php endif; ?>
 <form method="post" class="stack">
 <label>Хост БД<input name="db_host" value="<?=htmlspecialchars($_POST['db_host'] ?? 'localhost',ENT_QUOTES,'UTF-8')?>" required></label>
 <label>Имя БД<input name="db_name" required></label><label>Пользователь БД<input name="db_user" required></label><label>Пароль БД<input type="password" name="db_pass"></label>
 <hr><label>Ваше имя<input name="name" required></label><label>Email<input type="email" name="email" required></label><label>Пароль владельца<input type="password" name="password" minlength="8" required></label>
-<button class="btn primary" type="submit">Установить MyCoffee</button></form></div></body></html>
+<button class="btn primary" type="submit">Установить Kapouch</button></form></div></body></html>
