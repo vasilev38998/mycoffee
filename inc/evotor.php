@@ -59,16 +59,16 @@ function evotor_request(array $connection, string $path, array $query = []): arr
     curl_close($ch);
 
     if ($body === false || $error !== '') {
-        throw new RuntimeException('Ошибка соединения с Эвотор: ' . $error);
+        throw new RuntimeException('Ошибка соединения с Эвотор при запросе ' . $path . ': ' . $error);
     }
 
-    $data = json_decode($body, true);
+    $data = json_decode((string)$body, true);
     if ($status < 200 || $status >= 300) {
-        $message = is_array($data) ? json_encode($data, JSON_UNESCAPED_UNICODE) : $body;
-        throw new RuntimeException("Эвотор API вернул HTTP {$status}: {$message}");
+        $message = is_array($data) ? json_encode($data, JSON_UNESCAPED_UNICODE) : (string)$body;
+        throw new RuntimeException("Эвотор API вернул HTTP {$status} при запросе {$path}: {$message}");
     }
     if (!is_array($data)) {
-        throw new RuntimeException('Эвотор API вернул некорректный JSON.');
+        throw new RuntimeException('Эвотор API вернул некорректный JSON при запросе ' . $path . '.');
     }
     return $data;
 }
@@ -153,10 +153,20 @@ function evotor_payment_method(array $body): string
     return 'other';
 }
 
+function evotor_position_product_id(array $position): string
+{
+    foreach (['product_id', 'productId', 'product_uuid', 'productUuid'] as $key) {
+        if (isset($position[$key]) && is_scalar($position[$key]) && trim((string)$position[$key]) !== '') {
+            return trim((string)$position[$key]);
+        }
+    }
+    return '';
+}
+
 function evotor_local_product_id(int $connectionId, array $position): int
 {
     $pdo = db();
-    $evotorProductId = (string)($position['product_id'] ?? '');
+    $evotorProductId = evotor_position_product_id($position);
     if ($evotorProductId !== '') {
         $stmt = $pdo->prepare('SELECT local_product_id FROM evotor_products WHERE connection_id=? AND evotor_product_id=?');
         $stmt->execute([$connectionId, $evotorProductId]);
@@ -164,11 +174,65 @@ function evotor_local_product_id(int $connectionId, array $position): int
         if ($id > 0) return $id;
     }
 
-    $name = trim((string)($position['name'] ?? $position['product_name'] ?? 'Позиция Эвотор'));
-    $price = (float)($position['price'] ?? $position['result_price'] ?? 0);
+    $name = trim((string)($position['name'] ?? $position['product_name'] ?? $position['productName'] ?? 'Позиция Эвотор'));
+    if ($name === '') $name = 'Позиция Эвотор';
+    $price = (float)($position['result_price'] ?? $position['resultPrice'] ?? $position['price'] ?? 0);
+
+    // Если ID товара в чеке отсутствует, переиспользуем уже загруженную номенклатуру по имени и цене.
+    $stmt = $pdo->prepare('SELECT local_product_id FROM evotor_products WHERE connection_id=? AND LOWER(TRIM(name))=LOWER(TRIM(?)) AND ABS(price-?) < 0.01 AND local_product_id IS NOT NULL ORDER BY id LIMIT 1');
+    $stmt->execute([$connectionId, $name, $price]);
+    $id = (int)$stmt->fetchColumn();
+    if ($id > 0) return $id;
+
+    // Fallback для чеков, пришедших раньше полной синхронизации номенклатуры.
+    $stmt = $pdo->prepare("SELECT id FROM products WHERE category='Эвотор' AND LOWER(TRIM(name))=LOWER(TRIM(?)) AND ABS(sale_price-?) < 0.01 ORDER BY id LIMIT 1");
+    $stmt->execute([$name, $price]);
+    $id = (int)$stmt->fetchColumn();
+    if ($id > 0) return $id;
+
     $stmt = $pdo->prepare('INSERT INTO products(name,category,sale_price,active) VALUES(?,?,?,1)');
-    $stmt->execute([$name !== '' ? $name : 'Позиция Эвотор', 'Эвотор', $price]);
+    $stmt->execute([$name, 'Эвотор', $price]);
     return (int)$pdo->lastInsertId();
+}
+
+function evotor_cleanup_orphan_product_duplicates(int $connectionId): int
+{
+    $pdo = db();
+    $orphans = $pdo->query("SELECT p.id,p.name,p.sale_price FROM products p LEFT JOIN evotor_products ep ON ep.local_product_id=p.id WHERE p.category='Эвотор' AND ep.id IS NULL ORDER BY p.id")->fetchAll();
+    $cleaned = 0;
+
+    foreach ($orphans as $orphan) {
+        $recipe = $pdo->prepare('SELECT COUNT(*) FROM recipe_items WHERE product_id=?');
+        $recipe->execute([(int)$orphan['id']]);
+        if ((int)$recipe->fetchColumn() > 0) continue;
+
+        $canonical = $pdo->prepare("SELECT p.id FROM products p JOIN evotor_products ep ON ep.local_product_id=p.id WHERE ep.connection_id=? AND LOWER(TRIM(p.name))=LOWER(TRIM(?)) AND ABS(p.sale_price-?) < 0.01 ORDER BY p.id LIMIT 1");
+        $canonical->execute([$connectionId, (string)$orphan['name'], (float)$orphan['sale_price']]);
+        $canonicalId = (int)$canonical->fetchColumn();
+
+        if ($canonicalId <= 0) {
+            $canonical = $pdo->prepare("SELECT id FROM products WHERE category='Эвотор' AND id < ? AND LOWER(TRIM(name))=LOWER(TRIM(?)) AND ABS(sale_price-?) < 0.01 ORDER BY id LIMIT 1");
+            $canonical->execute([(int)$orphan['id'], (string)$orphan['name'], (float)$orphan['sale_price']]);
+            $canonicalId = (int)$canonical->fetchColumn();
+        }
+
+        if ($canonicalId <= 0 || $canonicalId === (int)$orphan['id']) continue;
+
+        $pdo->beginTransaction();
+        try {
+            $updateSales = $pdo->prepare('UPDATE sale_items SET product_id=? WHERE product_id=?');
+            $updateSales->execute([$canonicalId, (int)$orphan['id']]);
+            $delete = $pdo->prepare('DELETE FROM products WHERE id=?');
+            $delete->execute([(int)$orphan['id']]);
+            $pdo->commit();
+            $cleaned++;
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    return $cleaned;
 }
 
 function evotor_document_datetime(array $document): string
@@ -194,7 +258,7 @@ function evotor_import_receipt(array $connection, array $document): ?int
     foreach (($body['positions'] ?? []) as $position) {
         $localId = evotor_local_product_id((int)$connection['id'], $position);
         $quantity = (float)($position['quantity'] ?? 1) * $sign;
-        $unitPrice = (float)($position['result_price'] ?? $position['price'] ?? 0);
+        $unitPrice = (float)($position['result_price'] ?? $position['resultPrice'] ?? $position['price'] ?? 0);
         $unitCost = product_cost($localId);
         $item = $pdo->prepare('INSERT INTO sale_items(sale_id,product_id,quantity,unit_price,unit_cost) VALUES(?,?,?,?,?)');
         $item->execute([$saleId, $localId, $quantity, $unitPrice, $unitCost]);
@@ -259,18 +323,37 @@ function evotor_run_sync(array $connection, string $type = 'full'): array
 {
     $started = date('Y-m-d H:i:s');
     $count = 0;
+    $cleaned = 0;
     try {
-        if ($type === 'products' || $type === 'full') $count += evotor_sync_products($connection);
+        if ($type === 'products' || $type === 'full') {
+            try {
+                $count += evotor_sync_products($connection);
+            } catch (Throwable $e) {
+                throw new RuntimeException('Ошибка синхронизации номенклатуры: ' . $e->getMessage(), 0, $e);
+            }
+        }
+
         $connection = evotor_connection((int)$connection['id']) ?? $connection;
-        if ($type === 'documents' || $type === 'full') $count += evotor_sync_documents($connection);
-        $status = 'success'; $message = null;
+
+        if ($type === 'documents' || $type === 'full') {
+            try {
+                $count += evotor_sync_documents($connection);
+            } catch (Throwable $e) {
+                throw new RuntimeException('Ошибка синхронизации чеков: ' . $e->getMessage(), 0, $e);
+            }
+        }
+
+        $cleaned = evotor_cleanup_orphan_product_duplicates((int)$connection['id']);
+        $status = 'success';
+        $message = $cleaned > 0 ? 'Удалено дублей позиций: ' . $cleaned : null;
     } catch (Throwable $e) {
-        $status = 'error'; $message = $e->getMessage();
+        $status = 'error';
+        $message = $e->getMessage();
     }
 
     $stmt = db()->prepare('INSERT INTO evotor_sync_log(connection_id,sync_type,status,processed_count,message,started_at,finished_at) VALUES(?,?,?,?,?,?,?)');
     $stmt->execute([(int)$connection['id'], $type, $status, $count, $message, $started, date('Y-m-d H:i:s')]);
 
     if ($status === 'error') throw new RuntimeException((string)$message);
-    return ['status'=>$status,'processed'=>$count];
+    return ['status'=>$status,'processed'=>$count,'cleaned'=>$cleaned];
 }
