@@ -1,3 +1,19 @@
+SET @kapouch_cash_column_exists := (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'evotor_connections'
+      AND COLUMN_NAME = 'last_cash_sync_ms'
+);
+SET @kapouch_cash_column_sql := IF(
+    @kapouch_cash_column_exists = 0,
+    'ALTER TABLE evotor_connections ADD COLUMN last_cash_sync_ms BIGINT NULL AFTER last_documents_sync_ms',
+    'SELECT 1'
+);
+PREPARE kapouch_cash_column_stmt FROM @kapouch_cash_column_sql;
+EXECUTE kapouch_cash_column_stmt;
+DEALLOCATE PREPARE kapouch_cash_column_stmt;
+
 CREATE TABLE IF NOT EXISTS cash_register_documents (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     connection_id INT UNSIGNED NOT NULL,
