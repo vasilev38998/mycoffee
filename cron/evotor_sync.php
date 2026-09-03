@@ -11,6 +11,7 @@ $migration = file_get_contents(dirname(__DIR__) . '/database/migrations/002_evot
 if ($migration !== false) db()->exec($migration);
 require_once dirname(__DIR__) . '/inc/evotor.php';
 require_once dirname(__DIR__) . '/inc/cash_register.php';
+require_once dirname(__DIR__) . '/inc/cash_flow.php';
 require_once dirname(__DIR__) . '/inc/automatic_expenses.php';
 require_once dirname(__DIR__) . '/inc/inventory.php';
 require_once dirname(__DIR__) . '/inc/control.php';
@@ -32,6 +33,14 @@ foreach ($connections as $connection) {
         $failed = true;
         fwrite(STDERR, sprintf("[%s] %s: %s\n", date('c'), $connection['store_id'], $e->getMessage()));
     }
+}
+
+try {
+    $cashflow = cashflow_sync_evotor_payments();
+    echo sprintf("[%s] cash flow payments created: %d, electron net %.2f, cash net %.2f\n", date('c'), $cashflow['processed'], $cashflow['electron'], $cashflow['cash']);
+} catch (Throwable $e) {
+    $failed = true;
+    fwrite(STDERR, sprintf("[%s] cash flow: %s\n", date('c'), $e->getMessage()));
 }
 
 try {
@@ -71,5 +80,5 @@ try {
     fwrite(STDERR, sprintf("[%s] business control: %s\n", date('c'), $e->getMessage()));
 }
 
-if (!$connections) echo "No enabled Evotor connections. Warehouse, expenses and business control still refreshed.\n";
+if (!$connections) echo "No enabled Evotor connections. Warehouse, expenses, cash flow and business control still refreshed.\n";
 exit($failed ? 1 : 0);
