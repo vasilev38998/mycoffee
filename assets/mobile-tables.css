@@ -12,4 +12,11 @@
   .sales-history .mobile-card-table td::before{content:attr(data-label);flex:0 0 42%;max-width:42%;font-size:9px;line-height:1.4;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;text-align:left}
   .sales-history .mobile-card-table td[data-label="Позиция"]{font-size:14px}
   .sales-history .mobile-card-table td[data-label="Валовая прибыль"] strong{color:var(--green)}
+
+  .cash-movement-card{overflow:hidden}
+  .cash-movement-card .cash-summary-table{width:100%;min-width:0;table-layout:fixed}
+  .cash-movement-card .cash-summary-table td{padding:10px 0;vertical-align:top}
+  .cash-movement-card .cash-summary-table td:first-child{width:54%;padding-right:12px;color:var(--muted);overflow-wrap:anywhere}
+  .cash-movement-card .cash-summary-table td:last-child{width:46%;text-align:right;white-space:normal;overflow-wrap:anywhere}
+  .cash-movement-card .cash-summary-table strong{font-size:14px}
 }
