@@ -66,7 +66,17 @@ function economics_menu_abc_xyz(string $from,string $to): array
 
 function economics_category_profitability(string $from,string $to): array
 {
-    $stmt=db()->prepare("SELECT COALESCE(NULLIF(p.category,''),'Без категории') category,SUM(si.quantity) qty,SUM(si.quantity*si.unit_price) revenue,SUM(si.quantity*si.unit_cost) cogs FROM sale_items si JOIN sales s ON s.id=si.sale_id JOIN products p ON p.id=si.product_id WHERE s.sold_at>=? AND s.sold_at<DATE_ADD(?,INTERVAL 1 DAY) GROUP BY COALESCE(NULLIF(p.category,''),'Без категории') ORDER BY revenue DESC");
+    $costExpr=sale_item_effective_unit_cost_sql('si');
+    $stmt=db()->prepare("SELECT COALESCE(NULLIF(p.category,''),'Без категории') category,
+        SUM(si.quantity) qty,
+        SUM(si.quantity*si.unit_price) revenue,
+        SUM(si.quantity*({$costExpr})) cogs
+        FROM sale_items si
+        JOIN sales s ON s.id=si.sale_id
+        JOIN products p ON p.id=si.product_id
+        WHERE s.sold_at>=? AND s.sold_at<DATE_ADD(?,INTERVAL 1 DAY)
+        GROUP BY COALESCE(NULLIF(p.category,''),'Без категории')
+        ORDER BY revenue DESC");
     $stmt->execute([$from.' 00:00:00',$to]);$rows=$stmt->fetchAll();foreach($rows as &$r){$r['revenue']=(float)$r['revenue'];$r['cogs']=(float)$r['cogs'];$r['gross_profit']=$r['revenue']-$r['cogs'];$r['margin']=$r['revenue']>0?$r['gross_profit']/$r['revenue']*100:0;}
     return $rows;
 }
