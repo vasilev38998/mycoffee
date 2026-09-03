@@ -43,8 +43,18 @@ function cashflow_summary(string $from,string $to): array{
     foreach($rows as $r){$amount=(float)$r['amount'];if($r['direction']==='in')$in+=$amount;else$out+=$amount;if(in_array($r['entry_type'],['sale','refund','expense','purchase','fee','other'],true)){if($r['direction']==='in')$operatingIn+=$amount;else$operatingOut+=$amount;}if($r['entry_type']==='owner_in')$ownerNet+=$amount;if($r['entry_type']==='owner_out')$ownerNet-=$amount;}
     return ['in'=>$in,'out'=>$out,'net'=>$in-$out,'operating_in'=>$operatingIn,'operating_out'=>$operatingOut,'operating_net'=>$operatingIn-$operatingOut,'owner_net'=>$ownerNet,'rows'=>$rows];
 }
+function cashflow_readiness(int $minHistoryDays=7): array{
+    $pdo=db();$accounts=cashflow_balances();$bankConfigured=false;
+    foreach($accounts as $a){if($a['account_type']!=='bank'||!(int)$a['active'])continue;$hasIdentity=trim((string)($a['provider']??''))!==''||trim((string)$a['name'])!=='Банковский счёт';$hasOpening=abs((float)$a['opening_balance'])>0.009;$q=$pdo->prepare('SELECT COUNT(*) FROM cash_flow_entries WHERE account_id=?');$q->execute([(int)$a['id']]);$hasMovements=(int)$q->fetchColumn()>0;if($hasIdentity||$hasOpening||$hasMovements){$bankConfigured=true;break;}}
+    $historyDays=(int)$pdo->query("SELECT COUNT(DISTINCT DATE(occurred_at)) FROM cash_flow_entries WHERE occurred_at>=DATE_SUB(CURDATE(),INTERVAL 29 DAY) AND occurred_at<=NOW()")->fetchColumn();
+    $to=date('Y-m-d');$from=date('Y-m-d',strtotime('-29 days'));$sum=cashflow_summary($from,$to);$reasons=[];
+    if(!$bankConfigured)$reasons[]='Настрой банковский счёт или укажи его начальный остаток.';
+    if($historyDays<$minHistoryDays)$reasons[]='Нужно хотя бы '.$minHistoryDays.' дней денежных движений; сейчас есть '.$historyDays.'.';
+    if($sum['operating_out']<=0)$reasons[]='Пока нет достаточных денежных расходов для расчёта запаса в днях.';
+    return ['ready'=>!$reasons,'reasons'=>$reasons,'history_days'=>$historyDays,'bank_configured'=>$bankConfigured,'operating_out'=>(float)$sum['operating_out']];
+}
 function cashflow_runway_days(int $lookbackDays=30): ?float{
-    $to=date('Y-m-d');$from=date('Y-m-d',strtotime('-'.($lookbackDays-1).' days'));$sum=cashflow_summary($from,$to);$dailyOut=$sum['operating_out']/max(1,$lookbackDays);if($dailyOut<=0)return null;$liquid=0.0;foreach(cashflow_balances() as $a){if(in_array($a['account_type'],['cash','bank'],true))$liquid+=(float)$a['balance'];}return $liquid/$dailyOut;
+    $readiness=cashflow_readiness(7);if(!$readiness['ready'])return null;$to=date('Y-m-d');$from=date('Y-m-d',strtotime('-'.($lookbackDays-1).' days'));$sum=cashflow_summary($from,$to);$dailyOut=$sum['operating_out']/max(1,$lookbackDays);if($dailyOut<=0)return null;$liquid=0.0;foreach(cashflow_balances() as $a){if(in_array($a['account_type'],['cash','bank'],true))$liquid+=(float)$a['balance'];}return $liquid/$dailyOut;
 }
 function cashflow_electronic_pending(): float{$a=cashflow_account_by_name((string)app_setting('cashflow_electron_account_name','Безнал / ожидаемые поступления'));return $a?cashflow_account_balance((int)$a['id']):0.0;}
 function cashflow_profit_vs_money(string $from,string $to): array{$m=dashboard_metrics($from,$to);$cf=cashflow_summary($from,$to);return ['operating_profit'=>$m['operating_profit'],'cashflow_operating_net'=>$cf['operating_net'],'difference'=>$cf['operating_net']-$m['operating_profit']];}
