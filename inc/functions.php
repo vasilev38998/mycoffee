@@ -8,8 +8,7 @@ function e(string $value): string
 
 function money(float $value): string
 {
-    global $config;
-    return number_format($value, 2, ',', ' ') . ' ' . ($config['app']['currency'] ?? '₽');
+    return number_format($value, 2, ',', ' ') . ' ' . app_currency();
 }
 
 function csrf_token(): string

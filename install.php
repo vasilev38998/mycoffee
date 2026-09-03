@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $config = "<?php\nreturn " . var_export([
-                'app' => ['name' => 'MyCoffee', 'timezone' => 'Europe/Moscow', 'currency' => '₽'],
+                'app' => ['name' => 'MyCoffee', 'timezone' => 'Asia/Irkutsk', 'currency' => '₽'],
                 'db' => ['host' => $dbHost, 'name' => $dbName, 'user' => $dbUser, 'pass' => $dbPass, 'charset' => 'utf8mb4'],
                 'security' => ['encryption_key' => bin2hex(random_bytes(32))],
             ], true) . ";\n";
