@@ -24,10 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($schema === false) throw new RuntimeException('Не найден database/schema.sql');
             $pdo->exec($schema);
 
-            foreach (glob(__DIR__ . '/database/migrations/*.sql') ?: [] as $migrationFile) {
-                $migration = file_get_contents($migrationFile);
-                if ($migration !== false) $pdo->exec($migration);
-            }
+            require_once __DIR__ . '/inc/updater.php';
+            kapouch_apply_pending_migrations($pdo, false);
 
             $count = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
             if ($count === 0) {
@@ -52,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Установка Kapouch</title><link rel="stylesheet" href="assets/style.css?v=20260903-6"></head><body class="auth-body">
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Установка Kapouch</title><link rel="stylesheet" href="assets/style.css?v=20260903-10"></head><body class="auth-body">
 <div class="auth-card"><div style="font-size:22px;font-weight:800;margin-bottom:20px">Kapouch</div><h1>Установка</h1><p class="muted">Укажите базу MySQL, созданную в панели Beget, и данные владельца.</p>
 <?php if ($error): ?><div class="alert danger"><?=htmlspecialchars($error,ENT_QUOTES,'UTF-8')?></div><?php endif; ?>
 <form method="post" class="stack">
