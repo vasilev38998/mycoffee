@@ -9,14 +9,19 @@ function ensure_settings_tables(): void
     try {
         db()->query('SELECT setting_key FROM app_settings LIMIT 1');
         db()->query('SELECT meta_key FROM system_meta LIMIT 1');
-        $ready = true;
-        return;
     } catch (Throwable $e) {
-        // Первая загрузка после обновления — создаём таблицы ниже.
+        $migration = file_get_contents(__DIR__ . '/../database/migrations/005_settings.sql');
+        if ($migration !== false) db()->exec($migration);
     }
 
-    $migration = file_get_contents(__DIR__ . '/../database/migrations/005_settings.sql');
-    if ($migration !== false) db()->exec($migration);
+    // Новые служебные таблицы и переименование MyCoffee -> Kapouch.
+    try {
+        db()->query('SELECT id FROM notification_settings LIMIT 1');
+    } catch (Throwable $e) {
+        $migration = file_get_contents(__DIR__ . '/../database/migrations/006_kapouch_intelligence.sql');
+        if ($migration !== false) db()->exec($migration);
+    }
+
     $ready = true;
 }
 
@@ -75,16 +80,8 @@ function migrate_evotor_times_to_irkutsk_once(): int
     $pdo->beginTransaction();
     try {
         $sales = $pdo->exec("UPDATE sales SET sold_at=DATE_ADD(sold_at, INTERVAL 5 HOUR) WHERE note LIKE 'Импорт Эвотор:%'");
-        try {
-            $pdo->exec("UPDATE evotor_documents SET close_date=DATE_ADD(close_date, INTERVAL 5 HOUR) WHERE close_date IS NOT NULL");
-        } catch (Throwable $e) {
-            // Интеграция может ещё не быть установлена.
-        }
-        try {
-            $pdo->exec("UPDATE inventory_movements SET occurred_at=DATE_ADD(occurred_at, INTERVAL 5 HOUR) WHERE reference_type='sale_item'");
-        } catch (Throwable $e) {
-            // Склад может ещё не быть установлен.
-        }
+        try { $pdo->exec("UPDATE evotor_documents SET close_date=DATE_ADD(close_date, INTERVAL 5 HOUR) WHERE close_date IS NOT NULL"); } catch (Throwable $e) {}
+        try { $pdo->exec("UPDATE inventory_movements SET occurred_at=DATE_ADD(occurred_at, INTERVAL 5 HOUR) WHERE reference_type='sale_item'"); } catch (Throwable $e) {}
         $meta = $pdo->prepare('INSERT INTO system_meta(meta_key,meta_value) VALUES(?,?) ON DUPLICATE KEY UPDATE meta_value=VALUES(meta_value)');
         $meta->execute(['evotor_time_rebased_to_irkutsk','1']);
         $pdo->commit();
