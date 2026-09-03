@@ -21,7 +21,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo = new PDO("mysql:host={$dbHost};dbname={$dbName};charset=utf8mb4", $dbUser, $dbPass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
             $schema = file_get_contents(__DIR__ . '/database/schema.sql');
+            if ($schema === false) throw new RuntimeException('Не найден database/schema.sql');
             $pdo->exec($schema);
+
+            foreach (glob(__DIR__ . '/database/migrations/*.sql') ?: [] as $migrationFile) {
+                $migration = file_get_contents($migrationFile);
+                if ($migration !== false) $pdo->exec($migration);
+            }
 
             $count = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
             if ($count === 0) {
@@ -32,6 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $config = "<?php\nreturn " . var_export([
                 'app' => ['name' => 'MyCoffee', 'timezone' => 'Europe/Moscow', 'currency' => '₽'],
                 'db' => ['host' => $dbHost, 'name' => $dbName, 'user' => $dbUser, 'pass' => $dbPass, 'charset' => 'utf8mb4'],
+                'security' => ['encryption_key' => bin2hex(random_bytes(32))],
             ], true) . ";\n";
 
             if (file_put_contents($configPath, $config) === false) {
