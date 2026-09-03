@@ -87,14 +87,39 @@ function current_cash_balance(?int $connectionId=null): array
     ensure_cash_register_tables();
     $pdo=db();$params=[];$where='';
     if($connectionId){$where=' AND connection_id=?';$params[]=$connectionId;}
-    $stmt=$pdo->prepare("SELECT * FROM cash_register_documents WHERE document_type IN ('Z_REPORT','X_REPORT') AND report_cash IS NOT NULL{$where} ORDER BY occurred_at DESC,id DESC LIMIT 1");$stmt->execute($params);$report=$stmt->fetch()?:null;
+
+    $stmt=$pdo->prepare("SELECT * FROM cash_register_documents WHERE document_type='OPEN_SESSION'{$where} ORDER BY occurred_at DESC,id DESC LIMIT 1");
+    $stmt->execute($params);$open=$stmt->fetch()?:null;
+
+    $closeParams=[];$closeWhere='';
+    if($connectionId){$closeWhere=' AND connection_id=?';$closeParams[]=$connectionId;}
+    $stmt=$pdo->prepare("SELECT * FROM cash_register_documents WHERE document_type IN ('CLOSE_SESSION','Z_REPORT'){$closeWhere} ORDER BY occurred_at DESC,id DESC LIMIT 1");
+    $stmt->execute($closeParams);$close=$stmt->fetch()?:null;
+
+    if($open && (!$close || strtotime((string)$open['occurred_at'])>strtotime((string)$close['occurred_at']))){
+        $sql='SELECT COALESCE(SUM(cash_delta),0) FROM cash_register_documents WHERE cash_delta<>0 AND occurred_at>=?';
+        $args=[$open['occurred_at']];
+        if(!empty($open['session_id'])){$sql.=' AND session_id=?';$args[]=$open['session_id'];}
+        elseif(!empty($open['session_number'])){$sql.=' AND session_number=?';$args[]=$open['session_number'];}
+        if($connectionId){$sql.=' AND connection_id=?';$args[]=$connectionId;}
+        $stmt=$pdo->prepare($sql);$stmt->execute($args);$balance=(float)$stmt->fetchColumn();
+        return ['balance'=>$balance,'report'=>null,'delta_after_report'=>$balance,'shift_open'=>true,'shift'=>$open];
+    }
+
+    if($close){
+        return ['balance'=>0.0,'report'=>$close['document_type']==='Z_REPORT'?$close:null,'delta_after_report'=>0.0,'shift_open'=>false,'shift'=>$open];
+    }
+
+    $fallbackParams=[];$fallbackWhere='';
+    if($connectionId){$fallbackWhere=' AND connection_id=?';$fallbackParams[]=$connectionId;}
+    $stmt=$pdo->prepare("SELECT * FROM cash_register_documents WHERE document_type IN ('Z_REPORT','X_REPORT') AND report_cash IS NOT NULL{$fallbackWhere} ORDER BY occurred_at DESC,id DESC LIMIT 1");$stmt->execute($fallbackParams);$report=$stmt->fetch()?:null;
     $balance=0.0;$since=null;
     if($report){$balance=(float)$report['report_cash'];$since=$report['occurred_at'];}
     $sql='SELECT COALESCE(SUM(cash_delta),0) FROM cash_register_documents WHERE cash_delta<>0';$args=[];
     if($since){$sql.=' AND occurred_at>?';$args[]=$since;}
     if($connectionId){$sql.=' AND connection_id=?';$args[]=$connectionId;}
     $stmt=$pdo->prepare($sql);$stmt->execute($args);$after=(float)$stmt->fetchColumn();
-    return ['balance'=>$balance+$after,'report'=>$report,'delta_after_report'=>$after];
+    return ['balance'=>$balance+$after,'report'=>$report,'delta_after_report'=>$after,'shift_open'=>null,'shift'=>null];
 }
 
 function cash_period_summary(string $from,string $to): array
