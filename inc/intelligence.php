@@ -9,12 +9,23 @@ function median(array $values): float
     return $n%2?$values[$m]:($values[$m-1]+$values[$m])/2;
 }
 
+function sale_item_effective_unit_cost_sql(string $alias='si'): string
+{
+    return "CASE WHEN {$alias}.unit_cost > 0 THEN {$alias}.unit_cost ELSE COALESCE((
+        SELECT SUM(ri.quantity * (i.purchase_price / NULLIF(i.purchase_quantity,0)))
+        FROM recipe_items ri
+        JOIN ingredients i ON i.id=ri.ingredient_id
+        WHERE ri.product_id={$alias}.product_id
+    ),0) END";
+}
+
 function shift_analytics(string $from,string $to): array
 {
+    $costExpr=sale_item_effective_unit_cost_sql('si');
     $sql="SELECT ed.session_id,ed.session_number,MIN(ed.close_date) started_at,MAX(ed.close_date) finished_at,
         COUNT(ed.imported_sale_id) checks,
         COALESCE(SUM(s.total_amount),0) revenue,
-        COALESCE(SUM((SELECT SUM(si.quantity*si.unit_cost) FROM sale_items si WHERE si.sale_id=s.id)),0) cogs
+        COALESCE(SUM((SELECT SUM(si.quantity*({$costExpr})) FROM sale_items si WHERE si.sale_id=s.id)),0) cogs
         FROM evotor_documents ed
         LEFT JOIN sales s ON s.id=ed.imported_sale_id
         WHERE ed.document_type IN ('SELL','PAYBACK')
@@ -43,10 +54,11 @@ function inventory_variances(int $limit=30): array
 
 function menu_engineering(string $from,string $to): array
 {
+    $costExpr=sale_item_effective_unit_cost_sql('si');
     $sql="SELECT p.id,p.name,p.sale_price,COALESCE(SUM(si.quantity),0) qty,
         COALESCE(SUM(si.quantity*si.unit_price),0) revenue,
-        COALESCE(SUM(si.quantity*si.unit_cost),0) cogs,
-        COALESCE(SUM(si.quantity*(si.unit_price-si.unit_cost)),0) gross_profit
+        COALESCE(SUM(si.quantity*({$costExpr})),0) cogs,
+        COALESCE(SUM(si.quantity*(si.unit_price-({$costExpr}))),0) gross_profit
         FROM products p JOIN sale_items si ON si.product_id=p.id JOIN sales s ON s.id=si.sale_id
         WHERE s.sold_at>=? AND s.sold_at<DATE_ADD(?,INTERVAL 1 DAY)
         GROUP BY p.id,p.name,p.sale_price HAVING qty>0 ORDER BY gross_profit DESC";
