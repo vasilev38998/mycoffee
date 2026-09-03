@@ -8,6 +8,7 @@ function page_header(string $title): void {
             ['index.php','Дашборд'],
             ['control.php','Контроль'],
             ['analytics.php','Аналитика'],
+            ['economics.php','Экономика'],
             ['daily_report.php','Отчёт дня'],
             ['planning.php','Планирование'],
         ]],
@@ -40,7 +41,7 @@ function page_header(string $title): void {
             $month=dashboard_metrics(date('Y-m-01'),date('Y-m-d'));
             $revPct=$revenueGoal>0?min(999,$month['revenue']/$revenueGoal*100):0;
             $profitPct=$profitGoal>0?min(999,max(0,$month['operating_profit']/$profitGoal*100)):0;
-            ?><div class="three-col"><div class="insight-card"><div class="kicker">Цель выручки месяца</div><strong><?=number_format($revPct,0,',',' ')?>%</strong><p><?=money($month['revenue'])?> из <?=money($revenueGoal)?>.</p></div><div class="insight-card"><div class="kicker">Цель прибыли месяца</div><strong><?=number_format($profitPct,0,',',' ')?>%</strong><p><?=money($month['operating_profit'])?> из <?=money($profitGoal)?>.</p></div><div class="insight-card"><div class="kicker">Локальное время</div><strong><?=e(date('H:i'))?></strong><p>Часовой пояс <?=e(app_timezone())?>.</p></div></div><?php
+            ?><div class="three-col"><div class="insight-card"><div class="kicker">Цель выручки месяца</div><strong><?=number_format($revPct,0,',',' ')?>%</strong><p><?=money($month['revenue'])?> из <?=money($revenueGoal)?>.</p></div><div class="insight-card"><div class="kicker">Цель прибыли месяца</div><strong><?=number_format($profitPct,0,',',' ')?>%</strong><p><?=money($month['operating_profit'])?> из <?=money($profitGoal)?>.</p></div><div class="insight-card"><div class="kicker">Экономика</div><strong><a href="economics.php">Открыть показатели →</a></strong><p>Безубыточность, запас прочности, ABC/XYZ меню, склад и прогноз месяца.</p></div></div><?php
         }
         try{
             require_once __DIR__.'/control.php';
