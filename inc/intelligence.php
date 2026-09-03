@@ -12,12 +12,11 @@ function median(array $values): float
 function shift_analytics(string $from,string $to): array
 {
     $sql="SELECT ed.session_id,ed.session_number,MIN(ed.close_date) started_at,MAX(ed.close_date) finished_at,
-        COUNT(DISTINCT ed.imported_sale_id) checks,
+        COUNT(ed.imported_sale_id) checks,
         COALESCE(SUM(s.total_amount),0) revenue,
-        COALESCE(SUM(si.quantity*si.unit_cost),0) cogs
+        COALESCE(SUM((SELECT SUM(si.quantity*si.unit_cost) FROM sale_items si WHERE si.sale_id=s.id)),0) cogs
         FROM evotor_documents ed
         LEFT JOIN sales s ON s.id=ed.imported_sale_id
-        LEFT JOIN sale_items si ON si.sale_id=s.id
         WHERE ed.document_type IN ('SELL','PAYBACK')
           AND ed.close_date>=? AND ed.close_date<DATE_ADD(?,INTERVAL 1 DAY)
           AND ed.imported_sale_id IS NOT NULL
