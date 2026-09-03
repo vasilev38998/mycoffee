@@ -51,7 +51,33 @@ $paymentStmt->execute([$from.' 00:00:00',$to]);
 $payments=['card'=>0.0,'cash'=>0.0,'other'=>0.0];foreach($paymentStmt as $r){$payments[$r['payment_method']]=(float)$r['total'];}
 $paymentTotal=array_sum($payments);$cardShare=$paymentTotal>0?max(0,min(100,$payments['card']/$paymentTotal*100)):0;
 
-$top=db()->prepare("SELECT p.name,SUM(si.quantity) qty,SUM(si.quantity*si.unit_price) revenue,SUM(si.quantity*si.unit_cost) cost,SUM(si.quantity*(si.unit_price-si.unit_cost)) profit FROM sale_items si JOIN sales s ON s.id=si.sale_id JOIN products p ON p.id=si.product_id WHERE s.sold_at>=? AND s.sold_at<DATE_ADD(?,INTERVAL 1 DAY) GROUP BY p.id,p.name ORDER BY profit DESC LIMIT 8");
+$top=db()->prepare("SELECT p.name,
+    SUM(si.quantity) qty,
+    SUM(si.quantity*si.unit_price) revenue,
+    SUM(si.quantity * CASE
+        WHEN si.unit_cost > 0 THEN si.unit_cost
+        ELSE COALESCE((
+            SELECT SUM(ri.quantity * (i.purchase_price / NULLIF(i.purchase_quantity,0)))
+            FROM recipe_items ri
+            JOIN ingredients i ON i.id=ri.ingredient_id
+            WHERE ri.product_id=si.product_id
+        ),0)
+    END) cost,
+    SUM(si.quantity * (si.unit_price - CASE
+        WHEN si.unit_cost > 0 THEN si.unit_cost
+        ELSE COALESCE((
+            SELECT SUM(ri.quantity * (i.purchase_price / NULLIF(i.purchase_quantity,0)))
+            FROM recipe_items ri
+            JOIN ingredients i ON i.id=ri.ingredient_id
+            WHERE ri.product_id=si.product_id
+        ),0)
+    END)) profit
+    FROM sale_items si
+    JOIN sales s ON s.id=si.sale_id
+    JOIN products p ON p.id=si.product_id
+    WHERE s.sold_at>=? AND s.sold_at<DATE_ADD(?,INTERVAL 1 DAY)
+    GROUP BY p.id,p.name
+    ORDER BY profit DESC LIMIT 8");
 $top->execute([$from.' 00:00:00',$to]);$topRows=$top->fetchAll();$bestProduct=$topRows[0]??null;
 
 $foodCost=$m['revenue']>0?$m['cogs']/$m['revenue']*100:0;
