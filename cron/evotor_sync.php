@@ -11,7 +11,9 @@ $migration = file_get_contents(dirname(__DIR__) . '/database/migrations/002_evot
 if ($migration !== false) db()->exec($migration);
 require_once dirname(__DIR__) . '/inc/evotor.php';
 require_once dirname(__DIR__) . '/inc/automatic_expenses.php';
+require_once dirname(__DIR__) . '/inc/inventory.php';
 ensure_automatic_expense_tables();
+ensure_inventory_tables();
 
 $connections = db()->query('SELECT * FROM evotor_connections WHERE enabled=1 ORDER BY id')->fetchAll();
 $failed = false;
@@ -27,6 +29,14 @@ foreach ($connections as $connection) {
 }
 
 try {
+    $inventoryMovements = sync_inventory_from_sales(date('Y-m-01'));
+    echo sprintf("[%s] inventory movements created: %d\n", date('c'), $inventoryMovements);
+} catch (Throwable $e) {
+    $failed = true;
+    fwrite(STDERR, sprintf("[%s] inventory: %s\n", date('c'), $e->getMessage()));
+}
+
+try {
     $accruals = refresh_automatic_expenses(date('Y-m-01'), date('Y-m-d'));
     echo sprintf("[%s] automatic expenses refreshed: %d accruals\n", date('c'), $accruals);
 } catch (Throwable $e) {
@@ -34,5 +44,5 @@ try {
     fwrite(STDERR, sprintf("[%s] automatic expenses: %s\n", date('c'), $e->getMessage()));
 }
 
-if (!$connections) echo "No enabled Evotor connections. Automatic expenses still refreshed.\n";
+if (!$connections) echo "No enabled Evotor connections. Warehouse and automatic expenses still refreshed.\n";
 exit($failed ? 1 : 0);
