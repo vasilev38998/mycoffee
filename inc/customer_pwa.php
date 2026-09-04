@@ -63,6 +63,9 @@ function customer_pwa_catalog(): array
     $settings=customer_pwa_settings();$categories=customer_pwa_categories(true);$byId=[];$bySlug=[];
     foreach($categories as $c){$byId[(int)$c['id']]=$c;$bySlug[(string)$c['slug']]=$c;}
 
+    $groupedProductIds=[];
+    foreach(db()->query('SELECT product_id FROM customer_product_group_variants')->fetchAll(PDO::FETCH_COLUMN) as $pid)$groupedProductIds[(int)$pid]=true;
+
     $variantRows=db()->query("SELECT g.id group_id,g.name group_name,g.category_id group_category_id,g.description group_description,g.badge group_badge,g.featured group_featured,g.visible group_visible,g.sort_order group_sort,
         v.product_id,v.variant_label,v.sort_order variant_sort,v.is_default,
         p.name product_name,p.category product_category,p.sale_price,p.active,
@@ -74,9 +77,9 @@ function customer_pwa_catalog(): array
         WHERE g.visible=1 AND p.active=1 AND p.sale_price>0 AND COALESCE(s.visible,1)=1
         ORDER BY g.sort_order,g.id,v.is_default DESC,v.sort_order,p.sale_price,p.name")->fetchAll();
 
-    $products=[];$groupedProductIds=[];$groups=[];
+    $products=[];$groups=[];
     foreach($variantRows as $r){
-        $gid=(int)$r['group_id'];$pid=(int)$r['product_id'];$groupedProductIds[$pid]=true;
+        $gid=(int)$r['group_id'];$pid=(int)$r['product_id'];
         if(!array_key_exists($gid,$groups)){
             $cat=customer_pwa_category_for($r['group_category_id']?(int)$r['group_category_id']:null,(string)($r['product_category']?:$r['group_name']),$byId,$bySlug);
             if(!$cat){$groups[$gid]=null;continue;}
