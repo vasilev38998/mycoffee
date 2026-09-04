@@ -103,11 +103,34 @@ function current_cash_balance(?int $connectionId=null): array
         elseif(!empty($open['session_number'])){$sql.=' AND session_number=?';$args[]=$open['session_number'];}
         if($connectionId){$sql.=' AND connection_id=?';$args[]=$connectionId;}
         $stmt=$pdo->prepare($sql);$stmt->execute($args);$balance=(float)$stmt->fetchColumn();
-        return ['balance'=>$balance,'report'=>null,'delta_after_report'=>$balance,'shift_open'=>true,'shift'=>$open];
+        return ['balance'=>$balance,'report'=>null,'delta_after_report'=>$balance,'shift_open'=>true,'shift'=>$open,'inferred_open'=>false];
     }
 
     if($close){
-        return ['balance'=>0.0,'report'=>$close['document_type']==='Z_REPORT'?$close:null,'delta_after_report'=>0.0,'shift_open'=>false,'shift'=>$open];
+        $reportSql="SELECT * FROM cash_register_documents WHERE document_type='X_REPORT' AND report_cash IS NOT NULL AND occurred_at>?";
+        $reportArgs=[$close['occurred_at']];
+        if($connectionId){$reportSql.=' AND connection_id=?';$reportArgs[]=$connectionId;}
+        $reportSql.=' ORDER BY occurred_at DESC,id DESC LIMIT 1';
+        $stmt=$pdo->prepare($reportSql);$stmt->execute($reportArgs);$currentReport=$stmt->fetch()?:null;
+
+        if($currentReport){
+            $sql='SELECT COALESCE(SUM(cash_delta),0) FROM cash_register_documents WHERE cash_delta<>0 AND occurred_at>?';
+            $args=[$currentReport['occurred_at']];
+            if($connectionId){$sql.=' AND connection_id=?';$args[]=$connectionId;}
+            $stmt=$pdo->prepare($sql);$stmt->execute($args);$after=(float)$stmt->fetchColumn();
+            return ['balance'=>(float)$currentReport['report_cash']+$after,'report'=>$currentReport,'delta_after_report'=>$after,'shift_open'=>true,'shift'=>$open,'inferred_open'=>true];
+        }
+
+        $sql='SELECT COUNT(*) movement_count,COALESCE(SUM(cash_delta),0) balance FROM cash_register_documents WHERE cash_delta<>0 AND occurred_at>?';
+        $args=[$close['occurred_at']];
+        if($connectionId){$sql.=' AND connection_id=?';$args[]=$connectionId;}
+        $stmt=$pdo->prepare($sql);$stmt->execute($args);$movement=$stmt->fetch()?:[];
+        if((int)($movement['movement_count']??0)>0){
+            $balance=(float)($movement['balance']??0);
+            return ['balance'=>$balance,'report'=>null,'delta_after_report'=>$balance,'shift_open'=>true,'shift'=>$open,'inferred_open'=>true];
+        }
+
+        return ['balance'=>0.0,'report'=>$close['document_type']==='Z_REPORT'?$close:null,'delta_after_report'=>0.0,'shift_open'=>false,'shift'=>$open,'inferred_open'=>false];
     }
 
     $fallbackParams=[];$fallbackWhere='';
@@ -119,7 +142,7 @@ function current_cash_balance(?int $connectionId=null): array
     if($since){$sql.=' AND occurred_at>?';$args[]=$since;}
     if($connectionId){$sql.=' AND connection_id=?';$args[]=$connectionId;}
     $stmt=$pdo->prepare($sql);$stmt->execute($args);$after=(float)$stmt->fetchColumn();
-    return ['balance'=>$balance+$after,'report'=>$report,'delta_after_report'=>$after,'shift_open'=>null,'shift'=>null];
+    return ['balance'=>$balance+$after,'report'=>$report,'delta_after_report'=>$after,'shift_open'=>null,'shift'=>null,'inferred_open'=>false];
 }
 
 function cash_period_summary(string $from,string $to): array
