@@ -57,8 +57,8 @@ function customer_auth_send_smsru(string $phone,string $code): void
 function customer_auth_request_code(string $rawPhone): array
 {
     $phone=customer_order_normalize_phone($rawPhone);$pdo=db();$ip=customer_auth_client_ip();
-    $stmt=$pdo->prepare('SELECT created_at FROM customer_auth_codes WHERE phone=? ORDER BY id DESC LIMIT 1');$stmt->execute([$phone]);$last=$stmt->fetchColumn();
-    if($last&&time()-strtotime((string)$last)<60)throw new RuntimeException('Код уже отправлен. Повторите через минуту.');
+    $stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE phone=? AND created_at>DATE_SUB(NOW(),INTERVAL 60 SECOND)');$stmt->execute([$phone]);
+    if((int)$stmt->fetchColumn()>0)throw new RuntimeException('Код уже отправлен. Повторите через минуту.');
     $stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE phone=? AND created_at>=DATE_SUB(NOW(),INTERVAL 1 HOUR)');$stmt->execute([$phone]);
     if((int)$stmt->fetchColumn()>=5)throw new RuntimeException('Слишком много кодов для этого номера. Попробуйте позже.');
     if($ip!==''){$stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE request_ip=? AND created_at>=DATE_SUB(NOW(),INTERVAL 1 HOUR)');$stmt->execute([$ip]);if((int)$stmt->fetchColumn()>=20)throw new RuntimeException('Слишком много запросов. Попробуйте позже.');}
@@ -78,9 +78,9 @@ function customer_auth_verify_code(string $rawPhone,string $code): array
     if(!preg_match('/^\d{6}$/',$code))throw new RuntimeException('Введите 6 цифр из SMS.');
     $pdo=db();$pdo->beginTransaction();
     try{
-        $stmt=$pdo->prepare('SELECT * FROM customer_auth_codes WHERE phone=? AND consumed_at IS NULL ORDER BY id DESC LIMIT 1 FOR UPDATE');$stmt->execute([$phone]);$row=$stmt->fetch();
+        $stmt=$pdo->prepare('SELECT *,CASE WHEN expires_at<=NOW() THEN 1 ELSE 0 END AS is_expired FROM customer_auth_codes WHERE phone=? AND consumed_at IS NULL ORDER BY id DESC LIMIT 1 FOR UPDATE');$stmt->execute([$phone]);$row=$stmt->fetch();
         if(!$row)throw new RuntimeException('Запросите новый код.');
-        if(strtotime((string)$row['expires_at'])<time())throw new RuntimeException('Код истёк. Запросите новый.');
+        if((int)$row['is_expired']===1)throw new RuntimeException('Код истёк. Запросите новый.');
         if((int)$row['attempts']>=5)throw new RuntimeException('Превышено число попыток. Запросите новый код.');
         if(!hash_equals((string)$row['code_hash'],customer_auth_code_hash($phone,$code))){$pdo->prepare('UPDATE customer_auth_codes SET attempts=attempts+1 WHERE id=?')->execute([(int)$row['id']]);$pdo->commit();throw new RuntimeException('Неверный код.');}
         $pdo->prepare('UPDATE customer_auth_codes SET consumed_at=NOW() WHERE id=?')->execute([(int)$row['id']]);
