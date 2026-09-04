@@ -9,8 +9,8 @@ function role_pages(): array{
     return [
       'owner'=>$all,
       'manager'=>array_values(array_diff($all,['users.php','audit.php','updates.php'])),
-      'accountant'=>['index.php','control.php','analytics.php','economics.php','daily_report.php','planning.php','budget.php','cash.php','cash_flow.php','sales.php','expenses.php','automatic_expenses.php','purchases.php','receipt_import.php','suppliers.php','purchase_prices.php','data_quality.php'],
-      'employee'=>['index.php','online_orders.php','online_orders_feed.php','cash.php','sales.php','inventory.php','purchases.php','receipt_import.php'],
+      'accountant'=>['index.php','control.php','analytics.php','economics.php','daily_report.php','planning.php','budget.php','cash.php','cash_flow.php','sales.php','expenses.php','automatic_expenses.php','purchases.php','suppliers.php','purchase_prices.php','data_quality.php'],
+      'employee'=>['index.php','online_orders.php','online_orders_feed.php','cash.php','sales.php','inventory.php','purchases.php'],
     ];
 }
 function can_access_page(string $page,?array $user=null): bool{$user=$user??current_user();if(!$user)return false;return in_array($page,role_pages()[$user['role']]??[],true);}
