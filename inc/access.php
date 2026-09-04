@@ -5,7 +5,7 @@ function role_labels(): array{return ['owner'=>'Владелец','manager'=>'У
 function role_label(string $role): string{return role_labels()[$role]??$role;}
 
 function role_pages(): array{
-    $all=['index.php','owner_brief.php','control.php','analytics.php','economics.php','daily_report.php','planning.php','budget.php','online_orders.php','online_orders_feed.php','cash.php','cash_flow.php','sales.php','expenses.php','automatic_expenses.php','products.php','recipe.php','ingredients.php','inventory.php','purchases.php','suppliers.php','purchase_prices.php','customer_app.php','integrations.php','settings.php','updates.php','users.php','audit.php','data_quality.php'];
+    $all=['index.php','owner_brief.php','control.php','analytics.php','economics.php','daily_report.php','planning.php','budget.php','online_orders.php','online_orders_feed.php','cash.php','cash_flow.php','sales.php','expenses.php','automatic_expenses.php','products.php','recipe.php','ingredients.php','inventory.php','purchases.php','suppliers.php','purchase_prices.php','customer_app.php','push_notifications.php','integrations.php','settings.php','updates.php','users.php','audit.php','data_quality.php'];
     return [
       'owner'=>$all,
       'manager'=>array_values(array_diff($all,['users.php','audit.php','updates.php'])),
@@ -19,7 +19,8 @@ function require_page_access(): void{
     $public=[
       'login.php','logout.php','install.php','api_online_orders.php',
       'customer_catalog.php','customer_order.php','customer_order_status.php','customer_manifest.php',
-      'customer_auth_request.php','customer_auth_verify.php','customer_profile.php','customer_logout.php'
+      'customer_auth_request.php','customer_auth_verify.php','customer_profile.php','customer_logout.php',
+      'customer_push_config.php','customer_push_subscribe.php','customer_push_unsubscribe.php'
     ];
     if(in_array($page,$public,true))return;
     $user=current_user();if(!$user)return;
