@@ -32,6 +32,7 @@ function customer_auth_decrypt(string $value): string
 function customer_auth_smsru_configured(): bool{return (string)app_setting('smsru_api_id','')!=='';}
 function customer_auth_code_hash(string $phone,string $code): string{return hash_hmac('sha256',$phone.'|'.$code,customer_auth_secret_key());}
 function customer_auth_client_ip(): string{return mb_substr(trim((string)($_SERVER['REMOTE_ADDR']??'')),0,64);}
+function customer_auth_session_days(): int{return 180;}
 
 function customer_auth_send_smsru(string $phone,string $code): void
 {
@@ -86,10 +87,10 @@ function customer_auth_verify_code(string $rawPhone,string $code): array
         $pdo->prepare('UPDATE customer_auth_codes SET consumed_at=NOW() WHERE id=?')->execute([(int)$row['id']]);
         $stmt=$pdo->prepare('SELECT id,name FROM customer_accounts WHERE phone=?');$stmt->execute([$phone]);$account=$stmt->fetch();
         if(!$account){$pdo->prepare('INSERT INTO customer_accounts(phone) VALUES(?)')->execute([$phone]);$customerId=(int)$pdo->lastInsertId();$name='';}else{$customerId=(int)$account['id'];$name=(string)($account['name']??'');}
-        $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
-        $pdo->prepare('INSERT INTO customer_sessions(customer_id,token_hash,expires_at,last_seen_at) VALUES(?,?,DATE_ADD(NOW(),INTERVAL 30 DAY),NOW())')->execute([$customerId,$hash]);
+        $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);$days=customer_auth_session_days();
+        $pdo->prepare("INSERT INTO customer_sessions(customer_id,token_hash,expires_at,last_seen_at) VALUES(?,?,DATE_ADD(NOW(),INTERVAL {$days} DAY),NOW())")->execute([$customerId,$hash]);
         $pdo->commit();
-        return ['token'=>$token,'expires_in'=>2592000,'customer'=>['id'=>$customerId,'phone'=>$phone,'name'=>$name,'loyalty_balance'=>customer_loyalty_balance($customerId)]];
+        return ['token'=>$token,'expires_in'=>$days*86400,'customer'=>['id'=>$customerId,'phone'=>$phone,'name'=>$name,'loyalty_balance'=>customer_loyalty_balance($customerId)]];
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 
@@ -106,7 +107,8 @@ function customer_auth_current(): ?array
     $token=customer_auth_bearer_token();if(!preg_match('/^[a-f0-9]{64}$/',$token))return null;
     $stmt=db()->prepare('SELECT s.id session_id,s.customer_id,c.phone,c.name,c.loyalty_balance FROM customer_sessions s JOIN customer_accounts c ON c.id=s.customer_id WHERE s.token_hash=? AND s.expires_at>NOW() LIMIT 1');
     $stmt->execute([hash('sha256',$token)]);$row=$stmt->fetch();if(!$row)return null;
-    db()->prepare('UPDATE customer_sessions SET last_seen_at=NOW() WHERE id=?')->execute([(int)$row['session_id']]);
+    $days=customer_auth_session_days();
+    db()->prepare("UPDATE customer_sessions SET last_seen_at=NOW(),expires_at=DATE_ADD(NOW(),INTERVAL {$days} DAY) WHERE id=?")->execute([(int)$row['session_id']]);
     return ['session_id'=>(int)$row['session_id'],'id'=>(int)$row['customer_id'],'phone'=>(string)$row['phone'],'name'=>(string)($row['name']??''),'loyalty_balance'=>(float)$row['loyalty_balance']];
 }
 function customer_auth_require(): array{$customer=customer_auth_current();if(!$customer)throw new RuntimeException('AUTH_REQUIRED');return $customer;}
