@@ -16,7 +16,7 @@ function customer_api_headers(): void
         header('Access-Control-Allow-Origin: '.$origin);
         header('Vary: Origin');
         header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization');
     }
 }
 
