@@ -1,4 +1,4 @@
-const CACHE='kapouch-pwa-v8';
+const CACHE='kapouch-pwa-v9';
 const SHELL=['./','./index.html','./config.js?v=9','./assets/app.css?v=5','./assets/variants.css?v=1','./assets/pwa-v2.css?v=1','./assets/modifiers.css?v=1','./assets/app.js?v=10','./assets/push.js?v=1','./assets/icon.svg'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
