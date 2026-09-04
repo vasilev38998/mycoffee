@@ -12,6 +12,7 @@
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icon.svg">
 <link rel="stylesheet" href="assets/app.css?v=5">
+<link rel="stylesheet" href="assets/variants.css?v=1">
 </head>
 <body>
 <div id="app" class="pwa-app">
@@ -79,11 +80,11 @@
   <button data-nav="profile"><span>◎</span><small>Профиль</small></button>
 </nav>
 
-<div class="modal" id="productModal" hidden><div class="modal-backdrop" data-close-product></div><article class="product-sheet"><button class="sheet-close" data-close-product>×</button><button class="favorite" aria-label="В избранное">♡</button><div class="product-hero"><div class="cup large"><span>K</span></div></div><div class="product-detail"><div class="eyebrow-client" id="productCategory"></div><h2 id="productName"></h2><p id="productDescription"></p><div class="product-price" id="productPrice"></div><div class="qty-control"><button id="detailMinus">−</button><strong id="detailQty">1</strong><button id="detailPlus">+</button></div><button class="accent-button" id="detailAdd">Добавить в корзину</button></div></article></div>
+<div class="modal" id="productModal" hidden><div class="modal-backdrop" data-close-product></div><article class="product-sheet"><button class="sheet-close" data-close-product>×</button><button class="favorite" aria-label="В избранное">♡</button><div class="product-hero"><div class="cup large"><span>K</span></div></div><div class="product-detail"><div class="eyebrow-client" id="productCategory"></div><h2 id="productName"></h2><p id="productDescription"></p><div class="variant-picker" id="variantPicker" hidden><div class="variant-picker-title"><strong>Выберите объём</strong><span>Цена зависит от варианта</span></div><div class="variant-options" id="variantOptions"></div></div><div class="product-price" id="productPrice"></div><div class="qty-control"><button id="detailMinus">−</button><strong id="detailQty">1</strong><button id="detailPlus">+</button></div><button class="accent-button" id="detailAdd">Добавить в корзину</button></div></article></div>
 
 <div class="install-banner" id="installBanner" hidden><div class="install-icon">K</div><div class="install-copy"><strong>Установить Kapouch</strong><span>Быстрый доступ к заказам и бонусам</span></div><button class="install-action" id="installButton">Установить</button><button class="install-close" id="installClose" aria-label="Закрыть">×</button></div>
 </div>
-<script src="config.js?v=6"></script>
-<script src="assets/app.js?v=6"></script>
+<script src="config.js?v=7"></script>
+<script src="assets/app.js?v=7"></script>
 </body>
 </html>
