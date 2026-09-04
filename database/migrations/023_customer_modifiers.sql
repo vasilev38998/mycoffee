@@ -44,3 +44,11 @@ CREATE TABLE IF NOT EXISTS customer_display_group_modifier_groups (
     CONSTRAINT fk_customer_display_modifier_group FOREIGN KEY (modifier_group_id) REFERENCES customer_modifier_groups(id) ON DELETE CASCADE,
     KEY idx_customer_display_mod_group (modifier_group_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET @has_local_product_id := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='online_order_items' AND COLUMN_NAME='local_product_id');
+SET @sql := IF(@has_local_product_id=0,'ALTER TABLE online_order_items ADD COLUMN local_product_id INT UNSIGNED DEFAULT NULL AFTER external_item_id','SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @has_evotor_product_id := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='online_order_items' AND COLUMN_NAME='evotor_product_id');
+SET @sql := IF(@has_evotor_product_id=0,'ALTER TABLE online_order_items ADD COLUMN evotor_product_id VARCHAR(190) DEFAULT NULL AFTER local_product_id','SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
