@@ -40,3 +40,12 @@ function customer_loyalty_on_order_completed(int $orderId): float
         $pdo->commit();return $amount;
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
+
+function customer_loyalty_refresh_completed(int $limit=100): array
+{
+    $limit=max(1,min(500,$limit));
+    $rows=db()->query("SELECT a.order_id FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE o.status='completed' AND a.loyalty_earned_at IS NULL ORDER BY o.completed_at,a.order_id LIMIT {$limit}")->fetchAll();
+    $orders=0;$amount=0.0;
+    foreach($rows as $row){$earned=customer_loyalty_on_order_completed((int)$row['order_id']);$orders++;$amount+=$earned;}
+    return ['orders'=>$orders,'amount'=>round($amount,2)];
+}
