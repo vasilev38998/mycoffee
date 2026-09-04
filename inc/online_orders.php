@@ -99,6 +99,17 @@ function online_orders_create_test(): int
     audit_write('online_order_test_created','Создан тестовый онлайн-заказ через общий API-процессор','online_order',(string)$id);
     return $id;
 }
+function online_orders_clear_tests(): int
+{
+    $count=(int)db()->exec("DELETE FROM online_orders WHERE source='Kapouch test'");
+    audit_write('online_order_tests_cleared','Удалены тестовые онлайн-заказы: '.$count,'online_order');
+    return $count;
+}
+function online_orders_cleanup_test_orders(int $hours=24): int
+{
+    $hours=max(1,min(720,$hours));
+    return (int)db()->exec("DELETE FROM online_orders WHERE source='Kapouch test' AND status IN ('completed','cancelled') AND updated_at<DATE_SUB(NOW(),INTERVAL {$hours} HOUR)");
+}
 
 function online_orders_api_authorized(): bool
 {
