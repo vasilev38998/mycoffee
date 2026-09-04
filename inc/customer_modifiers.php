@@ -22,29 +22,44 @@ function customer_modifier_display_group_for_product(int $productId): ?int
 
 function customer_modifier_group_ids_for_product(int $productId,?int $displayGroupId=null): array
 {
-    if($displayGroupId===null)$displayGroupId=customer_modifier_display_group_for_product($productId);
-    $ids=[];
+    if($displayGroupId===null)$displayGroupId=customer_modifier_display_group_for_product($productId);$ids=[];
     if($displayGroupId){$stmt=db()->prepare('SELECT modifier_group_id FROM customer_display_group_modifier_groups WHERE product_group_id=? ORDER BY sort_order,modifier_group_id');$stmt->execute([$displayGroupId]);foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $id)$ids[(int)$id]=true;}
-    $stmt=db()->prepare('SELECT modifier_group_id FROM customer_product_modifier_groups WHERE product_id=? ORDER BY sort_order,modifier_group_id');$stmt->execute([$productId]);foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $id)$ids[(int)$id]=true;
-    return array_keys($ids);
+    $stmt=db()->prepare('SELECT modifier_group_id FROM customer_product_modifier_groups WHERE product_id=? ORDER BY sort_order,modifier_group_id');$stmt->execute([$productId]);foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $id)$ids[(int)$id]=true;return array_keys($ids);
+}
+
+function customer_modifier_group_payload(array $g,array $options): ?array
+{
+    if(!$options)return null;$min=max(0,(int)$g['min_select']);$max=max(1,(int)$g['max_select']);$max=min($max,count($options));$min=min($min,$max);
+    return ['id'=>(int)$g['id'],'name'=>(string)$g['name'],'min_select'=>$min,'max_select'=>$max,'required'=>$min>0,'options'=>$options];
 }
 
 function customer_modifier_groups_for_product(int $productId,?int $displayGroupId=null): array
 {
-    $ids=customer_modifier_group_ids_for_product($productId,$displayGroupId);if(!$ids)return [];
-    $ph=implode(',',array_fill(0,count($ids),'?'));
+    $ids=customer_modifier_group_ids_for_product($productId,$displayGroupId);if(!$ids)return [];$ph=implode(',',array_fill(0,count($ids),'?'));
     $stmt=db()->prepare("SELECT * FROM customer_modifier_groups WHERE active=1 AND id IN ({$ph}) ORDER BY sort_order,name,id");$stmt->execute($ids);$groups=[];
-    foreach($stmt->fetchAll() as $g){
-        $options=[];foreach(customer_modifier_options((int)$g['id'],true) as $o){$options[]=['id'=>(int)$o['id'],'product_id'=>(int)$o['product_id'],'evotor_product_id'=>$o['evotor_product_id']!==null?(string)$o['evotor_product_id']:null,'label'=>trim((string)($o['label']??''))?:((string)$o['product_name']),'product_name'=>(string)$o['product_name'],'price'=>(float)$o['sale_price']];}
-        if(!$options)continue;$min=max(0,(int)$g['min_select']);$max=max(1,(int)$g['max_select']);$max=min($max,count($options));$min=min($min,$max);
-        $groups[]=['id'=>(int)$g['id'],'name'=>(string)$g['name'],'min_select'=>$min,'max_select'=>$max,'required'=>$min>0,'options'=>$options];
-    }
+    foreach($stmt->fetchAll() as $g){$options=[];foreach(customer_modifier_options((int)$g['id'],true) as $o)$options[]=['id'=>(int)$o['id'],'product_id'=>(int)$o['product_id'],'evotor_product_id'=>$o['evotor_product_id']!==null?(string)$o['evotor_product_id']:null,'label'=>trim((string)($o['label']??''))?:((string)$o['product_name']),'product_name'=>(string)$o['product_name'],'price'=>(float)$o['sale_price']];$payload=customer_modifier_group_payload($g,$options);if($payload)$groups[]=$payload;}
     return $groups;
 }
 
 function customer_modifier_catalog_map(array $products): array
 {
-    $map=[];foreach($products as $p){$displayGroupId=!empty($p['group_id'])?(int)$p['group_id']:null;foreach(($p['variants']??[]) as $v){$pid=(int)$v['id'];$map[(string)$pid]=customer_modifier_groups_for_product($pid,$displayGroupId);}}return $map;
+    $productIds=[];$displayByProduct=[];$displayIds=[];
+    foreach($products as $p){$display=!empty($p['group_id'])?(int)$p['group_id']:null;if($display)$displayIds[$display]=true;foreach(($p['variants']??[]) as $v){$pid=(int)$v['id'];if($pid<=0)continue;$productIds[$pid]=true;$displayByProduct[$pid]=$display;}}
+    if(!$productIds)return [];
+
+    $groupDefs=[];foreach(db()->query('SELECT * FROM customer_modifier_groups WHERE active=1 ORDER BY sort_order,name,id')->fetchAll() as $g)$groupDefs[(int)$g['id']]=$g;
+    if(!$groupDefs)return array_fill_keys(array_map('strval',array_keys($productIds)),[]);
+
+    $optionsByGroup=[];
+    $rows=db()->query("SELECT o.*,p.name product_name,p.sale_price,(SELECT ep.evotor_product_id FROM evotor_products ep WHERE ep.local_product_id=p.id ORDER BY ep.id LIMIT 1) evotor_product_id FROM customer_modifier_options o JOIN products p ON p.id=o.product_id JOIN customer_modifier_groups g ON g.id=o.modifier_group_id WHERE o.active=1 AND g.active=1 AND p.active=1 AND p.sale_price>=0 ORDER BY o.modifier_group_id,o.sort_order,p.name,o.id")->fetchAll();
+    foreach($rows as $o)$optionsByGroup[(int)$o['modifier_group_id']][]=['id'=>(int)$o['id'],'product_id'=>(int)$o['product_id'],'evotor_product_id'=>$o['evotor_product_id']!==null?(string)$o['evotor_product_id']:null,'label'=>trim((string)($o['label']??''))?:((string)$o['product_name']),'product_name'=>(string)$o['product_name'],'price'=>(float)$o['sale_price']];
+
+    $payloadByGroup=[];foreach($groupDefs as $gid=>$g){$payload=customer_modifier_group_payload($g,$optionsByGroup[$gid]??[]);if($payload)$payloadByGroup[$gid]=$payload;}
+    $productAssign=[];$ids=array_keys($productIds);$ph=implode(',',array_fill(0,count($ids),'?'));$stmt=db()->prepare("SELECT product_id,modifier_group_id FROM customer_product_modifier_groups WHERE product_id IN ({$ph}) ORDER BY sort_order,modifier_group_id");$stmt->execute($ids);foreach($stmt->fetchAll() as $r)$productAssign[(int)$r['product_id']][]=(int)$r['modifier_group_id'];
+    $displayAssign=[];if($displayIds){$dids=array_keys($displayIds);$dph=implode(',',array_fill(0,count($dids),'?'));$stmt=db()->prepare("SELECT product_group_id,modifier_group_id FROM customer_display_group_modifier_groups WHERE product_group_id IN ({$dph}) ORDER BY sort_order,modifier_group_id");$stmt->execute($dids);foreach($stmt->fetchAll() as $r)$displayAssign[(int)$r['product_group_id']][]=(int)$r['modifier_group_id'];}
+
+    $map=[];foreach($ids as $pid){$ordered=[];$display=$displayByProduct[$pid]??null;if($display)foreach($displayAssign[$display]??[] as $gid)$ordered[$gid]=true;foreach($productAssign[$pid]??[] as $gid)$ordered[$gid]=true;$map[(string)$pid]=[];foreach(array_keys($ordered) as $gid)if(isset($payloadByGroup[$gid]))$map[(string)$pid][]=$payloadByGroup[$gid];}
+    return $map;
 }
 
 function customer_modifier_validate_selection(int $baseProductId,array $selectedProductIds): array
