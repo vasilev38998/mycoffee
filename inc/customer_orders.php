@@ -36,6 +36,9 @@ function customer_order_create(array $data): array
     $fulfillment=(string)($data['fulfillment_type']??'pickup');
     if(!in_array($fulfillment,['pickup','delivery'],true))$fulfillment='pickup';
     if($fulfillment==='delivery')throw new RuntimeException('Доставка пока не запущена. Выберите самовывоз.');
+    $clientOrderId=trim((string)($data['client_order_id']??''));
+    if($clientOrderId!==''&&!preg_match('/^[A-Za-z0-9_-]{8,80}$/',$clientOrderId))throw new RuntimeException('Некорректный идентификатор оформления. Обновите страницу и попробуйте ещё раз.');
+    if($clientOrderId==='')$clientOrderId=bin2hex(random_bytes(16));
     $rawItems=$data['items']??null;
     if(!is_array($rawItems)||!$rawItems)throw new RuntimeException('Корзина пустая.');
 
@@ -58,8 +61,8 @@ function customer_order_create(array $data): array
     foreach($qtyById as $id=>$qty){$p=$products[$id];$price=(float)$p['sale_price'];$line=$price*$qty;$total+=$line;$items[]=['external_id'=>(string)$id,'name'=>(string)$p['name'],'quantity'=>$qty,'unit_price'=>$price,'line_total'=>$line];}
 
     $customerId=customer_order_account($phone,$name);
-    $publicId='web-'.date('YmdHis').'-'.bin2hex(random_bytes(4));
-    $orderNumber='W'.date('Hi').'-'.strtoupper(bin2hex(random_bytes(1)));
+    $publicId='customer-web-'.$clientOrderId;
+    $orderNumber='W'.date('Hi').'-'.strtoupper(substr(hash('sha256',$clientOrderId),0,2));
     $payload=[
         'external_id'=>$publicId,'order_number'=>$orderNumber,'source'=>'customer-web',
         'customer'=>['name'=>$name!==''?$name:'Гость','phone'=>$phone],
@@ -68,11 +71,18 @@ function customer_order_create(array $data): array
         'comment'=>$comment!==''?mb_substr($comment,0,1000):null,'created_at'=>date('c'),'items'=>$items,
     ];
     $result=online_orders_upsert_from_api($payload);
-    $orderId=(int)$result['id'];$token=bin2hex(random_bytes(32));
-    db()->prepare('INSERT INTO customer_order_access(order_id,customer_id,tracking_token) VALUES(?,?,?)')->execute([$orderId,$customerId,$token]);
+    $orderId=(int)$result['id'];
+    $findAccess=db()->prepare('SELECT tracking_token,customer_id FROM customer_order_access WHERE order_id=?');$findAccess->execute([$orderId]);$existingAccess=$findAccess->fetch();
+    if($existingAccess){
+        $token=(string)$existingAccess['tracking_token'];
+        $customerId=(int)($existingAccess['customer_id']?:$customerId);
+    }else{
+        $token=bin2hex(random_bytes(32));
+        db()->prepare('INSERT INTO customer_order_access(order_id,customer_id,tracking_token) VALUES(?,?,?)')->execute([$orderId,$customerId,$token]);
+    }
     return [
         'order_id'=>$orderId,'order_number'=>$orderNumber,'tracking_token'=>$token,'total_amount'=>round($total,2),
-        'status'=>'new','status_label'=>online_orders_status_label('new'),
+        'status'=>(string)$result['status'],'status_label'=>online_orders_status_label((string)$result['status']),
         'loyalty_balance'=>customer_loyalty_balance($customerId),'loyalty_expected'=>customer_loyalty_preview($total),'loyalty_percent'=>customer_loyalty_rate(),
     ];
 }
