@@ -40,6 +40,15 @@ try{
 }
 
 try{
+    require_once $root.'/inc/customer_auth.php';
+    $authCleanup=customer_auth_cleanup();
+    if($authCleanup['codes']>0||$authCleanup['sessions']>0)echo sprintf("[%s] customer auth cleanup: codes %d, sessions %d\n",date('c'),$authCleanup['codes'],$authCleanup['sessions']);
+}catch(Throwable $e){
+    $failed=true;
+    fwrite(STDERR,'['.date('c').'] customer auth cleanup: '.$e->getMessage()."\n");
+}
+
+try{
     $cleaned=online_orders_cleanup_test_orders(24);
     if($cleaned>0)echo sprintf("[%s] removed old completed test orders: %d\n",date('c'),$cleaned);
 }catch(Throwable $e){
