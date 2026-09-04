@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/customer_modifiers.php';
 
 function customer_pwa_settings(): array
 {
@@ -23,8 +24,7 @@ function customer_pwa_settings(): array
 }
 function customer_pwa_slug(string $value): string
 {
-    $value=mb_strtolower(trim($value));
-    $map=['а'=>'a','б'=>'b','в'=>'v','г'=>'g','д'=>'d','е'=>'e','ё'=>'e','ж'=>'zh','з'=>'z','и'=>'i','й'=>'y','к'=>'k','л'=>'l','м'=>'m','н'=>'n','о'=>'o','п'=>'p','р'=>'r','с'=>'s','т'=>'t','у'=>'u','ф'=>'f','х'=>'h','ц'=>'c','ч'=>'ch','ш'=>'sh','щ'=>'sch','ъ'=>'','ы'=>'y','ь'=>'','э'=>'e','ю'=>'yu','я'=>'ya'];
+    $value=mb_strtolower(trim($value));$map=['а'=>'a','б'=>'b','в'=>'v','г'=>'g','д'=>'d','е'=>'e','ё'=>'e','ж'=>'zh','з'=>'z','и'=>'i','й'=>'y','к'=>'k','л'=>'l','м'=>'m','н'=>'n','о'=>'o','п'=>'p','р'=>'r','с'=>'s','т'=>'t','у'=>'u','ф'=>'f','х'=>'h','ц'=>'c','ч'=>'ch','ш'=>'sh','щ'=>'sch','ъ'=>'','ы'=>'y','ь'=>'','э'=>'e','ю'=>'yu','я'=>'ya'];
     $value=strtr($value,$map);$value=preg_replace('/[^a-z0-9]+/','-',$value)??'';return trim($value,'-')?:'category';
 }
 function customer_pwa_categories(bool $onlyActive=true): array{$where=$onlyActive?'WHERE active=1':'';return db()->query("SELECT * FROM customer_categories {$where} ORDER BY sort_order,name,id")->fetchAll();}
@@ -39,10 +39,7 @@ function customer_pwa_category_for(?int $categoryId,string $fallback,array $byId
 }
 function customer_pwa_image_url(?string $path): ?string
 {
-    $path=trim((string)$path);if($path===''||!str_starts_with($path,'uploads/products/'))return null;
-    $host=preg_replace('/[^A-Za-z0-9.:-]/','',(string)($_SERVER['HTTP_HOST']??''));if($host==='')return '../customer/'.$path;
-    $forwarded=trim(explode(',',(string)($_SERVER['HTTP_X_FORWARDED_PROTO']??''))[0]??'');$scheme=$forwarded!==''?$forwarded:((!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')?'https':'http');if(!in_array($scheme,['http','https'],true))$scheme='https';
-    return $scheme.'://'.$host.'/customer/'.$path;
+    $path=trim((string)$path);if($path===''||!str_starts_with($path,'uploads/products/'))return null;$host=preg_replace('/[^A-Za-z0-9.:-]/','',(string)($_SERVER['HTTP_HOST']??''));if($host==='')return '../customer/'.$path;$forwarded=trim(explode(',',(string)($_SERVER['HTTP_X_FORWARDED_PROTO']??''))[0]??'');$scheme=$forwarded!==''?$forwarded:((!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')?'https':'http');if(!in_array($scheme,['http','https'],true))$scheme='https';return $scheme.'://'.$host.'/customer/'.$path;
 }
 function customer_pwa_catalog(): array
 {
@@ -55,5 +52,6 @@ function customer_pwa_catalog(): array
     $rows=db()->query("SELECT p.id,p.name,p.category,p.sale_price,s.category_id,s.description,s.badge,s.image_path,s.featured,s.visible,s.sort_order FROM products p LEFT JOIN customer_product_settings s ON s.product_id=p.id WHERE p.active=1 AND p.sale_price>0 AND COALESCE(s.visible,1)=1 ORDER BY COALESCE(s.featured,0) DESC,COALESCE(s.sort_order,100),p.name")->fetchAll();
     foreach($rows as $r){$pid=(int)$r['id'];if(isset($groupedProductIds[$pid]))continue;$cat=customer_pwa_category_for($r['category_id']?(int)$r['category_id']:null,(string)($r['category']?:$r['name']),$byId,$bySlug);if(!$cat)continue;$image=customer_pwa_image_url($r['image_path']??null);$products[]=['key'=>'p'.$pid,'group_id'=>null,'id'=>$pid,'default_product_id'=>$pid,'name'=>(string)$r['name'],'price'=>(float)$r['sale_price'],'description'=>trim((string)($r['description']??''))?:'Любимый напиток, приготовленный специально для вас.','badge'=>trim((string)($r['badge']??'')),'image'=>$image,'featured'=>(bool)$r['featured'],'sort_order'=>(int)($r['sort_order']??100),'category_id'=>(int)$cat['id'],'category'=>(string)$cat['name'],'category_slug'=>(string)$cat['slug'],'category_icon'=>(string)$cat['icon'],'variants'=>[['id'=>$pid,'label'=>'Стандарт','price'=>(float)$r['sale_price'],'product_name'=>(string)$r['name'],'is_default'=>true,'image'=>$image]]];}
     usort($products,static function(array $a,array $b): int{return ((int)$b['featured']<=>(int)$a['featured'])?:((int)$a['sort_order']<=>(int)$b['sort_order'])?:strnatcasecmp((string)$a['name'],(string)$b['name']);});
+    $modifierMap=customer_modifier_catalog_map($products);foreach($products as &$p){$p['modifier_groups_by_product']=[];foreach($p['variants'] as $v){$pid=(string)(int)$v['id'];$p['modifier_groups_by_product'][$pid]=$modifierMap[$pid]??[];}}unset($p);
     return ['settings'=>$settings,'categories'=>array_map(static fn($c)=>['id'=>(int)$c['id'],'name'=>(string)$c['name'],'slug'=>(string)$c['slug'],'icon'=>(string)$c['icon']],$categories),'products'=>$products];
 }
