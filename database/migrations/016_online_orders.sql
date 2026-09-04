@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS online_orders (
     fulfillment_label VARCHAR(160) DEFAULT NULL,
     payment_status VARCHAR(40) DEFAULT NULL,
     total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
-    customer_comment TEXT DEFAULT NULL,
+    customer_comment TEXT,
     promised_at DATETIME DEFAULT NULL,
     external_created_at DATETIME DEFAULT NULL,
     preparing_at DATETIME DEFAULT NULL,
