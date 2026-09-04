@@ -21,6 +21,12 @@ body{background:#f3f2ef;font-weight:500;-webkit-font-smoothing:antialiased;text-
 .card>*{min-width:0;max-width:100%}
 .card p,.card .meta,.chart-head p,.insight-card p,.alert-item p,.period-note,.muted{color:var(--muted)}
 
+/* Forecast is intentionally a dark accent card; keep it above the generic white-card hardening. */
+.card.forecast-card{background:linear-gradient(145deg,#4b3528,#2d2119);border-color:#4b3528;color:#fff;overflow:hidden}
+.card.forecast-card strong{display:block;color:#fff;font-size:30px;line-height:1.1;margin:10px 0 8px;font-weight:850;letter-spacing:-.035em}
+.card.forecast-card .kicker,.card.forecast-card p{color:#d3c5ba}
+.card.forecast-card .section{border-top:1px solid rgba(255,255,255,.12);padding-top:16px}
+
 .topbar h1,.card h2,.chart-head h2{color:#171411;font-weight:800}
 .topbar-subtitle{margin-top:6px;color:#625a53;font-size:13px;font-weight:600}
 .eyebrow{color:#6d645c;font-weight:800}
@@ -68,6 +74,7 @@ td strong{font-weight:800;color:#1d1915}
   body{font-size:15px}
   .content{width:100%;max-width:100%}
   .card{overflow-x:auto}
+  .card.forecast-card{overflow:hidden}
   .chart-head{flex-wrap:wrap}
   .chart-summary{max-width:100%;text-align:left}
 }
@@ -76,6 +83,7 @@ td strong{font-weight:800;color:#1d1915}
   body{font-weight:520}
   .content{width:100%;overflow-x:hidden}
   .card{max-width:100%;padding:15px}
+  .card.forecast-card strong{font-size:26px}
   .metric .label{font-size:11px}
   .metric .meta,.chart-head p,.insight-card p,.alert-item p{font-size:11px;line-height:1.5}
   td{font-size:12.5px}
