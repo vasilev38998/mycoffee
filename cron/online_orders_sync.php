@@ -26,7 +26,7 @@ try{
     }
 }catch(Throwable $e){
     $failed=true;
-    try{set_system_meta('online_orders_last_pull_error',mb_substr($e->getMessage(),0,500));set_system_meta('online_orders_last_pull_at',date('Y-m-d H:i:s'));}catch(Throwable $ignored){}
+    try{set_system_meta('online_orders_last_pull_error',mb_substr($e->getMessage(),0,500));set_system_meta('online_orders_last_pull_error_at',date('Y-m-d H:i:s'));}catch(Throwable $ignored){}
     fwrite(STDERR,'['.date('c').'] online orders: '.$e->getMessage()."\n");
 }
 
