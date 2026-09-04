@@ -29,20 +29,9 @@ function customer_auth_decrypt(string $value): string
     return $plain;
 }
 
-function customer_auth_smsru_configured(): bool
-{
-    return (string)app_setting('smsru_api_id','')!=='';
-}
-
-function customer_auth_code_hash(string $phone,string $code): string
-{
-    return hash_hmac('sha256',$phone.'|'.$code,customer_auth_secret_key());
-}
-
-function customer_auth_client_ip(): string
-{
-    return mb_substr(trim((string)($_SERVER['REMOTE_ADDR']??'')),0,64);
-}
+function customer_auth_smsru_configured(): bool{return (string)app_setting('smsru_api_id','')!=='';}
+function customer_auth_code_hash(string $phone,string $code): string{return hash_hmac('sha256',$phone.'|'.$code,customer_auth_secret_key());}
+function customer_auth_client_ip(): string{return mb_substr(trim((string)($_SERVER['REMOTE_ADDR']??'')),0,64);}
 
 function customer_auth_send_smsru(string $phone,string $code): void
 {
@@ -54,7 +43,6 @@ function customer_auth_send_smsru(string $phone,string $code): void
     $sender=trim((string)app_setting('smsru_sender',''));
     if($sender!=='')$params['from']=$sender;
     if((string)app_setting('smsru_test_mode','0')==='1')$params['test']=1;
-
     $ch=curl_init('https://sms.ru/sms/send');
     curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>http_build_query($params),CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>20,CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded']]);
     $body=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
@@ -74,7 +62,6 @@ function customer_auth_request_code(string $rawPhone): array
     $stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE phone=? AND created_at>=DATE_SUB(NOW(),INTERVAL 1 HOUR)');$stmt->execute([$phone]);
     if((int)$stmt->fetchColumn()>=5)throw new RuntimeException('Слишком много кодов для этого номера. Попробуйте позже.');
     if($ip!==''){$stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE request_ip=? AND created_at>=DATE_SUB(NOW(),INTERVAL 1 HOUR)');$stmt->execute([$ip]);if((int)$stmt->fetchColumn()>=20)throw new RuntimeException('Слишком много запросов. Попробуйте позже.');}
-
     $code=(string)random_int(100000,999999);
     customer_auth_send_smsru($phone,$code);
     $stmt=$pdo->prepare('INSERT INTO customer_auth_codes(phone,code_hash,request_ip,expires_at) VALUES(?,?,?,DATE_ADD(NOW(),INTERVAL 5 MINUTE))');
@@ -105,6 +92,8 @@ function customer_auth_verify_code(string $rawPhone,string $code): array
 
 function customer_auth_bearer_token(): string
 {
+    $direct=trim((string)($_SERVER['HTTP_X_CUSTOMER_TOKEN']??''));
+    if($direct!=='')return $direct;
     $auth=trim((string)($_SERVER['HTTP_AUTHORIZATION']??''));
     return preg_match('/^Bearer\s+(.+)$/i',$auth,$m)?trim($m[1]):'';
 }
@@ -117,17 +106,8 @@ function customer_auth_current(): ?array
     db()->prepare('UPDATE customer_sessions SET last_seen_at=NOW() WHERE id=?')->execute([(int)$row['session_id']]);
     return ['session_id'=>(int)$row['session_id'],'id'=>(int)$row['customer_id'],'phone'=>(string)$row['phone'],'name'=>(string)($row['name']??''),'loyalty_balance'=>(float)$row['loyalty_balance']];
 }
-
-function customer_auth_require(): array
-{
-    $customer=customer_auth_current();if(!$customer)throw new RuntimeException('AUTH_REQUIRED');return $customer;
-}
-
-function customer_auth_logout(): void
-{
-    $token=customer_auth_bearer_token();if($token==='')return;
-    db()->prepare('DELETE FROM customer_sessions WHERE token_hash=?')->execute([hash('sha256',$token)]);
-}
+function customer_auth_require(): array{$customer=customer_auth_current();if(!$customer)throw new RuntimeException('AUTH_REQUIRED');return $customer;}
+function customer_auth_logout(): void{$token=customer_auth_bearer_token();if($token==='')return;db()->prepare('DELETE FROM customer_sessions WHERE token_hash=?')->execute([hash('sha256',$token)]);}
 
 function customer_auth_profile(array $customer): array
 {
@@ -136,4 +116,11 @@ function customer_auth_profile(array $customer): array
     foreach($orders as &$order){$order['status_label']=online_orders_status_label((string)$order['status']);$order['total_amount']=(float)$order['total_amount'];}unset($order);
     $ledger=db()->prepare('SELECT amount,operation_type,note,created_at FROM customer_loyalty_ledger WHERE customer_id=? ORDER BY id DESC LIMIT 30');$ledger->execute([(int)$customer['id']]);
     return ['customer'=>['id'=>$customer['id'],'phone'=>$customer['phone'],'name'=>$customer['name'],'loyalty_balance'=>customer_loyalty_balance((int)$customer['id'])],'orders'=>$orders,'loyalty'=>$ledger->fetchAll()];
+}
+
+function customer_auth_cleanup(): array
+{
+    $codes=(int)db()->exec('DELETE FROM customer_auth_codes WHERE expires_at<DATE_SUB(NOW(),INTERVAL 1 DAY)');
+    $sessions=(int)db()->exec('DELETE FROM customer_sessions WHERE expires_at<NOW()');
+    return ['codes'=>$codes,'sessions'=>$sessions];
 }
