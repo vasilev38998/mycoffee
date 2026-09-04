@@ -14,7 +14,7 @@ function page_header(string $title): void {
             ['products.php','Меню и техкарты'],['ingredients.php','Ингредиенты'],['inventory.php','Склад'],['purchases.php','Закупки'],['suppliers.php','Поставщики'],['purchase_prices.php','Закупочные цены'],
         ]],
         ['label'=>'Система','items'=>[
-            ['customer_app.php','Клиентское PWA'],['customer_groups.php','Группы и объёмы PWA'],['customer_media.php','Фото PWA'],['pwa_visibility.php','Видимость меню PWA'],['push_notifications.php','Push-уведомления'],['integrations.php','Интеграции'],['settings.php','Настройки'],['users.php','Пользователи'],['audit.php','Журнал действий'],['updates.php','Обновления'],
+            ['customer_app.php','Клиентское PWA'],['integrations.php','Интеграции'],['settings.php','Настройки'],['users.php','Пользователи'],['audit.php','Журнал действий'],['updates.php','Обновления'],
         ]],
     ];
     foreach($navGroups as &$g){$g['items']=array_values(array_filter($g['items'],fn($i)=>can_access_page($i[0],$user)));}unset($g);
