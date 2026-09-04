@@ -1,5 +1,9 @@
 (function(){
 'use strict';
+
+// The decorative shape in the yellow "О Kapouch" card overlaps text on narrow screens.
+document.querySelectorAll('.about-shape').forEach(el=>el.remove());
+
 function normalizePrice(text){return String(text||'').replace(/\s+/g,' ').trim()}
 function refresh(){
   document.querySelectorAll('#modifierPicker .modifier-group').forEach(group=>{
