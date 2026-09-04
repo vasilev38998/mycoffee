@@ -14,9 +14,28 @@ function pc_fail(string $message,int $status=400): never
     exit;
 }
 
+function pc_authorization_header(): string
+{
+    $candidates=[
+        $_SERVER['HTTP_AUTHORIZATION']??'',
+        $_SERVER['REDIRECT_HTTP_AUTHORIZATION']??'',
+        $_SERVER['Authorization']??'',
+    ];
+    if(function_exists('getallheaders')){
+        $headers=getallheaders();
+        if(is_array($headers)){
+            foreach($headers as $name=>$value){
+                if(strcasecmp((string)$name,'Authorization')===0)$candidates[]=(string)$value;
+            }
+        }
+    }
+    foreach($candidates as $candidate){$candidate=trim((string)$candidate);if($candidate!=='')return $candidate;}
+    return '';
+}
+
 if($_SERVER['REQUEST_METHOD']!=='GET')pc_fail('Метод не поддерживается.',405);
 
-$auth=(string)($_SERVER['HTTP_AUTHORIZATION']??'');
+$auth=pc_authorization_header();
 if(!preg_match('/^Bearer\s+(.+)$/i',$auth,$m))pc_fail('Не передан токен источника чеков.',401);
 $token=trim($m[1]);
 if($token==='')pc_fail('Пустой токен источника чеков.',401);
