@@ -11,7 +11,7 @@ function customer_modifier_options(int $groupId,bool $activeOnly=false): array
 {
     $sql="SELECT o.*,p.name product_name,p.sale_price,p.active product_active,(SELECT ep.evotor_product_id FROM evotor_products ep WHERE ep.local_product_id=p.id ORDER BY ep.id LIMIT 1) evotor_product_id FROM customer_modifier_options o JOIN products p ON p.id=o.product_id WHERE o.modifier_group_id=?";
     if($activeOnly)$sql.=' AND o.active=1 AND p.active=1 AND p.sale_price>=0';
-    $sql.=' ORDER BY o.sort_order,p.name,o.id';
+    $sql.=' ORDER BY o.sort_order,o.label,o.id';
     $stmt=db()->prepare($sql);$stmt->execute([$groupId]);return $stmt->fetchAll();
 }
 
@@ -33,11 +33,16 @@ function customer_modifier_group_payload(array $g,array $options): ?array
     return ['id'=>(int)$g['id'],'name'=>(string)$g['name'],'min_select'=>$min,'max_select'=>$max,'required'=>$min>0,'options'=>$options];
 }
 
+function customer_modifier_option_payload(array $o): array
+{
+    return ['id'=>(int)$o['id'],'product_id'=>(int)$o['product_id'],'evotor_product_id'=>$o['evotor_product_id']!==null?(string)$o['evotor_product_id']:null,'label'=>(string)$o['label'],'product_name'=>(string)$o['product_name'],'price'=>(float)$o['sale_price']];
+}
+
 function customer_modifier_groups_for_product(int $productId,?int $displayGroupId=null): array
 {
     $ids=customer_modifier_group_ids_for_product($productId,$displayGroupId);if(!$ids)return [];$ph=implode(',',array_fill(0,count($ids),'?'));
     $stmt=db()->prepare("SELECT * FROM customer_modifier_groups WHERE active=1 AND id IN ({$ph}) ORDER BY sort_order,name,id");$stmt->execute($ids);$groups=[];
-    foreach($stmt->fetchAll() as $g){$options=[];foreach(customer_modifier_options((int)$g['id'],true) as $o)$options[]=['id'=>(int)$o['id'],'product_id'=>(int)$o['product_id'],'evotor_product_id'=>$o['evotor_product_id']!==null?(string)$o['evotor_product_id']:null,'label'=>trim((string)($o['label']??''))?:((string)$o['product_name']),'product_name'=>(string)$o['product_name'],'price'=>(float)$o['sale_price']];$payload=customer_modifier_group_payload($g,$options);if($payload)$groups[]=$payload;}
+    foreach($stmt->fetchAll() as $g){$options=[];foreach(customer_modifier_options((int)$g['id'],true) as $o)$options[]=customer_modifier_option_payload($o);$payload=customer_modifier_group_payload($g,$options);if($payload)$groups[]=$payload;}
     return $groups;
 }
 
@@ -46,29 +51,28 @@ function customer_modifier_catalog_map(array $products): array
     $productIds=[];$displayByProduct=[];$displayIds=[];
     foreach($products as $p){$display=!empty($p['group_id'])?(int)$p['group_id']:null;if($display)$displayIds[$display]=true;foreach(($p['variants']??[]) as $v){$pid=(int)$v['id'];if($pid<=0)continue;$productIds[$pid]=true;$displayByProduct[$pid]=$display;}}
     if(!$productIds)return [];
-
     $groupDefs=[];foreach(db()->query('SELECT * FROM customer_modifier_groups WHERE active=1 ORDER BY sort_order,name,id')->fetchAll() as $g)$groupDefs[(int)$g['id']]=$g;
     if(!$groupDefs)return array_fill_keys(array_map('strval',array_keys($productIds)),[]);
 
     $optionsByGroup=[];
-    $rows=db()->query("SELECT o.*,p.name product_name,p.sale_price,(SELECT ep.evotor_product_id FROM evotor_products ep WHERE ep.local_product_id=p.id ORDER BY ep.id LIMIT 1) evotor_product_id FROM customer_modifier_options o JOIN products p ON p.id=o.product_id JOIN customer_modifier_groups g ON g.id=o.modifier_group_id WHERE o.active=1 AND g.active=1 AND p.active=1 AND p.sale_price>=0 ORDER BY o.modifier_group_id,o.sort_order,p.name,o.id")->fetchAll();
-    foreach($rows as $o)$optionsByGroup[(int)$o['modifier_group_id']][]=['id'=>(int)$o['id'],'product_id'=>(int)$o['product_id'],'evotor_product_id'=>$o['evotor_product_id']!==null?(string)$o['evotor_product_id']:null,'label'=>trim((string)($o['label']??''))?:((string)$o['product_name']),'product_name'=>(string)$o['product_name'],'price'=>(float)$o['sale_price']];
+    $rows=db()->query("SELECT o.*,p.name product_name,p.sale_price,(SELECT ep.evotor_product_id FROM evotor_products ep WHERE ep.local_product_id=p.id ORDER BY ep.id LIMIT 1) evotor_product_id FROM customer_modifier_options o JOIN products p ON p.id=o.product_id JOIN customer_modifier_groups g ON g.id=o.modifier_group_id WHERE o.active=1 AND g.active=1 AND p.active=1 AND p.sale_price>=0 ORDER BY o.modifier_group_id,o.sort_order,o.label,o.id")->fetchAll();
+    foreach($rows as $o)$optionsByGroup[(int)$o['modifier_group_id']][]=customer_modifier_option_payload($o);
 
     $payloadByGroup=[];foreach($groupDefs as $gid=>$g){$payload=customer_modifier_group_payload($g,$optionsByGroup[$gid]??[]);if($payload)$payloadByGroup[$gid]=$payload;}
     $productAssign=[];$ids=array_keys($productIds);$ph=implode(',',array_fill(0,count($ids),'?'));$stmt=db()->prepare("SELECT product_id,modifier_group_id FROM customer_product_modifier_groups WHERE product_id IN ({$ph}) ORDER BY sort_order,modifier_group_id");$stmt->execute($ids);foreach($stmt->fetchAll() as $r)$productAssign[(int)$r['product_id']][]=(int)$r['modifier_group_id'];
     $displayAssign=[];if($displayIds){$dids=array_keys($displayIds);$dph=implode(',',array_fill(0,count($dids),'?'));$stmt=db()->prepare("SELECT product_group_id,modifier_group_id FROM customer_display_group_modifier_groups WHERE product_group_id IN ({$dph}) ORDER BY sort_order,modifier_group_id");$stmt->execute($dids);foreach($stmt->fetchAll() as $r)$displayAssign[(int)$r['product_group_id']][]=(int)$r['modifier_group_id'];}
-
     $map=[];foreach($ids as $pid){$ordered=[];$display=$displayByProduct[$pid]??null;if($display)foreach($displayAssign[$display]??[] as $gid)$ordered[$gid]=true;foreach($productAssign[$pid]??[] as $gid)$ordered[$gid]=true;$map[(string)$pid]=[];foreach(array_keys($ordered) as $gid)if(isset($payloadByGroup[$gid]))$map[(string)$pid][]=$payloadByGroup[$gid];}
     return $map;
 }
 
-function customer_modifier_validate_selection(int $baseProductId,array $selectedProductIds): array
+function customer_modifier_validate_selection(int $baseProductId,array $selectedOptionIds): array
 {
-    $displayGroupId=customer_modifier_display_group_for_product($baseProductId);$groups=customer_modifier_groups_for_product($baseProductId,$displayGroupId);$selected=array_values(array_unique(array_filter(array_map('intval',$selectedProductIds),static fn($v)=>$v>0)));$optionByProduct=[];$groupById=[];
-    foreach($groups as $g){$groupById[(int)$g['id']]=$g;foreach($g['options'] as $o)$optionByProduct[(int)$o['product_id']]=['group_id'=>(int)$g['id'],'option'=>$o];}
-    foreach($selected as $pid)if(!isset($optionByProduct[$pid]))throw new RuntimeException('Один из выбранных модификаторов недоступен для этого напитка. Обновите меню.');
-    $counts=[];foreach($selected as $pid){$gid=$optionByProduct[$pid]['group_id'];$counts[$gid]=($counts[$gid]??0)+1;}
+    $displayGroupId=customer_modifier_display_group_for_product($baseProductId);$groups=customer_modifier_groups_for_product($baseProductId,$displayGroupId);
+    $selected=array_values(array_unique(array_filter(array_map('intval',$selectedOptionIds),static fn($v)=>$v>0)));$optionById=[];$groupById=[];
+    foreach($groups as $g){$groupById[(int)$g['id']]=$g;foreach($g['options'] as $o)$optionById[(int)$o['id']]=['group_id'=>(int)$g['id'],'option'=>$o];}
+    foreach($selected as $optionId)if(!isset($optionById[$optionId]))throw new RuntimeException('Один из выбранных модификаторов недоступен для этого напитка. Обновите меню.');
+    $counts=[];foreach($selected as $optionId){$gid=$optionById[$optionId]['group_id'];$counts[$gid]=($counts[$gid]??0)+1;}
     foreach($groups as $g){$gid=(int)$g['id'];$count=(int)($counts[$gid]??0);if($count<(int)$g['min_select'])throw new RuntimeException('Выберите «'.$g['name'].'».');if($count>(int)$g['max_select'])throw new RuntimeException('Для «'.$g['name'].'» можно выбрать не больше '.$g['max_select'].'.');}
-    $validated=[];foreach($selected as $pid){$entry=$optionByProduct[$pid];$validated[]=['group_id'=>$entry['group_id'],'group_name'=>(string)$groupById[$entry['group_id']]['name'],'product_id'=>$pid,'evotor_product_id'=>$entry['option']['evotor_product_id']??null,'label'=>(string)$entry['option']['label'],'product_name'=>(string)$entry['option']['product_name'],'price'=>(float)$entry['option']['price']];}
+    $validated=[];foreach($selected as $optionId){$entry=$optionById[$optionId];$o=$entry['option'];$validated[]=['option_id'=>$optionId,'group_id'=>$entry['group_id'],'group_name'=>(string)$groupById[$entry['group_id']]['name'],'product_id'=>(int)$o['product_id'],'evotor_product_id'=>$o['evotor_product_id']??null,'label'=>(string)$o['label'],'product_name'=>(string)$o['product_name'],'price'=>(float)$o['price']];}
     return $validated;
 }
