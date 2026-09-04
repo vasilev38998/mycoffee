@@ -16,7 +16,7 @@ function role_pages(): array{
 function can_access_page(string $page,?array $user=null): bool{$user=$user??current_user();if(!$user)return false;return in_array($page,role_pages()[$user['role']]??[],true);}
 function require_page_access(): void{
     $page=basename($_SERVER['SCRIPT_NAME']??'');
-    $public=['login.php','logout.php','install.php','api_online_orders.php'];
+    $public=['login.php','logout.php','install.php','api_online_orders.php','customer_catalog.php','customer_order.php','customer_order_status.php'];
     if(in_array($page,$public,true))return;
     $user=current_user();if(!$user)return;
     if(!can_access_page($page,$user)){http_response_code(403);exit('Недостаточно прав для этого раздела.');}
