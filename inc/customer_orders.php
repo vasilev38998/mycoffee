@@ -18,9 +18,9 @@ function customer_order_account(string $phone,string $name): int
 {
     $stmt=db()->prepare('SELECT id FROM customer_accounts WHERE phone=?');$stmt->execute([$phone]);$id=(int)($stmt->fetchColumn()?:0);if($id>0){if($name!=='')db()->prepare('UPDATE customer_accounts SET name=? WHERE id=?')->execute([mb_substr($name,0,160),$id]);return $id;}$stmt=db()->prepare('INSERT INTO customer_accounts(phone,name) VALUES(?,?)');$stmt->execute([$phone,$name!==''?mb_substr($name,0,160):null]);return (int)db()->lastInsertId();
 }
-function customer_order_modifier_ids(mixed $raw): array
+function customer_order_modifier_option_ids(mixed $raw): array
 {
-    if(!is_array($raw))return [];$ids=[];foreach($raw as $value){$id=is_array($value)?(int)($value['product_id']??$value['id']??0):(int)$value;if($id>0)$ids[$id]=true;}return array_keys($ids);
+    if(!is_array($raw))return [];$ids=[];foreach($raw as $value){$id=is_array($value)?(int)($value['option_id']??$value['id']??0):(int)$value;if($id>0)$ids[$id]=true;}return array_keys($ids);
 }
 function customer_order_attach_product_identity(int $orderId): void
 {
@@ -33,15 +33,15 @@ function customer_order_create(array $data): array
     $clientOrderId=trim((string)($data['client_order_id']??''));if($clientOrderId!==''&&!preg_match('/^[A-Za-z0-9_-]{8,80}$/',$clientOrderId))throw new RuntimeException('Некорректный идентификатор оформления. Обновите страницу и попробуйте ещё раз.');if($clientOrderId==='')$clientOrderId=bin2hex(random_bytes(16));
     $rawItems=$data['items']??null;if(!is_array($rawItems)||!$rawItems)throw new RuntimeException('Корзина пустая.');
     $lines=[];$baseIds=[];$baseUnits=0;
-    foreach($rawItems as $row){if(!is_array($row))continue;$id=(int)($row['product_id']??$row['id']??0);$qty=max(0,min(20,(int)($row['quantity']??0)));if($id<=0||$qty<=0)continue;$baseUnits+=$qty;$baseIds[$id]=true;$lines[]=['product_id'=>$id,'quantity'=>$qty,'modifier_ids'=>customer_order_modifier_ids($row['modifiers']??[])];}
+    foreach($rawItems as $row){if(!is_array($row))continue;$id=(int)($row['product_id']??$row['id']??0);$qty=max(0,min(20,(int)($row['quantity']??0)));if($id<=0||$qty<=0)continue;$baseUnits+=$qty;$baseIds[$id]=true;$lines[]=['product_id'=>$id,'quantity'=>$qty,'modifier_option_ids'=>customer_order_modifier_option_ids($row['modifiers']??[])];}
     if(!$lines)throw new RuntimeException('В корзине нет корректных позиций.');if($baseUnits>50)throw new RuntimeException('В одном заказе можно оформить не больше 50 основных позиций.');
     $ids=array_keys($baseIds);$placeholders=implode(',',array_fill(0,count($ids),'?'));
     $stmt=db()->prepare("SELECT p.id,p.name,p.sale_price FROM products p LEFT JOIN customer_product_settings cps ON cps.product_id=p.id LEFT JOIN customer_categories pc ON pc.id=cps.category_id LEFT JOIN customer_product_group_variants cgv ON cgv.product_id=p.id LEFT JOIN customer_product_groups cg ON cg.id=cgv.group_id LEFT JOIN customer_categories gc ON gc.id=cg.category_id WHERE p.active=1 AND p.sale_price>0 AND COALESCE(cps.visible,1)=1 AND (cps.category_id IS NULL OR COALESCE(pc.active,0)=1) AND (cgv.group_id IS NULL OR COALESCE(cg.visible,0)=1) AND (cg.category_id IS NULL OR COALESCE(gc.active,0)=1) AND p.id IN ({$placeholders})");$stmt->execute($ids);$products=[];foreach($stmt->fetchAll() as $p)$products[(int)$p['id']]=$p;if(count($products)!==count($ids))throw new RuntimeException('Одна из позиций больше недоступна. Обновите меню.');
     $items=[];$total=0.0;$allUnits=0;
-    foreach($lines as $line){$id=$line['product_id'];$qty=$line['quantity'];$p=$products[$id];$modifiers=customer_modifier_validate_selection($id,$line['modifier_ids']);$allUnits+=$qty*(1+count($modifiers));if($allUnits>100)throw new RuntimeException('Слишком много позиций и добавок в одном заказе.');
+    foreach($lines as $line){$id=$line['product_id'];$qty=$line['quantity'];$p=$products[$id];$modifiers=customer_modifier_validate_selection($id,$line['modifier_option_ids']);$allUnits+=$qty*(1+count($modifiers));if($allUnits>100)throw new RuntimeException('Слишком много позиций и добавок в одном заказе.');
         $modifierSummary=[];foreach($modifiers as $m)$modifierSummary[]=$m['group_name'].': '.$m['label'];$price=(float)$p['sale_price'];$lineTotal=$price*$qty;$total+=$lineTotal;
         $items[]=['external_id'=>(string)$id,'name'=>(string)$p['name'],'quantity'=>$qty,'unit_price'=>$price,'line_total'=>$lineTotal,'comment'=>$modifierSummary?implode(' · ',$modifierSummary):null];
-        foreach($modifiers as $m){$mPrice=(float)$m['price'];$mTotal=$mPrice*$qty;$total+=$mTotal;$items[]=['external_id'=>(string)$m['product_id'],'name'=>(string)$m['product_name'],'variant'=>(string)$m['group_name'],'quantity'=>$qty,'unit_price'=>$mPrice,'line_total'=>$mTotal,'comment'=>'Добавка к: '.(string)$p['name']];}
+        foreach($modifiers as $m){$mPrice=(float)$m['price'];$mTotal=$mPrice*$qty;$total+=$mTotal;$items[]=['external_id'=>(string)$m['product_id'],'name'=>(string)$m['product_name'],'variant'=>(string)$m['group_name'].' · '.(string)$m['label'],'quantity'=>$qty,'unit_price'=>$mPrice,'line_total'=>$mTotal,'comment'=>'Добавка «'.$m['label'].'» к: '.(string)$p['name']];}
     }
     $customerId=customer_order_account($phone,$name);$publicId='customer-web-'.$clientOrderId;$orderNumber='W'.date('Hi').'-'.strtoupper(substr(hash('sha256',$clientOrderId),0,2));
     $payload=['external_id'=>$publicId,'order_number'=>$orderNumber,'source'=>'customer-web','customer'=>['name'=>$name!==''?$name:'Гость','phone'=>$phone],'fulfillment'=>['type'=>$fulfillment,'label'=>(string)app_setting('customer_pickup_label','Самовывоз')],'payment_status'=>'unpaid','total_amount'=>round($total,2),'comment'=>$comment!==''?mb_substr($comment,0,1000):null,'created_at'=>date('c'),'items'=>$items];
