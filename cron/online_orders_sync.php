@@ -40,6 +40,19 @@ try{
 }
 
 try{
+    require_once $root.'/inc/customer_push.php';
+    $readyRows=db()->query("SELECT o.id FROM online_orders o JOIN customer_order_access a ON a.order_id=o.id WHERE o.status='ready' AND a.customer_id IS NOT NULL AND o.ready_at>=DATE_SUB(NOW(),INTERVAL 3 DAY) ORDER BY o.id DESC LIMIT 200")->fetchAll();
+    foreach($readyRows as $row)customer_push_enqueue_order_ready((int)$row['id']);
+    $loyaltyRows=db()->query("SELECT l.customer_id,l.order_id,l.amount FROM customer_loyalty_ledger l WHERE l.operation_type='earn' AND l.order_id IS NOT NULL AND l.created_at>=DATE_SUB(NOW(),INTERVAL 7 DAY) ORDER BY l.id DESC LIMIT 300")->fetchAll();
+    foreach($loyaltyRows as $row)customer_push_enqueue_loyalty((int)$row['customer_id'],(int)$row['order_id'],(float)$row['amount']);
+    $push=customer_push_process_queue(50);
+    if($push['processed']>0)echo sprintf("[%s] customer push: processed %d, sent %d, failed %d\n",date('c'),$push['processed'],$push['sent'],$push['failed']);
+}catch(Throwable $e){
+    $failed=true;
+    fwrite(STDERR,'['.date('c').'] customer push: '.$e->getMessage()."\n");
+}
+
+try{
     require_once $root.'/inc/customer_auth.php';
     $authCleanup=customer_auth_cleanup();
     if($authCleanup['codes']>0||$authCleanup['sessions']>0)echo sprintf("[%s] customer auth cleanup: codes %d, sessions %d\n",date('c'),$authCleanup['codes'],$authCleanup['sessions']);
