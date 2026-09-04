@@ -1,6 +1,8 @@
 -- Customer payment methods and Sber SBP payment transactions.
 SET @db := DATABASE();
 
+ALTER TABLE online_orders MODIFY status ENUM('awaiting_payment','new','preparing','ready','completed','cancelled') NOT NULL DEFAULT 'new';
+
 SET @sql := IF(
   EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='online_orders' AND COLUMN_NAME='payment_method'),
   'SELECT 1',
