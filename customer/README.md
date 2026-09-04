@@ -8,9 +8,9 @@
 
 Клиентская часть обращается только к публичному API Kapouch:
 
-- `GET customer_catalog.php`
-- `POST customer_order.php`
-- `GET customer_order_status.php?token=...`
+- `GET api/customer_catalog.php`
+- `POST api/customer_order.php`
+- `GET api/customer_order_status.php?token=...`
 
 Сервер сам повторно проверяет товары, доступность и цены. Браузер передаёт только ID товара и количество, поэтому итоговую сумму нельзя подменить на клиенте.
 
@@ -29,7 +29,7 @@
 ## Перенос на другой домен
 
 1. Скопировать содержимое `customer/` на новый сайт.
-2. В `customer/config.js` заменить `apiBase` на абсолютный адрес Kapouch, например `https://kapouch.store`.
+2. В `customer/config.js` заменить `apiBase` на абсолютный адрес API Kapouch, например `https://kapouch.store/api`.
 3. В Kapouch задать `customer_api_allowed_origin` равным origin клиентского сайта, например `https://order.example.ru`.
 
 После этого клиентский интерфейс может жить отдельно, а каталог, заказы, статусы и лояльность останутся в Kapouch.
