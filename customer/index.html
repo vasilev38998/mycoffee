@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#111111">
+<meta name="theme-color" content="#0f0f0f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Kapouch">
@@ -11,34 +11,34 @@
 <link rel="manifest" href="../api/customer_manifest.php">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icon.svg">
-<link rel="stylesheet" href="assets/app.css?v=4">
+<link rel="stylesheet" href="assets/app.css?v=5">
 </head>
 <body>
 <div id="app" class="pwa-app">
 <header class="app-header">
-  <button class="location-button" id="locationButton"><span>⌖</span><span id="pickupLabel">Самовывоз из кофейни</span><b>⌄</b></button>
-  <button class="mini-cart" id="headerCart"><span>▣</span><b id="headerCartCount">0</b></button>
+  <button class="location-button" id="locationButton"><span class="location-pin">⌖</span><span id="pickupLabel">Самовывоз из кофейни</span><b>⌄</b></button>
+  <button class="mini-cart" id="headerCart" aria-label="Корзина"><span>▣</span><b id="headerCartCount">0</b></button>
 </header>
 
 <main class="app-main">
 <section class="view active" data-view="home">
-  <div class="welcome"><div><div class="eyebrow-client">ВАШ KAPOUCH</div><h1 id="welcomeTitle">Привет!</h1><p id="heroText">Готовим твой любимый кофе ♥</p></div><div class="brand-orb">K</div></div>
-  <button class="balance-card" id="balanceCard"><div><span>Твой баланс</span><strong><span id="homeBalance">0</span> <small>★</small></strong><em>бонусов</em></div><div class="balance-k">K</div><span class="card-arrow">›</span></button>
+  <div class="welcome"><div><div class="eyebrow-client">KAPOUCH · С СОБОЙ</div><h1 id="welcomeTitle">Привет!</h1><p id="heroText">Готовим твой любимый кофе ♥</p></div><div class="brand-orb">K</div></div>
+  <button class="balance-card" id="balanceCard"><div class="balance-copy"><span>Твой баланс</span><strong><span id="homeBalance">0</span> <small>★</small></strong><em>бонусов</em></div><div class="balance-k">K</div><span class="card-arrow">›</span></button>
   <div class="status-strip" id="orderStatusStrip" hidden></div>
   <div class="section-title"><h2>Популярное</h2><button data-nav="menu">Смотреть все</button></div>
   <div class="popular-row" id="popularList"></div>
-  <section class="about-card"><div class="about-shape"></div><div class="eyebrow-client">KAPOUCH</div><h2 id="aboutTitle">Мы про кофе и людей</h2><p id="aboutText"></p></section>
+  <section class="about-card"><div class="about-shape"></div><div class="eyebrow-client">О KAPOUCH</div><h2 id="aboutTitle">Мы про кофе и людей</h2><p id="aboutText"></p></section>
 </section>
 
 <section class="view" data-view="menu">
-  <div class="page-head"><div><div class="eyebrow-client">МЕНЮ</div><h1>Что приготовим?</h1></div><button class="search-toggle" id="searchToggle">⌕</button></div>
+  <div class="page-head"><div><div class="eyebrow-client">МЕНЮ</div><h1>Что приготовим?</h1><p>Выбирай категорию и любимый напиток.</p></div><button class="search-toggle" id="searchToggle" aria-label="Поиск">⌕</button></div>
   <div class="search-box" id="searchBox" hidden><input id="searchInput" placeholder="Найти напиток"></div>
   <div class="category-tabs" id="categoryTabs"></div>
   <div class="menu-grid" id="menuGrid"></div>
 </section>
 
 <section class="view" data-view="cart">
-  <div class="page-head"><div><div class="eyebrow-client">ЗАКАЗ</div><h1>Корзина</h1></div></div>
+  <div class="page-head"><div><div class="eyebrow-client">ЗАКАЗ</div><h1>Корзина</h1><p>Проверь заказ перед оформлением.</p></div></div>
   <div id="cartList" class="cart-list-pwa"></div>
   <div class="checkout-card" id="checkoutCard">
     <div class="checkout-line"><span>Самовывоз</span><strong id="checkoutPickup">Кофейня</strong></div>
@@ -55,9 +55,9 @@
 </section>
 
 <section class="view" data-view="profile">
-  <div class="page-head"><div><div class="eyebrow-client">ПРОФИЛЬ</div><h1>Твой Kapouch</h1></div></div>
+  <div class="page-head"><div><div class="eyebrow-client">ПРОФИЛЬ</div><h1>Твой Kapouch</h1><p>Заказы, бонусы и всё важное в одном месте.</p></div></div>
   <div id="profileGuest" class="profile-card">
-    <div class="profile-icon">K</div><h2>Войди по номеру телефона</h2><p>История заказов, бонусы и персональные предложения будут здесь.</p>
+    <div class="profile-icon">K</div><h2>Войди по номеру телефона</h2><p>Сохраним историю заказов и покажем бонусный баланс.</p>
     <form id="phoneForm" class="auth-form"><input id="authPhone" required inputmode="tel" autocomplete="tel" placeholder="+7 900 000-00-00"><div class="form-error" id="phoneError"></div><button class="accent-button" id="sendCodeButton">Получить код</button></form>
     <form id="codeForm" class="auth-form" hidden><input id="authCode" required inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Код из SMS"><p class="auth-hint" id="codeHint">Код действует 5 минут</p><div class="form-error" id="codeError"></div><button class="accent-button" id="verifyCodeButton">Войти</button><button type="button" class="text-button" id="changePhoneButton">Изменить номер</button></form>
   </div>
@@ -78,11 +78,11 @@
   <button data-nav="profile"><span>◎</span><small>Профиль</small></button>
 </nav>
 
-<div class="modal" id="productModal" hidden><div class="modal-backdrop" data-close-product></div><article class="product-sheet"><button class="sheet-close" data-close-product>×</button><button class="favorite">♡</button><div class="product-hero"><div class="cup large"><span>K</span></div></div><div class="product-detail"><div class="eyebrow-client" id="productCategory"></div><h2 id="productName"></h2><p id="productDescription"></p><div class="product-price" id="productPrice"></div><div class="qty-control"><button id="detailMinus">−</button><strong id="detailQty">1</strong><button id="detailPlus">+</button></div><button class="accent-button" id="detailAdd">Добавить в корзину</button></div></article></div>
+<div class="modal" id="productModal" hidden><div class="modal-backdrop" data-close-product></div><article class="product-sheet"><button class="sheet-close" data-close-product>×</button><button class="favorite" aria-label="В избранное">♡</button><div class="product-hero"><div class="cup large"><span>K</span></div></div><div class="product-detail"><div class="eyebrow-client" id="productCategory"></div><h2 id="productName"></h2><p id="productDescription"></p><div class="product-price" id="productPrice"></div><div class="qty-control"><button id="detailMinus">−</button><strong id="detailQty">1</strong><button id="detailPlus">+</button></div><button class="accent-button" id="detailAdd">Добавить в корзину</button></div></article></div>
 
-<div class="install-banner" id="installBanner" hidden><div><strong>Установить Kapouch</strong><span>Добавь приложение на главный экран</span></div><button id="installButton">Установить</button><button id="installClose">×</button></div>
+<div class="install-banner" id="installBanner" hidden><div class="install-icon">K</div><div class="install-copy"><strong>Установить Kapouch</strong><span>Быстрый доступ к заказам и бонусам</span></div><button class="install-action" id="installButton">Установить</button><button class="install-close" id="installClose" aria-label="Закрыть">×</button></div>
 </div>
-<script src="config.js?v=4"></script>
-<script src="assets/app.js?v=4"></script>
+<script src="config.js?v=5"></script>
+<script src="assets/app.js?v=5"></script>
 </body>
 </html>
