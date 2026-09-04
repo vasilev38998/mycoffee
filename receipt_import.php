@@ -8,6 +8,25 @@ require_once __DIR__.'/inc/cash_flow.php';
 if($_SERVER['REQUEST_METHOD']==='POST'){
     verify_csrf();$action=(string)($_POST['action']??'');
     try{
+        if($action==='test_receipt'){
+            $stamp=date('YmdHis');
+            $json=['ticket'=>['document'=>['receipt'=>[
+                'user'=>'Тестовый поставщик Kapouch',
+                'userInn'=>'3800000000',
+                'fiscalDriveNumber'=>'TEST'.$stamp,
+                'fiscalDocumentNumber'=>(int)date('His'),
+                'fiscalSign'=>random_int(100000000,999999999),
+                'dateTime'=>date('Y-m-d\TH:i:s'),
+                'totalSum'=>326000,
+                'items'=>[
+                    ['name'=>'Молоко 3,2% 0,93 л','quantity'=>12,'price'=>9500,'sum'=>114000],
+                    ['name'=>'Кофе зерно 1 кг','quantity'=>2,'price'=>68000,'sum'=>136000],
+                    ['name'=>'Сироп карамель 1 л','quantity'=>1,'price'=>46000,'sum'=>46000],
+                    ['name'=>'Шоколад личная покупка','quantity'=>2,'price'=>15000,'sum'=>30000],
+                ],
+            ]]]];
+            $doc=receipt_document_from_json($json,null);$id=receipt_create_draft($doc,null,'test');flash('success','Тестовый чек создан. Попробуй исключить личную позицию, связать товары с ингредиентами и сохранить правила.');redirect('receipt_import.php?id='.$id);
+        }
         if($action==='scan_qr'){
             $qrRaw=trim((string)($_POST['qr_raw']??''));$qr=receipt_parse_qr($qrRaw);$json=receipt_fetch_by_qr($qr);$doc=receipt_document_from_json($json,$qr);$id=receipt_create_draft($doc,$qrRaw,'qr_api');redirect('receipt_import.php?id='.$id);
         }
@@ -33,6 +52,9 @@ page_header('QR-чек закупки');
 <div class="card"><div class="chart-head"><div><h2>Умный приход по кассовому чеку</h2><p>Сканируй QR, убирай личные покупки, один раз связывай товар с ингредиентом — следующие одинаковые позиции Kapouch сопоставит автоматически.</p></div><a class="btn ghost" href="purchases.php">← Закупки</a></div></div>
 
 <?php if(!$draft):?>
+<div class="card section test-receipt-card"><div><div class="eyebrow">Быстрая проверка после обновления</div><h2>Тестовый чек без API</h2><p>Создаст черновик с молоком, зерном, сиропом и одной личной покупкой. Можно проверить весь процесс до подключения источника электронных чеков.</p></div><form method="post"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="test_receipt"><button class="btn primary">Создать тестовый чек</button></form></div>
+<div class="alert warning section"><strong>Важно:</strong> тестовый чек сначала безопасный черновик. Но если нажать «Оприходовать на склад», выбранные позиции действительно изменят остатки и закупочные цены. Для первой проверки можно просто сохранить черновик и не подтверждать приход.</div>
+
 <div class="two-col section">
   <div class="card"><div class="chart-head"><div><h2>1. Сканировать QR</h2><p>QR содержит фискальные реквизиты. Если подключён источник электронных чеков, Kapouch сразу запросит полный состав.</p></div></div>
     <form method="post" id="qrForm" class="form-grid"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="scan_qr">
@@ -51,6 +73,7 @@ page_header('QR-чек закупки');
 <form method="post" class="form-grid" style="margin-top:14px"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="save_connection"><label>Название<input name="connection_name" value="<?=e((string)($connection['name']??'Электронные чеки'))?>"></label><label>HTTPS endpoint<input type="url" name="endpoint_url" value="<?=e((string)($connection['endpoint_url']??''))?>" placeholder="https://.../receipt" required></label><label>Bearer token<input type="password" name="token" autocomplete="new-password" placeholder="<?= $connection?'Оставь пустым, чтобы не менять':'Токен источника' ?>"></label><div><button class="btn ghost">Сохранить интеграцию</button></div></form></div>
 <?php else:?>
 <div class="card section"><div class="chart-head"><div><div class="eyebrow">Черновик чека #<?=$draft['id']?></div><h2><?=e($draft['seller_name']?:'Кассовый чек')?></h2><p><?=e($draft['receipt_at']?date('d.m.Y H:i',strtotime($draft['receipt_at'])):'Дата не определена')?> · ИНН <?=e($draft['seller_inn']?:'—')?> · чек <?=money((float)$draft['total_amount'])?></p></div><span class="pill <?=$draft['status']==='imported'?'connected':''?>"><?=e($draft['status']==='draft'?'Черновик':'Оприходован')?></span></div></div>
+<?php if($draft['source']==='test'&&$draft['status']==='draft'):?><div class="alert info section"><strong>Это тестовый чек.</strong> Попробуй сначала исключить «Шоколад личная покупка», затем сопоставить остальные позиции. Реальный склад изменится только после кнопки «Оприходовать на склад».</div><?php endif;?>
 <?php if($draft['status']==='draft'):?>
 <form method="post" id="draftForm"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="receipt_id" value="<?=$draft['id']?>"><input type="hidden" name="action" id="draftAction" value="save_draft">
 <div class="card section table-card"><div class="chart-head"><div><h2>2. Проверить позиции</h2><p>Нажми «Не для кофейни» у личной покупки — она останется в исходном чеке, но не попадёт ни на склад, ни в сумму закупки Kapouch.</p></div></div><div style="overflow:auto"><table id="receiptItems"><thead><tr><th>Позиция чека</th><th>Цена</th><th>Ингредиент</th><th>Сколько приходуем с 1 шт.</th><th>Правило</th><th></th></tr></thead><tbody>
@@ -60,9 +83,9 @@ page_header('QR-чек закупки');
 <?php endif;?>
 <?php endif;?>
 
-<div class="card section table-card"><div class="chart-head"><div><h2>Последние чеки</h2><p>Повторный импорт уже оприходованного фискального чека блокируется автоматически.</p></div></div><table><thead><tr><th>Дата</th><th>Продавец</th><th>Сумма</th><th>Статус</th><th>Источник</th><th></th></tr></thead><tbody><?php foreach($recent as $r):?><tr><td><?=e($r['receipt_at']?date('d.m.Y H:i',strtotime($r['receipt_at'])):'—')?></td><td><?=e($r['seller_name']?:'—')?></td><td><?=money((float)$r['total_amount'])?></td><td><?=e($r['status']==='imported'?'Оприходован':'Черновик')?></td><td><?=e($r['source'])?></td><td><a class="btn ghost" href="receipt_import.php?id=<?=$r['id']?>">Открыть</a></td></tr><?php endforeach;?><?php if(!$recent):?><tr><td colspan="6" class="muted">Чеков пока нет.</td></tr><?php endif;?></tbody></table></div>
+<div class="card section table-card"><div class="chart-head"><div><h2>Последние чеки</h2><p>Повторный импорт уже оприходованного фискального чека блокируется автоматически.</p></div></div><table><thead><tr><th>Дата</th><th>Продавец</th><th>Сумма</th><th>Статус</th><th>Источник</th><th></th></tr></thead><tbody><?php foreach($recent as $r):?><tr><td><?=e($r['receipt_at']?date('d.m.Y H:i',strtotime($r['receipt_at'])):'—')?></td><td><?=e($r['seller_name']?:'—')?></td><td><?=money((float)$r['total_amount'])?></td><td><?=e($r['status']==='imported'?'Оприходован':'Черновик')?></td><td><?=e($r['source']==='test'?'Тест':$r['source'])?></td><td><a class="btn ghost" href="receipt_import.php?id=<?=$r['id']?>">Открыть</a></td></tr><?php endforeach;?><?php if(!$recent):?><tr><td colspan="6" class="muted">Чеков пока нет.</td></tr><?php endif;?></tbody></table></div>
 
-<style>.receipt-include{display:flex;gap:9px;align-items:flex-start}.receipt-include input{width:auto;margin-top:3px}.receipt-include span{display:grid;gap:3px}.receipt-include small{color:var(--muted)}.receipt-row.excluded{opacity:.42}.receipt-row.excluded select,.receipt-row.excluded input[type=number]{pointer-events:none}.receipt-row.excluded td{text-decoration-color:var(--muted)}</style>
+<style>.receipt-include{display:flex;gap:9px;align-items:flex-start}.receipt-include input{width:auto;margin-top:3px}.receipt-include span{display:grid;gap:3px}.receipt-include small{color:var(--muted)}.receipt-row.excluded{opacity:.42}.receipt-row.excluded select,.receipt-row.excluded input[type=number]{pointer-events:none}.receipt-row.excluded td{text-decoration-color:var(--muted)}.test-receipt-card{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px;border:1px solid rgba(126,84,52,.32);background:linear-gradient(135deg,var(--surface),rgba(126,84,52,.07))}.test-receipt-card h2{margin:4px 0}.test-receipt-card p{margin:0;color:var(--muted);max-width:720px}@media(max-width:700px){.test-receipt-card{align-items:flex-start;flex-direction:column}}</style>
 <script>
 (function(){
   document.querySelectorAll('[data-exclude]').forEach(function(btn){btn.addEventListener('click',function(){var id=btn.dataset.exclude,row=document.querySelector('[data-row="'+id+'"]'),cb=row.querySelector('input[name="included['+id+']"]');cb.checked=!cb.checked;row.classList.toggle('excluded',!cb.checked);btn.textContent=cb.checked?'Не для кофейни':'Вернуть';});});
