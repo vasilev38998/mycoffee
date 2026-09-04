@@ -94,13 +94,15 @@ function customer_payment_create_sbp(int $orderId,string $orderNumber,float $amo
         'language'=>'ru',
         'jsonParams'=>['qrType'=>'DYNAMIC_QR_SBP','sbp.scenario'=>'C2B','returnUrl'=>$returnUrl],
     ];
+    // Hide the order from the barista queue before the remote registration call starts.
+    // If Sber registration fails, customer_order_create() cancels this awaiting-payment order.
+    db()->prepare("UPDATE online_orders SET status='awaiting_payment',payment_status='pending',payment_method='sbp',payment_provider='sber_sbp' WHERE id=? AND status='new'")->execute([$orderId]);
     $response=customer_payment_sber_request($connection,'register',$payload);
     if((string)($response['errorCode']??'')!=='0'||empty($response['orderId']))throw new RuntimeException('Сбер не создал СБП-платёж: '.trim((string)($response['errorMessage']??'ошибка регистрации заказа')));
     $formUrl=trim((string)($response['formUrl']??''));$sbpPayload=trim((string)($response['externalParams']['sbpPayload']??''));
     if($formUrl===''&&$sbpPayload==='')throw new RuntimeException('Сбер создал платёж без ссылки для оплаты.');
     $stmt=db()->prepare("INSERT INTO customer_payments(order_id,provider,method,status,amount,provider_order_id,provider_order_number,payment_url,sbp_payload,provider_response) VALUES(?,'sber_sbp','sbp','pending',?,?,?,?,?,?) ON DUPLICATE KEY UPDATE provider_order_id=VALUES(provider_order_id),provider_order_number=VALUES(provider_order_number),payment_url=VALUES(payment_url),sbp_payload=VALUES(sbp_payload),provider_response=VALUES(provider_response),status='pending'");
     $stmt->execute([$orderId,$amount,(string)$response['orderId'],$providerNumber,$formUrl?:null,$sbpPayload?:null,json_encode($response,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)]);
-    db()->prepare("UPDATE online_orders SET status='awaiting_payment',payment_status='pending',payment_method='sbp',payment_provider='sber_sbp' WHERE id=? AND status='new'")->execute([$orderId]);
     return ['payment_url'=>$formUrl?:$sbpPayload,'sbp_payload'=>$sbpPayload,'provider_order_id'=>(string)$response['orderId'],'status'=>'pending'];
 }
 
