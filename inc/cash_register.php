@@ -11,14 +11,33 @@ function ensure_cash_register_tables(): void
     $ready=true;
 }
 
+function evotor_payment_change(array $payment): float
+{
+    $partsChange=0.0;
+    foreach(($payment['parts']??[]) as $part){
+        if(is_array($part))$partsChange+=(float)($part['change']??0);
+    }
+    $direct=(float)($payment['change']??0);
+    return max(0.0,max($direct,$partsChange));
+}
+
 function evotor_cash_payment_amount(array $body): float
 {
-    $cash=0.0;
+    $cash=0.0;$hasCash=false;$hasNonCash=false;
     foreach(($body['payments']??[]) as $payment){
+        if(!is_array($payment))continue;
         $type=(string)($payment['type']??$payment['payment_type']??'');
-        if($type==='CASH')$cash+=(float)($payment['sum']??$payment['amount']??0);
+        $sum=(float)($payment['sum']??$payment['amount']??0);
+        if($type==='CASH'){
+            $hasCash=true;
+            $cash+=max(0.0,$sum-evotor_payment_change($payment));
+        }elseif($sum>0){$hasNonCash=true;}
     }
-    return $cash;
+    if($hasCash&&!$hasNonCash){
+        $result=isset($body['result_sum'])?(float)$body['result_sum']:(isset($body['resultSum'])?(float)$body['resultSum']:(isset($body['sum'])?(float)$body['sum']:null));
+        if($result!==null&&$result>=0)$cash=min($cash,$result);
+    }
+    return round($cash,2);
 }
 
 function cash_document_values(array $document): array
@@ -48,6 +67,21 @@ function cash_document_values(array $document): array
         'session_number'=>isset($body['session_number'])?(int)$body['session_number']:(isset($document['session_number'])?(int)$document['session_number']:null),
         'document_number'=>$body['document_number']??$document['number']??null,
     ];
+}
+
+function repair_cash_register_payment_amounts(string $from,string $to): int
+{
+    ensure_cash_register_tables();
+    $stmt=db()->prepare("SELECT id,document_type,cash_delta,cash_sale_amount,cash_return_amount,raw_json FROM cash_register_documents WHERE document_type IN ('SELL','PAYBACK') AND raw_json IS NOT NULL AND occurred_at>=? AND occurred_at<DATE_ADD(?,INTERVAL 1 DAY)");
+    $stmt->execute([$from.' 00:00:00',$to]);$fixed=0;
+    $update=db()->prepare('UPDATE cash_register_documents SET cash_delta=?,cash_sale_amount=?,cash_return_amount=? WHERE id=?');
+    foreach($stmt->fetchAll() as $row){
+        $doc=json_decode((string)$row['raw_json'],true);if(!is_array($doc))continue;
+        $v=cash_document_values($doc);
+        if(abs((float)$row['cash_delta']-(float)$v['cash_delta'])<0.005&&abs((float)$row['cash_sale_amount']-(float)$v['cash_sale_amount'])<0.005&&abs((float)$row['cash_return_amount']-(float)$v['cash_return_amount'])<0.005)continue;
+        $update->execute([$v['cash_delta'],$v['cash_sale_amount'],$v['cash_return_amount'],(int)$row['id']]);$fixed++;
+    }
+    return $fixed;
 }
 
 function sync_evotor_cash_register(array $connection): int
