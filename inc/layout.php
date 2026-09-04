@@ -14,7 +14,7 @@ function page_header(string $title): void {
             ['products.php','Меню и техкарты'],['ingredients.php','Ингредиенты'],['inventory.php','Склад'],['purchases.php','Закупки'],['suppliers.php','Поставщики'],['purchase_prices.php','Закупочные цены'],
         ]],
         ['label'=>'Система','items'=>[
-            ['customer_app.php','Клиентское PWA'],['integrations.php','Интеграции'],['settings.php','Настройки'],['users.php','Пользователи'],['audit.php','Журнал действий'],['updates.php','Обновления'],
+            ['customer_app.php','Клиентское PWA'],['push_notifications.php','Push-уведомления'],['integrations.php','Интеграции'],['settings.php','Настройки'],['users.php','Пользователи'],['audit.php','Журнал действий'],['updates.php','Обновления'],
         ]],
     ];
     foreach($navGroups as &$g){$g['items']=array_values(array_filter($g['items'],fn($i)=>can_access_page($i[0],$user)));}unset($g);
@@ -33,4 +33,4 @@ function page_header(string $title): void {
         try{require_once __DIR__.'/control.php';$control=control_summary();if($control['total']>0&&can_access_page('control.php',$user)){$kind=$control['critical']>0?'bad':'warn';?><a href="control.php" class="alert-item <?=e($kind)?> section" style="display:flex"><span class="alert-dot"></span><div><strong><?=$control['critical']>0?'Есть критичные сигналы':'Есть предупреждения'?></strong><p>Центр контроля: критичных <?=$control['critical']?>, предупреждений <?=$control['warning']?>. Нажми, чтобы открыть рекомендации.</p></div></a><?php }}catch(Throwable $e){}
     }
 }
-function page_footer(): void { ?><script>(function(){var groups=document.querySelectorAll('.sidebar .nav-group');groups.forEach(function(group){group.addEventListener('toggle',function(){if(!group.open)return;groups.forEach(function(other){if(other!==group)other.open=false;});});});})();</script><script src="assets/product-visuals.js?v=20260903-1"></script></main></div></body></html><?php }
+function page_footer(): void { ?><script>(function(){var groups=document.querySelectorAll('.sidebar .nav-group');groups.forEach(function(group){group.addEventListener('toggle',function(){if(!group.open)return;groups.forEach(function(other){if(other!==group)other.open=false;});});})();</script><script src="assets/product-visuals.js?v=20260903-1"></script></main></div></body></html><?php }
