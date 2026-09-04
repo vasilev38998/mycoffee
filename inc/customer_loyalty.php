@@ -46,3 +46,14 @@ function customer_loyalty_refresh_completed(int $limit=100): array
     foreach($rows as $row){$amount+=customer_loyalty_on_order_completed((int)$row['order_id']);$orders++;}
     return ['orders'=>$orders,'amount'=>round($amount,2)];
 }
+
+function customer_loyalty_refresh_customer(int $customerId,int $limit=30): array
+{
+    if($customerId<=0)return ['orders'=>0,'amount'=>0.0];
+    $limit=max(1,min(100,$limit));
+    $stmt=db()->prepare("SELECT a.order_id FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.customer_id=? AND o.status='completed' AND a.loyalty_earned_at IS NULL ORDER BY o.completed_at,a.order_id LIMIT {$limit}");
+    $stmt->execute([$customerId]);
+    $orders=0;$amount=0.0;
+    foreach($stmt->fetchAll() as $row){$amount+=customer_loyalty_on_order_completed((int)$row['order_id']);$orders++;}
+    return ['orders'=>$orders,'amount'=>round($amount,2)];
+}
