@@ -53,9 +53,9 @@ function customer_order_create(array $data): array
     if(array_sum($qtyById)>50)throw new RuntimeException('В одном заказе можно оформить не больше 50 позиций.');
 
     $ids=array_keys($qtyById);$placeholders=implode(',',array_fill(0,count($ids),'?'));
-    $stmt=db()->prepare("SELECT id,name,sale_price FROM products WHERE active=1 AND sale_price>0 AND id IN ({$placeholders})");$stmt->execute($ids);
+    $stmt=db()->prepare("SELECT p.id,p.name,p.sale_price FROM products p LEFT JOIN customer_product_settings cps ON cps.product_id=p.id WHERE p.active=1 AND p.sale_price>0 AND COALESCE(cps.visible,1)=1 AND p.id IN ({$placeholders})");$stmt->execute($ids);
     $products=[];foreach($stmt->fetchAll() as $p)$products[(int)$p['id']]=$p;
-    if(count($products)!==count($ids))throw new RuntimeException('Одна из позиций больше недоступна. Обновите каталог.');
+    if(count($products)!==count($ids))throw new RuntimeException('Одна из позиций больше недоступна. Обновите меню.');
 
     $items=[];$total=0.0;
     foreach($qtyById as $id=>$qty){$p=$products[$id];$price=(float)$p['sale_price'];$line=$price*$qty;$total+=$line;$items[]=['external_id'=>(string)$id,'name'=>(string)$p['name'],'quantity'=>$qty,'unit_price'=>$price,'line_total'=>$line];}
