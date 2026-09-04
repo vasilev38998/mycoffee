@@ -31,6 +31,15 @@ try{
 }
 
 try{
+    require_once $root.'/inc/customer_loyalty.php';
+    $loyalty=customer_loyalty_refresh_completed(100);
+    if($loyalty['orders']>0)echo sprintf("[%s] customer loyalty: processed %d orders, earned %.2f\n",date('c'),$loyalty['orders'],$loyalty['amount']);
+}catch(Throwable $e){
+    $failed=true;
+    fwrite(STDERR,'['.date('c').'] customer loyalty: '.$e->getMessage()."\n");
+}
+
+try{
     $cleaned=online_orders_cleanup_test_orders(24);
     if($cleaned>0)echo sprintf("[%s] removed old completed test orders: %d\n",date('c'),$cleaned);
 }catch(Throwable $e){
