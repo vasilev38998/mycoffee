@@ -5,7 +5,7 @@ function role_labels(): array{return ['owner'=>'Владелец','manager'=>'У
 function role_label(string $role): string{return role_labels()[$role]??$role;}
 
 function role_pages(): array{
-    $all=['index.php','owner_brief.php','control.php','analytics.php','economics.php','daily_report.php','planning.php','budget.php','online_orders.php','online_orders_feed.php','cash.php','cash_flow.php','sales.php','expenses.php','automatic_expenses.php','products.php','recipe.php','ingredients.php','inventory.php','purchases.php','suppliers.php','purchase_prices.php','customer_app.php','customer_groups.php','customer_media.php','pwa_visibility.php','push_notifications.php','integrations.php','settings.php','updates.php','users.php','audit.php','data_quality.php'];
+    $all=['index.php','owner_brief.php','control.php','analytics.php','economics.php','daily_report.php','planning.php','budget.php','online_orders.php','online_orders_feed.php','cash.php','cash_flow.php','sales.php','expenses.php','automatic_expenses.php','products.php','recipe.php','ingredients.php','inventory.php','purchases.php','suppliers.php','purchase_prices.php','customer_app.php','customer_groups.php','customer_media.php','customer_modifiers.php','pwa_visibility.php','push_notifications.php','integrations.php','settings.php','updates.php','users.php','audit.php','data_quality.php'];
     return [
       'owner'=>$all,
       'manager'=>array_values(array_diff($all,['users.php','audit.php','updates.php'])),
