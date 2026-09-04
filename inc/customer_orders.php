@@ -22,6 +22,11 @@ function customer_order_modifier_ids(mixed $raw): array
 {
     if(!is_array($raw))return [];$ids=[];foreach($raw as $value){$id=is_array($value)?(int)($value['product_id']??$value['id']??0):(int)$value;if($id>0)$ids[$id]=true;}return array_keys($ids);
 }
+function customer_order_attach_product_identity(int $orderId): void
+{
+    $stmt=db()->prepare("UPDATE online_order_items SET local_product_id=CAST(external_item_id AS UNSIGNED) WHERE order_id=? AND external_item_id REGEXP '^[0-9]+$'");$stmt->execute([$orderId]);
+    $stmt=db()->prepare('UPDATE online_order_items oi SET oi.evotor_product_id=(SELECT ep.evotor_product_id FROM evotor_products ep WHERE ep.local_product_id=oi.local_product_id ORDER BY ep.id LIMIT 1) WHERE oi.order_id=? AND oi.local_product_id IS NOT NULL');$stmt->execute([$orderId]);
+}
 function customer_order_create(array $data): array
 {
     $name=trim((string)($data['name']??''));$phone=customer_order_normalize_phone((string)($data['phone']??''));$comment=trim((string)($data['comment']??''));$fulfillment=(string)($data['fulfillment_type']??'pickup');if(!in_array($fulfillment,['pickup','delivery'],true))$fulfillment='pickup';if($fulfillment==='delivery')throw new RuntimeException('Доставка пока не запущена. Выберите самовывоз.');
@@ -40,7 +45,8 @@ function customer_order_create(array $data): array
     }
     $customerId=customer_order_account($phone,$name);$publicId='customer-web-'.$clientOrderId;$orderNumber='W'.date('Hi').'-'.strtoupper(substr(hash('sha256',$clientOrderId),0,2));
     $payload=['external_id'=>$publicId,'order_number'=>$orderNumber,'source'=>'customer-web','customer'=>['name'=>$name!==''?$name:'Гость','phone'=>$phone],'fulfillment'=>['type'=>$fulfillment,'label'=>(string)app_setting('customer_pickup_label','Самовывоз')],'payment_status'=>'unpaid','total_amount'=>round($total,2),'comment'=>$comment!==''?mb_substr($comment,0,1000):null,'created_at'=>date('c'),'items'=>$items];
-    $result=online_orders_upsert_from_api($payload);$orderId=(int)$result['id'];$findAccess=db()->prepare('SELECT tracking_token,customer_id FROM customer_order_access WHERE order_id=?');$findAccess->execute([$orderId]);$existingAccess=$findAccess->fetch();if($existingAccess){$token=(string)$existingAccess['tracking_token'];$customerId=(int)($existingAccess['customer_id']?:$customerId);}else{$token=bin2hex(random_bytes(32));db()->prepare('INSERT INTO customer_order_access(order_id,customer_id,tracking_token) VALUES(?,?,?)')->execute([$orderId,$customerId,$token]);}
+    $result=online_orders_upsert_from_api($payload);$orderId=(int)$result['id'];customer_order_attach_product_identity($orderId);
+    $findAccess=db()->prepare('SELECT tracking_token,customer_id FROM customer_order_access WHERE order_id=?');$findAccess->execute([$orderId]);$existingAccess=$findAccess->fetch();if($existingAccess){$token=(string)$existingAccess['tracking_token'];$customerId=(int)($existingAccess['customer_id']?:$customerId);}else{$token=bin2hex(random_bytes(32));db()->prepare('INSERT INTO customer_order_access(order_id,customer_id,tracking_token) VALUES(?,?,?)')->execute([$orderId,$customerId,$token]);}
     return ['order_id'=>$orderId,'order_number'=>$orderNumber,'tracking_token'=>$token,'total_amount'=>round($total,2),'status'=>(string)$result['status'],'status_label'=>online_orders_status_label((string)$result['status']),'loyalty_balance'=>customer_loyalty_balance($customerId),'loyalty_expected'=>customer_loyalty_preview($total),'loyalty_percent'=>customer_loyalty_rate()];
 }
 function customer_order_public_status(string $token): ?array
