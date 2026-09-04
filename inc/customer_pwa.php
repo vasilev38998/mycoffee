@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/customer_modifiers.php';
+require_once __DIR__.'/customer_payments.php';
 
 function customer_pwa_settings(): array
 {
@@ -20,6 +21,7 @@ function customer_pwa_settings(): array
         'background'=>(string)app_setting('customer_theme_background','#111111'),
         'surface'=>(string)app_setting('customer_theme_surface','#211B17'),
         'text'=>(string)app_setting('customer_theme_text','#FFF7E8'),
+        'payment_methods'=>customer_payment_enabled_methods(),
     ];
 }
 function customer_pwa_slug(string $value): string
