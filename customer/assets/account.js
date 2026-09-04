@@ -11,8 +11,9 @@ let phone='';
 async function api(path,options={}){
   const headers={'Accept':'application/json',...(options.body?{'Content-Type':'application/json'}:{}),...(token?{'X-Customer-Token':token}:{}),...(options.headers||{})};
   const r=await fetch(apiBase+'/'+path,{cache:'no-store',...options,headers});
-  const data=await r.json().catch(()=>({ok:false,error:'Некорректный ответ сервера.'}));
-  if(!r.ok||!data.ok)throw new Error(data.error||'Ошибка запроса.');
+  const raw=await r.text();let data=null;
+  try{data=JSON.parse(raw);}catch(e){throw new Error('API вернул HTTP '+r.status+' вместо JSON. Обновите Kapouch и повторите.');}
+  if(!r.ok||!data.ok)throw new Error(data.error||('Ошибка API, HTTP '+r.status));
   return data;
 }
 function showError(id,message){$(id).textContent=message;$(id).classList.add('show');}
@@ -23,8 +24,13 @@ function showProfile(){$('loginCard').hidden=true;$('profileSection').hidden=fal
 $('phoneForm').addEventListener('submit',async e=>{
   e.preventDefault();hideError('phoneError');
   const button=$('sendCodeButton');button.disabled=true;button.textContent='Отправляем…';
-  try{phone=$('authPhone').value.trim();const data=await api('customer_auth_request.php',{method:'POST',body:JSON.stringify({phone})});phone=data.auth.phone;$('phoneForm').hidden=true;$('codeForm').hidden=false;$('authCode').focus();$('codeHint').textContent='Код отправлен на '+phone+'. Он действует 5 минут.';}
-  catch(err){showError('phoneError',err.message);}finally{button.disabled=false;button.textContent='Получить код';}
+  try{
+    phone=$('authPhone').value.trim();
+    const data=await api('customer_auth_request.php',{method:'POST',body:JSON.stringify({phone})});
+    phone=data.auth.phone;$('phoneForm').hidden=true;$('codeForm').hidden=false;$('authCode').focus();
+    $('codeHint').textContent=data.auth.test_code?'Тестовый режим SMS.ru. Используйте код '+data.auth.test_code+'.':'Код отправлен на '+phone+'. Он действует 5 минут.';
+    if(data.auth.test_code)$('authCode').value=data.auth.test_code;
+  }catch(err){showError('phoneError',err.message);}finally{button.disabled=false;button.textContent='Получить код';}
 });
 
 $('codeForm').addEventListener('submit',async e=>{

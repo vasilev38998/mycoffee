@@ -62,11 +62,14 @@ function customer_auth_request_code(string $rawPhone): array
     $stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE phone=? AND created_at>=DATE_SUB(NOW(),INTERVAL 1 HOUR)');$stmt->execute([$phone]);
     if((int)$stmt->fetchColumn()>=5)throw new RuntimeException('Слишком много кодов для этого номера. Попробуйте позже.');
     if($ip!==''){$stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE request_ip=? AND created_at>=DATE_SUB(NOW(),INTERVAL 1 HOUR)');$stmt->execute([$ip]);if((int)$stmt->fetchColumn()>=20)throw new RuntimeException('Слишком много запросов. Попробуйте позже.');}
-    $code=(string)random_int(100000,999999);
+    $testMode=(string)app_setting('smsru_test_mode','0')==='1';
+    $code=$testMode?'999999':(string)random_int(100000,999999);
     customer_auth_send_smsru($phone,$code);
     $stmt=$pdo->prepare('INSERT INTO customer_auth_codes(phone,code_hash,request_ip,expires_at) VALUES(?,?,?,DATE_ADD(NOW(),INTERVAL 5 MINUTE))');
     $stmt->execute([$phone,customer_auth_code_hash($phone,$code),$ip?:null]);
-    return ['phone'=>$phone,'expires_in'=>300,'resend_in'=>60];
+    $result=['phone'=>$phone,'expires_in'=>300,'resend_in'=>60];
+    if($testMode)$result['test_code']='999999';
+    return $result;
 }
 
 function customer_auth_verify_code(string $rawPhone,string $code): array
