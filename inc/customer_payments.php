@@ -73,6 +73,35 @@ function customer_payment_sber_request(array $connection,string $method,array $p
     return $json;
 }
 
+function customer_payment_evotor_fiscalization_enabled(): bool
+{
+    return app_setting('customer_payment_evotor_fiscalization_enabled','0')==='1';
+}
+
+function customer_payment_sber_order_bundle(int $orderId,int $totalKop): array
+{
+    $stmt=db()->prepare('SELECT id,external_item_id,product_name,variant_name,quantity,unit_price,line_total FROM online_order_items WHERE order_id=? ORDER BY sort_order,id');
+    $stmt->execute([$orderId]);$rows=$stmt->fetchAll();if(!$rows)throw new RuntimeException('Не удалось сформировать состав фискального чека: заказ пуст.');
+    $items=[];$sum=0;$last=count($rows)-1;
+    foreach($rows as $index=>$row){
+        $qty=(float)$row['quantity'];if($qty<=0)throw new RuntimeException('Некорректное количество позиции в фискальном чеке.');
+        $priceKop=(int)round((float)$row['unit_price']*100);$amountKop=(int)round((float)$row['line_total']*100);
+        if($index===$last)$amountKop+=$totalKop-($sum+$amountKop);
+        if($priceKop<0||$amountKop<0)throw new RuntimeException('Некорректная сумма позиции в фискальном чеке.');
+        $sum+=$amountKop;$name=trim((string)$row['product_name']);$variant=trim((string)($row['variant_name']??''));if($variant!=='')$name.=' · '.$variant;
+        $items[]=[
+            'positionId'=>(string)($index+1),
+            'itemCode'=>trim((string)($row['external_item_id']??''))?:('kapouch-'.$row['id']),
+            'name'=>mb_substr($name!==''?$name:'Позиция заказа',0,128),
+            'quantity'=>['value'=>$qty],
+            'itemPrice'=>$priceKop,
+            'itemAmount'=>$amountKop,
+        ];
+    }
+    if($sum!==$totalKop)throw new RuntimeException('Сумма позиций фискального чека не совпала с суммой заказа.');
+    return ['cartItems'=>['items'=>$items]];
+}
+
 function customer_payment_create_sbp(int $orderId,string $orderNumber,float $amount,string $phone): array
 {
     $existing=customer_payment_status_for_order($orderId);
@@ -94,6 +123,7 @@ function customer_payment_create_sbp(int $orderId,string $orderNumber,float $amo
         'language'=>'ru',
         'jsonParams'=>['qrType'=>'DYNAMIC_QR_SBP','sbp.scenario'=>'C2B','returnUrl'=>$returnUrl],
     ];
+    if(customer_payment_evotor_fiscalization_enabled())$payload['orderBundle']=customer_payment_sber_order_bundle($orderId,$amountKop);
     // Hide the order from the barista queue before the remote registration call starts.
     // If Sber registration fails, customer_order_create() cancels this awaiting-payment order.
     db()->prepare("UPDATE online_orders SET status='awaiting_payment',payment_status='pending',payment_method='sbp',payment_provider='sber_sbp' WHERE id=? AND status='new'")->execute([$orderId]);
