@@ -2,49 +2,87 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#6f4b32">
-<title>Онлайн-заказ</title>
-<link rel="stylesheet" href="assets/app.css?v=3">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kapouch">
+<title>Kapouch</title>
+<link rel="manifest" href="../api/customer_manifest.php">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icon.svg">
+<link rel="stylesheet" href="assets/app.css?v=4">
 </head>
 <body>
-<div class="wrap">
-<header class="top">
-  <div class="brand"><div class="mark">K</div><div><h1 id="shopName">Kapouch</h1><small>заказ кофе онлайн</small></div></div>
-  <div class="top-actions"><a class="ghost" href="account.html">Кабинет</a><button class="cart-btn" id="cartOpen">Корзина · <span id="cartCount">0</span></button></div>
+<div id="app" class="pwa-app">
+<header class="app-header">
+  <button class="location-button" id="locationButton"><span>⌖</span><span id="pickupLabel">Самовывоз из кофейни</span><b>⌄</b></button>
+  <button class="mini-cart" id="headerCart"><span>▣</span><b id="headerCartCount">0</b></button>
 </header>
-<section class="hero"><div class="hero-chip" id="loyaltyRate">Бонусная программа</div><h2>Закажите заранее — заберите без ожидания</h2><p>Выберите напитки, оформите самовывоз и следите за приготовлением прямо на этой странице.</p><div class="hero-pickup">📍 <span id="pickupText">Самовывоз из кофейни</span></div></section>
-<section class="status-card" id="statusCard">
-  <div class="muted">Ваш текущий заказ</div>
-  <h2 id="statusTitle">Заказ</h2>
-  <div class="steps" id="statusSteps"></div>
-  <div id="statusText"></div>
-  <div class="loyalty-status" id="loyaltyStatus"></div>
-</section>
-<div class="tabs" id="tabs"></div>
-<div class="error" id="catalogError"></div>
-<main class="catalog" id="catalog"><div class="empty">Загружаем меню…</div></main>
-</div>
 
-<div class="drawer" id="drawer">
-  <div class="backdrop" id="cartCloseBackdrop"></div>
-  <aside class="panel">
-    <div class="panel-head"><h2>Ваш заказ</h2><button class="close" id="cartClose">×</button></div>
-    <div class="cart-list" id="cartList"></div>
-    <div class="summary"><span>Итого</span><span id="cartTotal">0 ₽</span></div>
-    <div class="loyalty-hint" id="loyaltyHint">За выданные онлайн-заказы начисляются бонусы.</div>
-    <div class="notice">Сейчас доступен самовывоз. Оплата — при получении. Онлайн-оплату подключим отдельным этапом.</div>
-    <form class="form" id="checkoutForm" style="margin-top:14px">
-      <label>Имя<input name="name" maxlength="160" autocomplete="name" placeholder="Как к вам обращаться"></label>
-      <label>Телефон<input name="phone" required inputmode="tel" autocomplete="tel" placeholder="+7 900 000-00-00"></label>
-      <label>Комментарий<textarea name="comment" maxlength="1000" placeholder="Например: без сахара"></textarea></label>
-      <input type="hidden" name="fulfillment_type" value="pickup">
-      <div class="error" id="checkoutError"></div>
-      <button class="primary" type="submit" id="checkoutButton">Оформить заказ</button>
+<main class="app-main">
+<section class="view active" data-view="home">
+  <div class="welcome"><div><div class="eyebrow-client">ВАШ KAPOUCH</div><h1 id="welcomeTitle">Привет!</h1><p id="heroText">Готовим твой любимый кофе ♥</p></div><div class="brand-orb">K</div></div>
+  <button class="balance-card" id="balanceCard"><div><span>Твой баланс</span><strong><span id="homeBalance">0</span> <small>★</small></strong><em>бонусов</em></div><div class="balance-k">K</div><span class="card-arrow">›</span></button>
+  <div class="status-strip" id="orderStatusStrip" hidden></div>
+  <div class="section-title"><h2>Популярное</h2><button data-nav="menu">Смотреть все</button></div>
+  <div class="popular-row" id="popularList"></div>
+  <section class="about-card"><div class="about-shape"></div><div class="eyebrow-client">KAPOUCH</div><h2 id="aboutTitle">Мы про кофе и людей</h2><p id="aboutText"></p></section>
+</section>
+
+<section class="view" data-view="menu">
+  <div class="page-head"><div><div class="eyebrow-client">МЕНЮ</div><h1>Что приготовим?</h1></div><button class="search-toggle" id="searchToggle">⌕</button></div>
+  <div class="search-box" id="searchBox" hidden><input id="searchInput" placeholder="Найти напиток"></div>
+  <div class="category-tabs" id="categoryTabs"></div>
+  <div class="menu-grid" id="menuGrid"></div>
+</section>
+
+<section class="view" data-view="cart">
+  <div class="page-head"><div><div class="eyebrow-client">ЗАКАЗ</div><h1>Корзина</h1></div></div>
+  <div id="cartList" class="cart-list-pwa"></div>
+  <div class="checkout-card" id="checkoutCard">
+    <div class="checkout-line"><span>Самовывоз</span><strong id="checkoutPickup">Кофейня</strong></div>
+    <div class="checkout-line total"><span>Итого</span><strong id="cartTotal">0 ₽</strong></div>
+    <div class="loyalty-preview" id="loyaltyHint"></div>
+    <form id="checkoutForm" class="checkout-form">
+      <input name="name" maxlength="160" autocomplete="name" placeholder="Ваше имя">
+      <input name="phone" required inputmode="tel" autocomplete="tel" placeholder="+7 900 000-00-00">
+      <textarea name="comment" maxlength="1000" placeholder="Комментарий к заказу"></textarea>
+      <div class="form-error" id="checkoutError"></div>
+      <button class="accent-button" id="checkoutButton">Оформить заказ</button>
     </form>
-  </aside>
+  </div>
+</section>
+
+<section class="view" data-view="profile">
+  <div class="page-head"><div><div class="eyebrow-client">ПРОФИЛЬ</div><h1>Твой Kapouch</h1></div></div>
+  <div id="profileGuest" class="profile-card">
+    <div class="profile-icon">K</div><h2>Войди по номеру телефона</h2><p>История заказов, бонусы и персональные предложения будут здесь.</p>
+    <form id="phoneForm" class="auth-form"><input id="authPhone" required inputmode="tel" autocomplete="tel" placeholder="+7 900 000-00-00"><div class="form-error" id="phoneError"></div><button class="accent-button" id="sendCodeButton">Получить код</button></form>
+    <form id="codeForm" class="auth-form" hidden><input id="authCode" required inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Код из SMS"><p class="auth-hint" id="codeHint">Код действует 5 минут</p><div class="form-error" id="codeError"></div><button class="accent-button" id="verifyCodeButton">Войти</button><button type="button" class="text-button" id="changePhoneButton">Изменить номер</button></form>
+  </div>
+  <div id="profileUser" hidden>
+    <div class="profile-balance"><div><span>Бонусный баланс</span><strong id="profileBalance">0 ★</strong><em id="profilePhone"></em></div><div class="balance-k">K</div></div>
+    <div class="section-title"><h2>Мои заказы</h2></div><div class="profile-list" id="profileOrders"></div>
+    <div class="section-title"><h2>Бонусы</h2></div><div class="profile-list" id="profileLoyalty"></div>
+    <div class="links-card" id="externalLinks"></div>
+    <button class="text-button logout" id="logoutButton">Выйти из аккаунта</button>
+  </div>
+</section>
+</main>
+
+<nav class="bottom-nav">
+  <button class="active" data-nav="home"><span>⌂</span><small>Главная</small></button>
+  <button data-nav="menu"><span>▦</span><small>Меню</small></button>
+  <button data-nav="cart"><span>▣</span><small>Корзина</small><i id="navCartCount">0</i></button>
+  <button data-nav="profile"><span>◎</span><small>Профиль</small></button>
+</nav>
+
+<div class="modal" id="productModal" hidden><div class="modal-backdrop" data-close-product></div><article class="product-sheet"><button class="sheet-close" data-close-product>×</button><button class="favorite">♡</button><div class="product-hero"><div class="cup large"><span>K</span></div></div><div class="product-detail"><div class="eyebrow-client" id="productCategory"></div><h2 id="productName"></h2><p id="productDescription"></p><div class="product-price" id="productPrice"></div><div class="qty-control"><button id="detailMinus">−</button><strong id="detailQty">1</strong><button id="detailPlus">+</button></div><button class="accent-button" id="detailAdd">Добавить в корзину</button></div></article></div>
+
+<div class="install-banner" id="installBanner" hidden><div><strong>Установить Kapouch</strong><span>Добавь приложение на главный экран</span></div><button id="installButton">Установить</button><button id="installClose">×</button></div>
 </div>
-<script src="config.js?v=3"></script>
-<script src="assets/app.js?v=2"></script>
+<script src="config.js?v=4"></script>
+<script src="assets/app.js?v=4"></script>
 </body>
 </html>
