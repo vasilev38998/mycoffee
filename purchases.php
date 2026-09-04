@@ -5,7 +5,6 @@ require_auth();
 require_once __DIR__ . '/inc/inventory.php';
 require_once __DIR__ . '/inc/suppliers.php';
 require_once __DIR__ . '/inc/cash_flow.php';
-ensure_inventory_tables();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
@@ -20,11 +19,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();flash('danger','Не удалось сохранить закупку: '.$e->getMessage());}}
     redirect('purchases.php');}
 }
-$ingredients=db()->query('SELECT id,name,unit,stock_quantity FROM ingredients ORDER BY name')->fetchAll();$suppliers=supplier_list(true);$accounts=array_values(array_filter(cashflow_accounts(true),fn($a)=>$a['account_type']!=='acquiring'));
-$rows=db()->query("SELECT p.*,i.name ingredient_name,i.unit,COALESCE(s.name,NULLIF(p.supplier,''),'—') supplier_name,(p.total_amount/NULLIF(p.quantity,0)) unit_price,a.name cash_account_name FROM purchases p JOIN ingredients i ON i.id=p.ingredient_id LEFT JOIN suppliers s ON s.id=p.supplier_id LEFT JOIN cash_flow_accounts a ON a.id=p.cash_flow_account_id ORDER BY p.purchased_at DESC,p.id DESC LIMIT 200")->fetchAll();
+
+$warnings=[];
+$ingredients=db()->query('SELECT id,name,unit,stock_quantity FROM ingredients ORDER BY name')->fetchAll();
+try{$suppliers=supplier_list(true);}catch(Throwable $e){$suppliers=[];$warnings[]='Не удалось загрузить поставщиков. Основной раздел закупок доступен.';}
+try{$accounts=array_values(array_filter(cashflow_accounts(true),fn($a)=>$a['account_type']!=='acquiring'));}catch(Throwable $e){$accounts=[];$warnings[]='Не удалось загрузить счета Cash Flow. Закупку можно сохранить без выбора счёта.';}
+try{
+    $rows=db()->query("SELECT p.*,i.name ingredient_name,i.unit,COALESCE(s.name,NULLIF(p.supplier,''),'—') supplier_name,(p.total_amount/NULLIF(p.quantity,0)) unit_price,a.name cash_account_name FROM purchases p JOIN ingredients i ON i.id=p.ingredient_id LEFT JOIN suppliers s ON s.id=p.supplier_id LEFT JOIN cash_flow_accounts a ON a.id=p.cash_flow_account_id ORDER BY p.purchased_at DESC,p.id DESC LIMIT 200")->fetchAll();
+}catch(Throwable $e){
+    $warnings[]='Расширенная история закупок временно недоступна: показан базовый вариант без поставщиков и Cash Flow.';
+    $rows=db()->query("SELECT p.*,i.name ingredient_name,i.unit,COALESCE(NULLIF(p.supplier,''),'—') supplier_name,(p.total_amount/NULLIF(p.quantity,0)) unit_price,NULL cash_account_name FROM purchases p JOIN ingredients i ON i.id=p.ingredient_id ORDER BY p.purchased_at DESC,p.id DESC LIMIT 200")->fetchAll();
+}
 $user=current_user();$canReceiptImport=in_array((string)($user['role']??''),['owner','manager'],true);
 page_header('Закупки');
 ?>
+<?php foreach($warnings as $warning):?><div class="alert warning section"><?=e($warning)?></div><?php endforeach;?>
 <div class="card"><div class="chart-head"><div><h2>Новая закупка</h2><p>Закупка участвует в складе, истории цен и — при выборе денежного счёта — в Cash Flow.</p></div><div class="actions"><?php if($canReceiptImport):?><a class="btn primary" href="receipt_import.php">⌁ Сканировать QR-чек</a><?php endif;?><a class="btn ghost" href="suppliers.php">Поставщики</a></div></div><form method="post" class="form-grid"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><label>Дата<input type="date" name="purchased_at" value="<?=date('Y-m-d')?>" required></label><label>Ингредиент<select name="ingredient_id" required><?php foreach($ingredients as $i):?><option value="<?=$i['id']?>"><?=e($i['name'])?> — остаток <?=e((string)$i['stock_quantity'])?> <?=e($i['unit'])?></option><?php endforeach;?></select></label><label>Количество<input type="number" step="0.001" min="0.001" name="quantity" required></label><label>Сумма закупки<input type="number" step="0.01" min="0" name="total_amount" required></label><label>Поставщик<select name="supplier_id"><option value="0">Без поставщика</option><?php foreach($suppliers as $s):?><option value="<?=$s['id']?>"><?=e($s['name'])?></option><?php endforeach;?></select></label><label>Оплачено со счёта<select name="cash_flow_account_id"><option value="0">Не учитывать в Cash Flow</option><?php foreach($accounts as $a):?><option value="<?=$a['id']?>"><?=e($a['name'])?></option><?php endforeach;?></select></label><div><button class="btn primary">Сохранить закупку</button></div></form></div>
 <div class="card section table-card"><div class="chart-head"><div><h2>История закупок</h2><p>Цена за единицу и денежный источник.</p></div><a class="btn ghost" href="purchase_prices.php">Анализ цен</a></div><table><thead><tr><th>Дата</th><th>Ингредиент</th><th>Количество</th><th>Сумма</th><th>Цена / ед.</th><th>Поставщик</th><th>Оплачено</th></tr></thead><tbody><?php foreach($rows as $r):?><tr><td><?=e(date('d.m.Y',strtotime($r['purchased_at'])))?></td><td><?=e($r['ingredient_name'])?></td><td><?=e((string)$r['quantity'])?> <?=e($r['unit'])?></td><td><?=money((float)$r['total_amount'])?></td><td><?=money((float)$r['unit_price'])?> / <?=e($r['unit'])?></td><td><?=e($r['supplier_name'])?></td><td><?=e((string)($r['cash_account_name']??'—'))?></td></tr><?php endforeach;?></tbody></table></div>
 <?php page_footer(); ?>
