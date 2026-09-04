@@ -77,7 +77,7 @@ function customer_pwa_catalog(): array
     $products=[];$groupedProductIds=[];$groups=[];
     foreach($variantRows as $r){
         $gid=(int)$r['group_id'];$pid=(int)$r['product_id'];$groupedProductIds[$pid]=true;
-        if(!isset($groups[$gid])){
+        if(!array_key_exists($gid,$groups)){
             $cat=customer_pwa_category_for($r['group_category_id']?(int)$r['group_category_id']:null,(string)($r['product_category']?:$r['group_name']),$byId,$bySlug);
             if(!$cat){$groups[$gid]=null;continue;}
             $groups[$gid]=[
@@ -110,6 +110,6 @@ function customer_pwa_catalog(): array
             'variants'=>[['id'=>$pid,'label'=>'Стандарт','price'=>(float)$r['sale_price'],'product_name'=>(string)$r['name'],'is_default'=>true]],
         ];
     }
-    usort($products,static function(array $a,array $b): int{return ((int)!$b['featured']<=>(int)!$a['featured'])?:((int)$a['sort_order']<=>(int)$b['sort_order'])?:strnatcasecmp((string)$a['name'],(string)$b['name']);});
+    usort($products,static function(array $a,array $b): int{return ((int)$b['featured']<=>(int)$a['featured'])?:((int)$a['sort_order']<=>(int)$b['sort_order'])?:strnatcasecmp((string)$a['name'],(string)$b['name']);});
     return ['settings'=>$settings,'categories'=>array_map(static fn($c)=>['id'=>(int)$c['id'],'name'=>(string)$c['name'],'slug'=>(string)$c['slug'],'icon'=>(string)$c['icon']],$categories),'products'=>$products];
 }
