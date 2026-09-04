@@ -33,7 +33,7 @@ async function submit(e){
       location.assign(order.payment_url);return;
     }
     localStorage.removeItem('kapouch_customer_cart');localStorage.removeItem('kapouch_checkout_request_id');location.replace('./#home');location.reload();
-  }catch(err){showError(err.message||'Не удалось оформить заказ.');button.disabled=false;button.textContent='Оформить заказ'}
+  }catch(err){if(method==='sbp')localStorage.removeItem('kapouch_checkout_request_id');showError(err.message||'Не удалось оформить заказ.');button.disabled=false;button.textContent='Оформить заказ'}
 }
 form.addEventListener('submit',submit,true);
 loadMethods();
