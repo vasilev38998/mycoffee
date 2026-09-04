@@ -2,17 +2,13 @@
 declare(strict_types=1);
 
 require_once __DIR__.'/online_orders.php';
+require_once __DIR__.'/customer_loyalty.php';
 
 function customer_order_catalog(): array
 {
     $rows=db()->query("SELECT id,name,category,sale_price FROM products WHERE active=1 AND sale_price>0 ORDER BY COALESCE(NULLIF(category,''),'Другое'),name")->fetchAll();
     return array_map(static function(array $row): array{
-        return [
-            'id'=>(int)$row['id'],
-            'name'=>(string)$row['name'],
-            'category'=>trim((string)($row['category']??''))?:'Другое',
-            'price'=>(float)$row['sale_price'],
-        ];
+        return ['id'=>(int)$row['id'],'name'=>(string)$row['name'],'category'=>trim((string)($row['category']??''))?:'Другое','price'=>(float)$row['sale_price']];
     },$rows);
 }
 
@@ -27,10 +23,7 @@ function customer_order_normalize_phone(string $phone): string
 function customer_order_account(string $phone,string $name): int
 {
     $stmt=db()->prepare('SELECT id FROM customer_accounts WHERE phone=?');$stmt->execute([$phone]);$id=(int)($stmt->fetchColumn()?:0);
-    if($id>0){
-        if($name!=='')db()->prepare('UPDATE customer_accounts SET name=? WHERE id=?')->execute([mb_substr($name,0,160),$id]);
-        return $id;
-    }
+    if($id>0){if($name!=='')db()->prepare('UPDATE customer_accounts SET name=? WHERE id=?')->execute([mb_substr($name,0,160),$id]);return $id;}
     $stmt=db()->prepare('INSERT INTO customer_accounts(phone,name) VALUES(?,?)');$stmt->execute([$phone,$name!==''?mb_substr($name,0,160):null]);
     return (int)db()->lastInsertId();
 }
@@ -62,47 +55,41 @@ function customer_order_create(array $data): array
     if(count($products)!==count($ids))throw new RuntimeException('Одна из позиций больше недоступна. Обновите каталог.');
 
     $items=[];$total=0.0;
-    foreach($qtyById as $id=>$qty){
-        $p=$products[$id];$price=(float)$p['sale_price'];$line=$price*$qty;$total+=$line;
-        $items[]=['external_id'=>(string)$id,'name'=>(string)$p['name'],'quantity'=>$qty,'unit_price'=>$price,'line_total'=>$line];
-    }
+    foreach($qtyById as $id=>$qty){$p=$products[$id];$price=(float)$p['sale_price'];$line=$price*$qty;$total+=$line;$items[]=['external_id'=>(string)$id,'name'=>(string)$p['name'],'quantity'=>$qty,'unit_price'=>$price,'line_total'=>$line];}
 
     $customerId=customer_order_account($phone,$name);
     $publicId='web-'.date('YmdHis').'-'.bin2hex(random_bytes(4));
-    $orderNumber=(string)((int)date('His')).'-'.strtoupper(bin2hex(random_bytes(1)));
+    $orderNumber='W'.date('Hi').'-'.strtoupper(bin2hex(random_bytes(1)));
     $payload=[
-        'external_id'=>$publicId,
-        'order_number'=>$orderNumber,
-        'source'=>'customer-web',
+        'external_id'=>$publicId,'order_number'=>$orderNumber,'source'=>'customer-web',
         'customer'=>['name'=>$name!==''?$name:'Гость','phone'=>$phone],
         'fulfillment'=>['type'=>$fulfillment,'label'=>'Самовывоз'],
-        'payment_status'=>'unpaid',
-        'total_amount'=>round($total,2),
-        'comment'=>$comment!==''?mb_substr($comment,0,1000):null,
-        'created_at'=>date('c'),
-        'items'=>$items,
+        'payment_status'=>'unpaid','total_amount'=>round($total,2),
+        'comment'=>$comment!==''?mb_substr($comment,0,1000):null,'created_at'=>date('c'),'items'=>$items,
     ];
     $result=online_orders_upsert_from_api($payload);
     $orderId=(int)$result['id'];$token=bin2hex(random_bytes(32));
-    $access=db()->prepare('INSERT INTO customer_order_access(order_id,customer_id,tracking_token) VALUES(?,?,?)');$access->execute([$orderId,$customerId,$token]);
-    return ['order_id'=>$orderId,'order_number'=>$orderNumber,'tracking_token'=>$token,'total_amount'=>round($total,2),'status'=>'new','status_label'=>online_orders_status_label('new')];
+    db()->prepare('INSERT INTO customer_order_access(order_id,customer_id,tracking_token) VALUES(?,?,?)')->execute([$orderId,$customerId,$token]);
+    return [
+        'order_id'=>$orderId,'order_number'=>$orderNumber,'tracking_token'=>$token,'total_amount'=>round($total,2),
+        'status'=>'new','status_label'=>online_orders_status_label('new'),
+        'loyalty_balance'=>customer_loyalty_balance($customerId),'loyalty_expected'=>customer_loyalty_preview($total),'loyalty_percent'=>customer_loyalty_rate(),
+    ];
 }
 
 function customer_order_public_status(string $token): ?array
 {
     if(!preg_match('/^[a-f0-9]{64}$/',$token))return null;
-    $stmt=db()->prepare("SELECT o.id,o.order_number,o.status,o.total_amount,o.fulfillment_type,o.fulfillment_label,o.external_created_at,o.created_at,o.updated_at
+    $stmt=db()->prepare("SELECT o.id,o.order_number,o.status,o.total_amount,o.fulfillment_type,o.fulfillment_label,o.external_created_at,o.created_at,o.updated_at,a.customer_id,a.loyalty_earned_at
         FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.tracking_token=? LIMIT 1");
     $stmt->execute([$token]);$order=$stmt->fetch();if(!$order)return null;
     $items=db()->prepare('SELECT product_name,variant_name,quantity,unit_price,line_total,item_comment FROM online_order_items WHERE order_id=? ORDER BY sort_order,id');$items->execute([(int)$order['id']]);
+    $customerId=(int)($order['customer_id']??0);
     return [
-        'order_number'=>(string)$order['order_number'],
-        'status'=>(string)$order['status'],
-        'status_label'=>online_orders_status_label((string)$order['status']),
-        'total_amount'=>(float)$order['total_amount'],
-        'fulfillment_label'=>online_orders_fulfillment_label($order),
-        'created_at'=>(string)($order['external_created_at']?:$order['created_at']),
-        'updated_at'=>(string)$order['updated_at'],
-        'items'=>$items->fetchAll(),
+        'order_number'=>(string)$order['order_number'],'status'=>(string)$order['status'],'status_label'=>online_orders_status_label((string)$order['status']),
+        'total_amount'=>(float)$order['total_amount'],'fulfillment_label'=>online_orders_fulfillment_label($order),
+        'created_at'=>(string)($order['external_created_at']?:$order['created_at']),'updated_at'=>(string)$order['updated_at'],'items'=>$items->fetchAll(),
+        'loyalty_balance'=>customer_loyalty_balance($customerId),'loyalty_expected'=>customer_loyalty_preview((float)$order['total_amount']),
+        'loyalty_earned'=>(bool)$order['loyalty_earned_at'],'loyalty_percent'=>customer_loyalty_rate(),
     ];
 }
