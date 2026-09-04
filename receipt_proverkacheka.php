@@ -4,6 +4,11 @@ require __DIR__.'/inc/layout.php';
 require_auth();
 require_once __DIR__.'/inc/receipt_import.php';
 
+function pc_proxy_key(): string
+{
+    return hash_hmac('sha256','kapouch-proverkacheka-proxy-v1',evotor_crypto_key());
+}
+
 function pc_local_endpoint(): string
 {
     $forwarded=trim(explode(',',(string)($_SERVER['HTTP_X_FORWARDED_PROTO']??''))[0]??'');
@@ -11,7 +16,7 @@ function pc_local_endpoint(): string
     if(!in_array($scheme,['http','https'],true))$scheme='https';
     $host=preg_replace('/[^A-Za-z0-9.:-]/','',(string)($_SERVER['HTTP_HOST']??''));
     if($host==='')throw new RuntimeException('Не удалось определить адрес Kapouch.');
-    return $scheme.'://'.$host.'/receipt_proverkacheka_proxy.php';
+    return $scheme.'://'.$host.'/receipt_proverkacheka_proxy.php?k='.rawurlencode(pc_proxy_key());
 }
 
 if($_SERVER['REQUEST_METHOD']==='POST'){
@@ -28,6 +33,10 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
 }
 
 $connection=receipt_connection();
+// Existing installations created before the Beget Authorization fix are upgraded silently.
+if($connection&&($connection['name']??'')==='ПроверкаЧека.com'&&!empty($connection['token_ciphertext'])&&!str_contains((string)($connection['endpoint_url']??''),'k=')){
+    try{receipt_connection_save('ПроверкаЧека.com',pc_local_endpoint(),'');$connection=receipt_connection();}catch(Throwable $e){}
+}
 $connected=$connection&&($connection['name']??'')==='ПроверкаЧека.com'&&!empty($connection['token_ciphertext']);
 page_header('ПроверкаЧека.com');
 ?>
