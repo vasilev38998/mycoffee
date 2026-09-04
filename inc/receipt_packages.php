@@ -1,6 +1,18 @@
 <?php
 declare(strict_types=1);
 
+function receipt_package_schema_ready(): bool
+{
+    static $ready=null;if($ready!==null)return $ready;
+    try{
+        $pdo=db();$dbName=(string)$pdo->query('SELECT DATABASE()')->fetchColumn();if($dbName==='')return $ready=false;
+        $table=$pdo->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME='receipt_package_rules'");$table->execute([$dbName]);if((int)$table->fetchColumn()!==1)return $ready=false;
+        $needed=['package_product_key','detected_package_quantity','detected_package_unit','package_signature','package_warning'];
+        $in=str_repeat('?,',count($needed)-1).'?';$q=$pdo->prepare("SELECT COUNT(DISTINCT COLUMN_NAME) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME='purchase_receipt_items' AND COLUMN_NAME IN ($in)");$q->execute(array_merge([$dbName],$needed));
+        return $ready=((int)$q->fetchColumn()===count($needed));
+    }catch(Throwable $e){error_log('[Kapouch receipt packages] schema check failed: '.$e->getMessage());return $ready=false;}
+}
+
 function receipt_package_detect(string $name): ?array
 {
     $s=mb_strtolower(str_replace(',', '.', $name));
@@ -16,7 +28,7 @@ function receipt_package_detect(string $name): ?array
             $value=(float)$m[1][0];if($value<=0)continue;
             $base=round($value*$factor,4);
             $productKey=trim(preg_replace('/\s+/u',' ',preg_replace($rx,' ',$s,1)??$s)??$s);
-            $productKey=receipt_normalize_name($productKey);
+            $productKey=function_exists('receipt_normalize_name')?receipt_normalize_name($productKey):trim($productKey);
             return ['quantity'=>$base,'unit'=>$unit,'signature'=>$unit.':'.rtrim(rtrim(number_format($base,4,'.',''),'0'),'.'),'product_key'=>$productKey];
         }
     }
@@ -25,6 +37,7 @@ function receipt_package_detect(string $name): ?array
 
 function receipt_package_reconcile_draft(int $receiptId): void
 {
+    if(!receipt_package_schema_ready()||!function_exists('receipt_draft'))return;
     $draft=receipt_draft($receiptId);if(!$draft||$draft['status']!=='draft')return;
     $pdo=db();
     $upd=$pdo->prepare('UPDATE purchase_receipt_items SET package_product_key=?,detected_package_quantity=?,detected_package_unit=?,package_signature=?,package_warning=?,ingredient_id=?,quantity_per_item=?,rule_id=? WHERE id=?');
@@ -41,7 +54,7 @@ function receipt_package_reconcile_draft(int $receiptId): void
         if($rule){
             $upd->execute([$det['product_key'],$det['quantity'],$det['unit'],$det['signature'],null,(int)$rule['ingredient_id'],(float)$rule['quantity_per_item'],null,(int)$row['id']]);
         }elseif($other){
-            $warning='Раньше для этого товара была другая упаковка. Найдено '.$det['quantity'].' '.$det['unit'].' — проверь коэффициент.';
+            $warning='Раньше для этого товара была другая упаковка. Найдено '.receipt_package_label((float)$det['quantity'],(string)$det['unit']).' — проверь коэффициент.';
             $upd->execute([$det['product_key'],$det['quantity'],$det['unit'],$det['signature'],$warning,null,null,null,(int)$row['id']]);
         }else{
             $upd->execute([$det['product_key'],$det['quantity'],$det['unit'],$det['signature'],null,$row['ingredient_id']?:null,$row['quantity_per_item']?:null,$row['rule_id']?:null,(int)$row['id']]);
@@ -51,6 +64,7 @@ function receipt_package_reconcile_draft(int $receiptId): void
 
 function receipt_package_save_rules(int $receiptId,array $post): void
 {
+    if(!receipt_package_schema_ready()||!function_exists('receipt_draft'))return;
     $draft=receipt_draft($receiptId);if(!$draft||$draft['status']!=='draft')return;
     $pdo=db();
     foreach($draft['items'] as $row){
