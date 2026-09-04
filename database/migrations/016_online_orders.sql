@@ -1,0 +1,41 @@
+CREATE TABLE IF NOT EXISTS online_orders (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    external_id VARCHAR(190) NOT NULL,
+    order_number VARCHAR(80) NOT NULL,
+    source VARCHAR(80) NOT NULL DEFAULT 'online',
+    status ENUM('new','preparing','ready','completed','cancelled') NOT NULL DEFAULT 'new',
+    customer_name VARCHAR(160) DEFAULT NULL,
+    customer_phone VARCHAR(80) DEFAULT NULL,
+    fulfillment_type ENUM('pickup','delivery','other') NOT NULL DEFAULT 'pickup',
+    fulfillment_label VARCHAR(160) DEFAULT NULL,
+    payment_status VARCHAR(40) DEFAULT NULL,
+    total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    customer_comment TEXT,
+    promised_at DATETIME DEFAULT NULL,
+    external_created_at DATETIME DEFAULT NULL,
+    preparing_at DATETIME DEFAULT NULL,
+    ready_at DATETIME DEFAULT NULL,
+    completed_at DATETIME DEFAULT NULL,
+    cancelled_at DATETIME DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_online_order_external (external_id),
+    KEY idx_online_orders_status_created (status,created_at),
+    KEY idx_online_orders_number (order_number)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS online_order_items (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    order_id BIGINT UNSIGNED NOT NULL,
+    external_item_id VARCHAR(190) DEFAULT NULL,
+    product_name VARCHAR(190) NOT NULL,
+    variant_name VARCHAR(160) DEFAULT NULL,
+    quantity DECIMAL(10,3) NOT NULL DEFAULT 1,
+    unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+    line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+    item_comment VARCHAR(500) DEFAULT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_online_order_items_order FOREIGN KEY (order_id) REFERENCES online_orders(id) ON DELETE CASCADE,
+    KEY idx_online_order_items_order (order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
