@@ -33,12 +33,30 @@ function pc_authorization_header(): string
     return '';
 }
 
+function pc_proxy_key(): string
+{
+    return hash_hmac('sha256','kapouch-proverkacheka-proxy-v1',evotor_crypto_key());
+}
+
 if($_SERVER['REQUEST_METHOD']!=='GET')pc_fail('Метод не поддерживается.',405);
 
-$auth=pc_authorization_header();
-if(!preg_match('/^Bearer\s+(.+)$/i',$auth,$m))pc_fail('Не передан токен источника чеков.',401);
-$token=trim($m[1]);
-if($token==='')pc_fail('Пустой токен источника чеков.',401);
+$connection=db()->query("SELECT * FROM receipt_data_connections WHERE enabled=1 AND name='ПроверкаЧека.com' ORDER BY id LIMIT 1")->fetch();
+if(!$connection)pc_fail('Интеграция ПроверкаЧека.com не настроена.',503);
+try{$saved=evotor_decrypt_token($connection);}catch(Throwable $e){pc_fail('Не удалось прочитать сохранённый токен интеграции.',500);}
+
+// Beget/Apache can strip Authorization before PHP-FPM. Prefer a signed internal key
+// embedded in the stored endpoint; keep Bearer as a backwards-compatible fallback.
+$authorized=false;
+$internalKey=trim((string)($_GET['k']??''));
+if($internalKey!==''&&hash_equals(pc_proxy_key(),$internalKey))$authorized=true;
+if(!$authorized){
+    $auth=pc_authorization_header();
+    if(preg_match('/^Bearer\s+(.+)$/i',$auth,$m)){
+        $bearer=trim((string)$m[1]);
+        if($bearer!==''&&hash_equals($saved,$bearer))$authorized=true;
+    }
+}
+if(!$authorized)pc_fail('Внутренняя авторизация источника чеков не прошла.',401);
 
 $fn=preg_replace('/\D+/','',(string)($_GET['fn']??''));
 $fd=preg_replace('/\D+/','',(string)($_GET['fd']??''));
@@ -50,11 +68,6 @@ if($fn===''||$fd===''||$fp===''||$t===''||$s==='')pc_fail('Не хватает �
 if(!in_array($n,[1,2,3,4],true))$n=1;
 if(strlen($t)>=15)$t=substr($t,0,13);
 
-$connection=db()->query("SELECT * FROM receipt_data_connections WHERE enabled=1 AND name='ПроверкаЧека.com' ORDER BY id LIMIT 1")->fetch();
-if(!$connection)pc_fail('Интеграция ПроверкаЧека.com не настроена.',503);
-try{$saved=evotor_decrypt_token($connection);}catch(Throwable $e){pc_fail('Не удалось прочитать сохранённый токен интеграции.',500);}
-if(!hash_equals($saved,$token))pc_fail('Неверный токен источника чеков.',401);
-
 $post=[
     'fn'=>$fn,
     'fd'=>$fd,
@@ -63,7 +76,7 @@ $post=[
     'n'=>(string)$n,
     's'=>$s,
     'qr'=>'1',
-    'token'=>$token,
+    'token'=>$saved,
 ];
 
 $ch=curl_init('https://proverkacheka.com/api/v1/check/get');
