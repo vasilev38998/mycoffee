@@ -1,4 +1,4 @@
 window.KAPOUCH_CUSTOMER_CONFIG = {
-  apiBase: '..',
+  apiBase: '../api',
   pollIntervalMs: 3000
 };
