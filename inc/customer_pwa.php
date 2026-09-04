@@ -56,13 +56,18 @@ function customer_pwa_catalog(): array
         ORDER BY COALESCE(s.featured,0) DESC,COALESCE(s.sort_order,100),p.name")->fetchAll();
     $products=[];
     foreach($rows as $r){
-        $cat=null;if(!empty($r['category_id']))$cat=$byId[(int)$r['category_id']]??null;
+        $cat=null;
+        if(!empty($r['category_id'])){
+            $cat=$byId[(int)$r['category_id']]??null;
+            if(!$cat)continue;
+        }
         if(!$cat){$slug=customer_pwa_guess_category((string)($r['category']?:$r['name']));$cat=$bySlug[$slug]??($bySlug['other']??null);}
+        if(!$cat)continue;
         $products[]=[
             'id'=>(int)$r['id'],'name'=>(string)$r['name'],'price'=>(float)$r['sale_price'],
             'description'=>trim((string)($r['description']??''))?:'Любимый напиток, приготовленный специально для вас.',
             'badge'=>trim((string)($r['badge']??'')),'featured'=>(bool)$r['featured'],
-            'category_id'=>$cat?(int)$cat['id']:0,'category'=>$cat?(string)$cat['name']:'Другое','category_slug'=>$cat?(string)$cat['slug']:'other','category_icon'=>$cat?(string)$cat['icon']:'✨',
+            'category_id'=>(int)$cat['id'],'category'=>(string)$cat['name'],'category_slug'=>(string)$cat['slug'],'category_icon'=>(string)$cat['icon'],
         ];
     }
     return ['settings'=>$settings,'categories'=>array_map(static fn($c)=>['id'=>(int)$c['id'],'name'=>(string)$c['name'],'slug'=>(string)$c['slug'],'icon'=>(string)$c['icon']],$categories),'products'=>$products];
