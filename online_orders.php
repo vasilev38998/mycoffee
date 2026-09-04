@@ -7,13 +7,6 @@ $filter=(string)($_GET['filter']??'active');
 if(!in_array($filter,['active','done','all'],true))$filter='active';
 $user=current_user();$canManage=in_array($user['role']??'',['owner','manager'],true);
 
-if(isset($_GET['feed'])){
-    header('Content-Type: application/json; charset=UTF-8');
-    header('Cache-Control: no-store');
-    echo json_encode(['ok'=>true,'orders'=>online_orders_fetch($filter),'server_time'=>date('c')],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
-    exit;
-}
-
 if($_SERVER['REQUEST_METHOD']==='POST'){
     verify_csrf();
     try{
@@ -61,7 +54,7 @@ page_header('Онлайн-заказы');
 </style>
 <div class="online-toolbar">
     <div class="actions"><a class="btn <?=$filter==='active'?'primary':''?>" href="online_orders.php?filter=active">Активные</a><a class="btn <?=$filter==='done'?'primary':''?>" href="online_orders.php?filter=done">Завершённые</a><a class="btn <?=$filter==='all'?'primary':''?>" href="online_orders.php?filter=all">Все</a></div>
-    <div class="actions"><span class="muted" id="liveStatus"><span class="live-dot"></span>Live · каждые 5 сек</span><button class="btn ghost" type="button" id="soundToggle">🔇 Звук</button><button class="btn ghost" type="button" id="fullToggle">На весь экран</button></div>
+    <div class="actions"><span class="muted" id="liveStatus"><span class="live-dot"></span>Live · каждые 3 сек</span><button class="btn ghost" type="button" id="soundToggle">🔇 Звук</button><button class="btn ghost" type="button" id="fullToggle">На весь экран</button></div>
 </div>
 <div id="orderBoard"></div>
 
@@ -76,7 +69,7 @@ page_header('Онлайн-заказы');
 <script>
 (function(){
 const board=document.getElementById('orderBoard'),filter=<?=json_encode($filter)?>,csrf=<?=json_encode(csrf_token(),JSON_UNESCAPED_UNICODE)?>,initialOrders=<?=json_encode($orders,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>;
-let lastNewId=0,sound=false,firstLoad=true;
+let lastNewId=0,sound=false,firstLoad=true,pollTimer=null,polling=false;
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 function qty(v){const n=Number(v||0);return Number.isInteger(n)?String(n):n.toLocaleString('ru-RU',{maximumFractionDigits:3});}
 function age(sec){sec=Math.max(0,Number(sec||0));if(sec<60)return 'только что';const min=Math.floor(sec/60);if(min<60)return min+' мин назад';const h=Math.floor(min/60);return h+' ч '+(min%60)+' мин назад';}
@@ -86,11 +79,29 @@ function lane(status,label,orders){const rows=orders.filter(o=>o.status===status
 function render(orders){const definitions=filter==='active'?[['new','Новые'],['preparing','Готовятся'],['ready','Готовы']]:filter==='done'?[['completed','Выданы'],['cancelled','Отменены']]:[['new','Новые'],['preparing','Готовятся'],['ready','Готовы'],['completed','Выданы'],['cancelled','Отменены']];board.innerHTML='<div class="order-lanes">'+definitions.map(d=>lane(d[0],d[1],orders)).join('')+'</div>';}
 function beep(){if(!sound)return;try{const C=window.AudioContext||window.webkitAudioContext,ctx=new C(),osc=ctx.createOscillator(),gain=ctx.createGain();osc.connect(gain);gain.connect(ctx.destination);osc.frequency.value=880;gain.gain.value=.12;osc.start();setTimeout(()=>{osc.stop();ctx.close();},180);}catch(e){}}
 function observeNew(orders){const ids=orders.filter(o=>o.status==='new').map(o=>Number(o.id));const newest=ids.length?Math.max(...ids):0;if(!firstLoad&&newest>lastNewId)beep();lastNewId=Math.max(lastNewId,newest);firstLoad=false;}
-async function refresh(){try{const r=await fetch('online_orders.php?feed=1&filter='+encodeURIComponent(filter),{credentials:'same-origin',cache:'no-store'});if(!r.ok)throw new Error();const data=await r.json(),orders=data.orders||[];observeNew(orders);render(orders);document.getElementById('liveStatus').innerHTML='<span class="live-dot"></span>Live · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){document.getElementById('liveStatus').innerHTML='<span class="live-dot off"></span>Нет связи';}}
-render(initialOrders);observeNew(initialOrders);
+function scheduleNext(ms=3000){clearTimeout(pollTimer);pollTimer=setTimeout(refresh,ms);}
+async function refresh(){
+    if(polling){scheduleNext();return;}
+    polling=true;
+    try{
+        const url='online_orders_feed.php?filter='+encodeURIComponent(filter)+'&_='+Date.now();
+        const r=await fetch(url,{credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'}});
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        const data=await r.json();if(!data.ok)throw new Error(data.error||'feed error');
+        const orders=data.orders||[];observeNew(orders);render(orders);
+        document.getElementById('liveStatus').innerHTML='<span class="live-dot"></span>Live · '+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    }catch(e){
+        document.getElementById('liveStatus').innerHTML='<span class="live-dot off"></span>Нет связи · повторяем';
+    }finally{
+        polling=false;scheduleNext();
+    }
+}
+render(initialOrders);observeNew(initialOrders);scheduleNext(1000);
 document.getElementById('soundToggle').addEventListener('click',function(){sound=!sound;this.textContent=sound?'🔔 Звук включён':'🔇 Звук';if(sound)beep();});
 document.getElementById('fullToggle').addEventListener('click',function(){document.body.classList.toggle('online-fullscreen');this.textContent=document.body.classList.contains('online-fullscreen')?'Обычный режим':'На весь экран';});
-setInterval(refresh,5000);
+document.addEventListener('visibilitychange',function(){if(!document.hidden)refresh();});
+window.addEventListener('focus',refresh);
+window.addEventListener('online',refresh);
 })();
 </script>
 <?php page_footer();?>
