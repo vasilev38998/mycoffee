@@ -18,7 +18,7 @@ function require_page_access(): void{
     $page=basename($_SERVER['SCRIPT_NAME']??'');
     $public=[
       'login.php','logout.php','install.php','api_online_orders.php','receipt_proverkacheka_proxy.php',
-      'customer_catalog.php','customer_order.php','customer_order_status.php','customer_manifest.php','customer_payment_sber_callback.php',
+      'customer_catalog.php','customer_order.php','customer_order_status.php','customer_manifest.php','customer_payment_sber_callback.php','customer_payment_yookassa_webhook.php',
       'customer_auth_request.php','customer_auth_verify.php','customer_profile.php','customer_logout.php',
       'customer_push_config.php','customer_push_subscribe.php','customer_push_unsubscribe.php'
     ];
