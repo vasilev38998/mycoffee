@@ -11,14 +11,21 @@ customer_api_guard_origin();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))!=='GET')customer_api_reply(405,['ok'=>false,'error'=>'Method not allowed']);
 try{
     $catalog=customer_pwa_catalog();
+    $promoEnabled=(string)app_setting('customer_promo_enabled','0')==='1';
+    $promoStart=trim((string)app_setting('customer_promo_start',''));
+    $promoEnd=trim((string)app_setting('customer_promo_end',''));
+    $now=time();
+    if($promoStart!==''&&($ts=strtotime($promoStart))!==false&&$now<$ts)$promoEnabled=false;
+    if($promoEnd!==''&&($ts=strtotime($promoEnd))!==false&&$now>$ts)$promoEnabled=false;
     $growth=[
         'scheduled_pickup'=>(string)app_setting('customer_scheduled_pickup_enabled','1')==='1',
-        'promo_enabled'=>(string)app_setting('customer_promo_enabled','0')==='1',
+        'promo_enabled'=>$promoEnabled,
         'promo_kicker'=>(string)app_setting('customer_promo_kicker','АКЦИЯ'),
         'promo_title'=>(string)app_setting('customer_promo_title',''),
         'promo_text'=>(string)app_setting('customer_promo_text',''),
         'promo_button'=>(string)app_setting('customer_promo_button','Выбрать напиток'),
         'promo_target'=>(string)app_setting('customer_promo_target','menu'),
+        'promo_start'=>$promoStart,'promo_end'=>$promoEnd,
         'personal_offer_enabled'=>(string)app_setting('customer_personal_offer_enabled','1')==='1',
         'loyalty_levels_enabled'=>(string)app_setting('customer_loyalty_levels_enabled','1')==='1',
     ];
