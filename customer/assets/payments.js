@@ -8,7 +8,7 @@ const error=document.getElementById('checkoutError');
 const button=document.getElementById('checkoutButton');
 if(!form||!box||!button)return;
 let methods=[];
-const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[m]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 function requestId(){return window.crypto?.randomUUID?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}
 function cart(){try{const raw=JSON.parse(localStorage.getItem('kapouch_customer_cart')||'[]');if(Array.isArray(raw))return raw.map(x=>({product_id:Number(x.product_id||0),quantity:Math.max(1,Number(x.quantity||1)),modifiers:Array.isArray(x.modifiers)?x.modifiers.map(Number).filter(Boolean):[]})).filter(x=>x.product_id>0);if(raw&&typeof raw==='object')return Object.entries(raw).map(([id,q])=>({product_id:Number(id),quantity:Math.max(1,Number(q||1)),modifiers:[]})).filter(x=>x.product_id>0)}catch(e){}return []}
 function selected(){return form.querySelector('input[name="payment_method"]:checked')?.value||''}
