@@ -90,6 +90,9 @@ jobs:
           curl -fsS http://127.0.0.1:8080/api/customer_catalog.php >/tmp/catalog.json
           php -r '$d=json_decode(file_get_contents("/tmp/catalog.json"),true); if(!is_array($d)||empty($d["ok"])||empty($d["products"])) exit(1);'
 
+          code=$(curl -sS -o /tmp/origin.json -w '%{http_code}' http://127.0.0.1:8080/api/customer_catalog.php -H 'Origin: https://evil.example')
+          test "$code" = "403"
+
           code=$(curl -sS -o /tmp/status.json -w '%{http_code}' 'http://127.0.0.1:8080/api/customer_order_status.php?token=invalid')
           test "$code" = "404"
 
@@ -106,6 +109,55 @@ jobs:
           token=$(php -r '$d=json_decode(file_get_contents("/tmp/order.json"),true); echo $d["order"]["tracking_token"];')
           curl -fsS "http://127.0.0.1:8080/api/customer_order_status.php?token=$token" >/tmp/order-status.json
           php -r '$d=json_decode(file_get_contents("/tmp/order-status.json"),true); if(empty($d["ok"])||empty($d["order"]["promised_display"])) exit(1);'
+
+          customer_id=$(mysql -N -s -h127.0.0.1 -uroot -proot kapouch_test -e "SELECT id FROM customer_accounts WHERE phone='+79001234567' LIMIT 1")
+          customer_token=$(php -r 'echo bin2hex(random_bytes(32));')
+          customer_hash=$(php -r 'echo hash("sha256",$argv[1]);' "$customer_token")
+          mysql -h127.0.0.1 -uroot -proot kapouch_test -e "INSERT INTO customer_sessions(customer_id,token_hash,expires_at,last_seen_at) VALUES($customer_id,'$customer_hash',DATE_ADD(NOW(),INTERVAL 1 DAY),NOW());"
+          curl -fsS http://127.0.0.1:8080/api/customer_profile.php -H "X-Customer-Token: $customer_token" >/tmp/profile.json
+          php -r '$d=json_decode(file_get_contents("/tmp/profile.json"),true); if(empty($d["ok"])||empty($d["profile"]["customer"]["id"])) exit(1);'
+
+          curl -fsS -X POST http://127.0.0.1:8080/api/customer_favorites.php -H 'Content-Type: application/json' -H "X-Customer-Token: $customer_token" --data "{\"favorites\":[\"p$product_id\"]}" >/tmp/fav-post.json
+          curl -fsS http://127.0.0.1:8080/api/customer_favorites.php -H "X-Customer-Token: $customer_token" >/tmp/fav-get.json
+          php -r '$d=json_decode(file_get_contents("/tmp/fav-get.json"),true); if(empty($d["ok"])||!in_array($argv[1],$d["favorites"]??[],true)) exit(1);' "p$product_id"
+
+          customer_order=$(mysql -N -s -h127.0.0.1 -uroot -proot kapouch_test -e "SELECT o.order_number FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.customer_id=$customer_id ORDER BY o.id LIMIT 1")
+          curl -fsS "http://127.0.0.1:8080/api/customer_order_detail.php?order_number=$customer_order" -H "X-Customer-Token: $customer_token" >/tmp/detail.json
+          php -r '$d=json_decode(file_get_contents("/tmp/detail.json"),true); if(empty($d["ok"])||empty($d["order"]["items"])) exit(1);'
+          curl -fsS -X POST http://127.0.0.1:8080/api/customer_reorder.php -H 'Content-Type: application/json' -H "X-Customer-Token: $customer_token" --data "{\"order_number\":\"$customer_order\"}" >/tmp/reorder.json
+          php -r '$d=json_decode(file_get_contents("/tmp/reorder.json"),true); if(empty($d["ok"])||empty($d["lines"])) exit(1);'
+
+          api_token=$(php -r 'require "inc/bootstrap.php"; require_once "inc/online_orders.php"; echo online_orders_api_token();')
+          external="runtime-ext-$(date +%s)"
+          code=$(curl -sS -o /tmp/ext-post.json -w '%{http_code}' -X POST http://127.0.0.1:8080/api_online_orders.php -H "X-Kapouch-Token: $api_token" -H 'Content-Type: application/json' --data "{\"external_id\":\"$external\",\"order_number\":\"EXT-1\",\"total_amount\":120,\"items\":[{\"name\":\"Внешний тест\",\"quantity\":1,\"unit_price\":120}]}" )
+          test "$code" = "201"
+          curl -fsS "http://127.0.0.1:8080/api_online_orders.php?external_id=$external" -H "X-Kapouch-Token: $api_token" >/tmp/ext-get.json
+          php -r '$d=json_decode(file_get_contents("/tmp/ext-get.json"),true); if(empty($d["ok"])||empty($d["order"]["id"])&&empty($d["order"]["external_id"])) exit(1);'
+
+          curl -fsS http://127.0.0.1:8080/customer/ >/tmp/pwa.html
+          grep -q 'checkoutForm' /tmp/pwa.html
+          curl -fsS http://127.0.0.1:8080/customer/sw.js | grep -q 'kapouch-pwa-v22'
+
+      - name: Owner admin routes smoke
+        run: |
+          set -euo pipefail
+          routes=$(php -r 'require "inc/bootstrap.php"; echo implode(" ",role_pages()["owner"]);')
+          for route in $routes; do
+            code=$(curl -sS -b /tmp/cookies.txt -o /tmp/route.out -w '%{http_code}' "http://127.0.0.1:8080/$route")
+            if [ "$code" != "200" ]; then
+              echo "Route $route returned HTTP $code"
+              cat /tmp/route.out
+              exit 1
+            fi
+          done
+
+      - name: Cron smoke without external integrations
+        run: |
+          set -euo pipefail
+          php cron/daily_report.php
+          php cron/online_orders_sync.php
+          php cron/business_control.php
+          php cron/evotor_sync.php
 
       - name: Show server log on failure
         if: failure()
