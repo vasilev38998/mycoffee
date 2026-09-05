@@ -23,9 +23,9 @@ try{
     $order=customer_order_create($data,$customer);
     if($delay>0&&!empty($order['order_id'])){
         $promised=date('Y-m-d H:i:s',time()+$delay*60);
-        db()->prepare('UPDATE online_orders SET promised_at=? WHERE id=?')->execute([$promised,(int)$order['order_id']]);
-        $order['promised_at']=$promised;
-        $order['pickup_delay_minutes']=$delay;
+        $stmt=db()->prepare("UPDATE online_orders SET promised_at=? WHERE id=? AND promised_at IS NULL AND status IN ('new','awaiting_payment')");$stmt->execute([$promised,(int)$order['order_id']]);
+        $read=db()->prepare('SELECT promised_at FROM online_orders WHERE id=?');$read->execute([(int)$order['order_id']]);$saved=trim((string)($read->fetchColumn()?:''));
+        if($saved!==''){$order['promised_at']=$saved;$order['pickup_delay_minutes']=$delay;}
     }
     customer_api_reply(201,['ok'=>true,'order'=>$order]);
 }catch(JsonException $e){
