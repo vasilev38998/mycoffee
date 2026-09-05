@@ -2,6 +2,7 @@
 require __DIR__.'/inc/bootstrap.php';
 require_auth();
 require_once __DIR__.'/inc/customer_payments.php';
+require_once __DIR__.'/inc/customer_loyalty.php';
 
 $user=current_user();
 if(!in_array($user['role']??'',['owner','manager'],true)){
@@ -17,15 +18,20 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
         if($action==='refund_full'){
             $result=customer_payment_yookassa_refund_full($orderId);
             $state=(string)($result['status']??'');
-            if($state==='succeeded')flash('success','Полный возврат выполнен. ЮKassa автоматически сформирует чек возврата на основе исходного чека.');
-            elseif($state==='pending')flash('warning','Возврат принят ЮKassa и ещё обрабатывается. Статус обновится по webhook.');
+            if($state==='succeeded'){
+                $reversed=customer_loyalty_reverse_order($orderId);
+                flash('success','Полный возврат выполнен. ЮKassa автоматически сформирует чек возврата на основе исходного чека.'.($reversed>0?' Начисленные бонусы отменены: '.number_format($reversed,2,',',' ').'.':''));
+            }elseif($state==='pending')flash('warning','Возврат принят ЮKassa и ещё обрабатывается. Статус обновится по webhook.');
             else flash('warning','ЮKassa вернула статус возврата: '.$state.'.');
         }elseif($action==='sync_refund'){
             $payment=customer_payment_status_for_order($orderId);
             $refundId=trim((string)($payment['provider_refund_id']??''));
             if($refundId==='')throw new RuntimeException('Идентификатор возврата ещё не сохранён.');
             $result=customer_payment_yookassa_sync_refund($refundId);
-            flash('success','Статус возврата обновлён: '.(string)($result['status']??'неизвестно').'.');
+            if(!$result)throw new RuntimeException('Не удалось получить статус возврата.');
+            $state=(string)($result['status']??'');
+            if($state==='succeeded')customer_loyalty_reverse_order($orderId);
+            flash('success','Статус возврата обновлён: '.($state!==''?$state:'неизвестно').'.');
         }else throw new RuntimeException('Неизвестное действие.');
     }catch(Throwable $e){flash('danger',$e->getMessage());}
     redirect('customer_refunds.php');
