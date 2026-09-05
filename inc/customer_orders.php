@@ -40,10 +40,20 @@ function customer_order_payment_method(array $data): array
     foreach($enabled as $method)if($method['id']===$requested)return $method;
     throw new RuntimeException('Выбранный способ оплаты сейчас недоступен.');
 }
-function customer_order_create(array $data): array
+function customer_order_create(array $data,?array $authenticatedCustomer=null): array
 {
     $name=trim((string)($data['name']??''));$phone=customer_order_normalize_phone((string)($data['phone']??''));$comment=trim((string)($data['comment']??''));$fulfillment=(string)($data['fulfillment_type']??'pickup');if(!in_array($fulfillment,['pickup','delivery'],true))$fulfillment='pickup';if($fulfillment==='delivery')throw new RuntimeException('Доставка пока не запущена. Выберите самовывоз.');
     $paymentMethod=customer_order_payment_method($data);
+    $customerId=0;$email='';
+    if($paymentMethod['id']==='sbp'){
+        if(!$authenticatedCustomer)throw new RuntimeException('Для оплаты по СБП сначала войдите в профиль Kapouch.');
+        $profilePhone=customer_order_normalize_phone((string)($authenticatedCustomer['phone']??''));
+        if(!hash_equals($profilePhone,$phone))throw new RuntimeException('Для оплаты по СБП номер телефона заказа должен совпадать с номером вашего профиля Kapouch.');
+        $customerId=(int)($authenticatedCustomer['id']??0);if($customerId<=0)throw new RuntimeException('Не удалось определить профиль покупателя. Войдите заново.');
+        $email=customer_order_account_email($customerId);
+        if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new RuntimeException('Для оплаты по СБП сначала укажите электронную почту в профиле Kapouch.');
+        $phone=$profilePhone;
+    }
     $clientOrderId=trim((string)($data['client_order_id']??''));if($clientOrderId!==''&&!preg_match('/^[A-Za-z0-9_-]{8,80}$/',$clientOrderId))throw new RuntimeException('Некорректный идентификатор оформления. Обновите страницу и попробуйте ещё раз.');if($clientOrderId==='')$clientOrderId=bin2hex(random_bytes(16));
     $rawItems=$data['items']??null;if(!is_array($rawItems)||!$rawItems)throw new RuntimeException('Корзина пустая.');
     $lines=[];$baseIds=[];$baseUnits=0;
@@ -57,8 +67,7 @@ function customer_order_create(array $data): array
         $items[]=['external_id'=>(string)$id,'name'=>(string)$p['name'],'quantity'=>$qty,'unit_price'=>$price,'line_total'=>$lineTotal,'comment'=>null];
         foreach($modifiers as $m){$mPrice=(float)$m['price'];$mTotal=$mPrice*$qty;$total+=$mTotal;$items[]=['external_id'=>(string)$m['product_id'],'name'=>(string)$m['product_name'],'variant'=>(string)$m['label'],'quantity'=>$qty,'unit_price'=>$mPrice,'line_total'=>$mTotal,'comment'=>null];}
     }
-    $customerId=customer_order_account($phone,$name);$email=customer_order_account_email($customerId);
-    if($paymentMethod['id']==='sbp'&&!filter_var($email,FILTER_VALIDATE_EMAIL))throw new RuntimeException('Для оплаты по СБП сначала войдите в профиль Kapouch и укажите электронную почту для чека.');
+    if($customerId<=0)$customerId=customer_order_account($phone,$name);elseif($name!=='')db()->prepare('UPDATE customer_accounts SET name=? WHERE id=?')->execute([mb_substr($name,0,160),$customerId]);
     $publicId='customer-web-'.$clientOrderId;$orderNumber='W'.date('Hi').'-'.strtoupper(substr(hash('sha256',$clientOrderId),0,2));
     $initialPayment=$paymentMethod['id']==='sbp'?'pending':'unpaid';
     $payload=['external_id'=>$publicId,'order_number'=>$orderNumber,'source'=>'customer-web','customer'=>['name'=>$name!==''?$name:'Гость','phone'=>$phone],'fulfillment'=>['type'=>$fulfillment,'label'=>(string)app_setting('customer_pickup_label','Самовывоз')],'payment_status'=>$initialPayment,'total_amount'=>round($total,2),'comment'=>$comment!==''?mb_substr($comment,0,1000):null,'created_at'=>date('c'),'items'=>$items];
