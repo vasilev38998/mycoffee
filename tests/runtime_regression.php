@@ -81,6 +81,7 @@ $order2=customer_order_create(['client_order_id'=>$secondClient,'name'=>'Дру�
 ok(abs((float)$order2['total_amount']-500.0)<0.001,'second independent checkout works');
 
 throws(fn()=>customer_order_create(['client_order_id'=>'bad','name'=>'X','phone'=>'+79001234567','payment_method'=>'cash','items'=>[['product_id'=>$productId,'quantity'=>1]]],null),'checkout rejects weak client order id');
-throws(fn()=>customer_order_create(['client_order_id'=>'valid-id-123456','name'=>'X','phone'=>'+79001234567','payment_method'=>'cash','items'=>[['product_id'=>$productId,'quantity'=>51]]],null),'checkout rejects excessive cart quantity');
+$large=customer_order_create(['client_order_id'=>'valid-id-123456','name'=>'X','phone'=>'+79001234567','payment_method'=>'cash','items'=>[['product_id'=>$productId,'quantity'=>51]]],null);
+ok(abs((float)$large['total_amount']-5000.0)<0.001,'checkout safely caps one line to 20 units');
 
 echo "RUNTIME REGRESSION PASSED\n";
