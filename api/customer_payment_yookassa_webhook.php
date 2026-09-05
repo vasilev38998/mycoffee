@@ -16,13 +16,16 @@ try{
     $data=json_decode(is_string($raw)?$raw:'',true);
     if(!is_array($data))throw new RuntimeException('invalid json');
     $event=(string)($data['event']??'');
-    $paymentId=trim((string)($data['object']['id']??''));
-    if($paymentId==='')throw new RuntimeException('missing payment id');
+    $objectId=trim((string)($data['object']['id']??''));
+    if($objectId==='')throw new RuntimeException('missing object id');
 
-    // Не доверяем статусу из webhook: повторно запрашиваем платеж у ЮKassa
-    // с серверными credentials и сверяем сумму в customer_payment_yookassa_sync_by_provider_id().
-    $result=customer_payment_yookassa_sync_by_provider_id($paymentId);
-    if(!$result)throw new RuntimeException('payment not found');
+    if(str_starts_with($event,'refund.')){
+        $result=customer_payment_yookassa_sync_refund($objectId);
+        if(!$result)throw new RuntimeException('refund not found');
+    }else{
+        $result=customer_payment_yookassa_sync_by_provider_id($objectId);
+        if(!$result)throw new RuntimeException('payment not found');
+    }
 
     echo json_encode(['ok'=>true,'event'=>$event],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
 }catch(Throwable $e){

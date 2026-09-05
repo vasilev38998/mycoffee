@@ -82,7 +82,6 @@ function customer_payment_receipt_subject(): string
 }
 function customer_payment_receipt_mode(): string
 {
-    // «Чеки от ЮKassa» поддерживают только полную предоплату и полный расчёт.
     $value=(string)app_setting('customer_yookassa_payment_mode','full_payment');
     return in_array($value,['full_prepayment','full_payment'],true)?$value:'full_payment';
 }
@@ -147,8 +146,8 @@ function customer_payment_yookassa_sync_by_provider_id(string $providerOrderId):
     $status=customer_payment_yookassa_request($connection,'GET','payments/'.rawurlencode($providerOrderId));
     $state=(string)($status['status']??'');$paid=!empty($status['paid'])&&$state==='succeeded';$actual=round((float)($status['amount']['value']??0),2);$expected=round((float)$payment['amount'],2);$paid=$paid&&abs($actual-$expected)<0.001;
     if($paid){
-        db()->prepare("UPDATE customer_payments SET status='paid',paid_at=COALESCE(paid_at,NOW()),provider_response=? WHERE id=?")->execute([json_encode($status,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),(int)$payment['id']]);
-        db()->prepare("UPDATE online_orders SET status=CASE WHEN status='awaiting_payment' THEN 'new' ELSE status END,payment_status='paid',payment_provider='yookassa_sbp' WHERE id=?")->execute([(int)$payment['order_id']]);
+        db()->prepare("UPDATE customer_payments SET status=CASE WHEN refund_status='succeeded' THEN 'refunded' ELSE 'paid' END,paid_at=COALESCE(paid_at,NOW()),provider_response=? WHERE id=?")->execute([json_encode($status,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),(int)$payment['id']]);
+        db()->prepare("UPDATE online_orders SET status=CASE WHEN status='awaiting_payment' THEN 'new' ELSE status END,payment_status=CASE WHEN payment_status='refunded' THEN 'refunded' ELSE 'paid' END,payment_provider='yookassa_sbp' WHERE id=?")->execute([(int)$payment['order_id']]);
     }elseif($state==='canceled'){
         db()->prepare("UPDATE customer_payments SET status='failed',failed_at=COALESCE(failed_at,NOW()),provider_response=? WHERE id=?")->execute([json_encode($status,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),(int)$payment['id']]);
         db()->prepare("UPDATE online_orders SET status=CASE WHEN status='awaiting_payment' THEN 'cancelled' ELSE status END,payment_status='failed' WHERE id=?")->execute([(int)$payment['order_id']]);
@@ -160,5 +159,74 @@ function customer_payment_yookassa_sync_by_provider_id(string $providerOrderId):
 
 function customer_payment_status_for_order(int $orderId): ?array
 {
-    $stmt=db()->prepare('SELECT provider,method,status,amount,payment_url,sbp_payload,provider_order_id FROM customer_payments WHERE order_id=? ORDER BY id DESC LIMIT 1');$stmt->execute([$orderId]);return $stmt->fetch()?:null;
+    $stmt=db()->prepare('SELECT provider,method,status,amount,payment_url,sbp_payload,provider_order_id,provider_refund_id,refund_status,refunded_amount FROM customer_payments WHERE order_id=? ORDER BY id DESC LIMIT 1');$stmt->execute([$orderId]);return $stmt->fetch()?:null;
+}
+
+function customer_payment_refundable_orders(int $limit=100): array
+{
+    $limit=max(1,min(300,$limit));
+    try{
+        return db()->query("SELECT p.id payment_id,p.order_id,p.status payment_record_status,p.amount,p.provider_order_id,p.provider_refund_id,p.refund_status,p.refunded_amount,p.paid_at,p.refunded_at,o.order_number,o.status order_status,o.payment_status,o.customer_name,o.customer_phone,o.total_amount FROM customer_payments p JOIN online_orders o ON o.id=p.order_id WHERE p.provider='yookassa_sbp' AND p.status IN ('paid','refund_pending','refunded') ORDER BY COALESCE(p.refunded_at,p.paid_at,p.created_at) DESC LIMIT {$limit}")->fetchAll();
+    }catch(Throwable $e){return [];}
+}
+
+function customer_payment_yookassa_refund_full(int $orderId): array
+{
+    $pdo=db();
+    $pdo->beginTransaction();
+    try{
+        $stmt=$pdo->prepare("SELECT p.*,o.order_number,o.status order_status,o.payment_status order_payment_status,o.total_amount FROM customer_payments p JOIN online_orders o ON o.id=p.order_id WHERE p.order_id=? AND p.provider='yookassa_sbp' FOR UPDATE");
+        $stmt->execute([$orderId]);$payment=$stmt->fetch();
+        if(!$payment)throw new RuntimeException('Платёж ЮKassa для заказа не найден.');
+        if((string)$payment['status']==='refunded'||(string)($payment['refund_status']??'')==='succeeded'){$pdo->commit();return ['status'=>'succeeded','refund_id'=>(string)($payment['provider_refund_id']??'')];}
+        if((string)$payment['status']==='refund_pending')throw new RuntimeException('Возврат уже отправлен в ЮKassa и ожидает завершения.');
+        if((string)$payment['status']!=='paid')throw new RuntimeException('Вернуть можно только успешно оплаченный заказ.');
+        $paymentId=trim((string)$payment['provider_order_id']);if($paymentId==='')throw new RuntimeException('У платежа отсутствует идентификатор ЮKassa.');
+        $amount=round((float)$payment['amount'],2);if($amount<=0)throw new RuntimeException('Некорректная сумма возврата.');
+        $retrySeed=(string)($payment['refund_status']??'')==='canceled'?(string)($payment['provider_refund_id']??''):'';
+        $pdo->commit();
+
+        $connection=customer_payment_connection('yookassa_sbp');
+        if(!$connection||empty($connection['merchant_login'])||empty($connection['secret_ciphertext']))throw new RuntimeException('Не настроены реквизиты ЮKassa для возврата.');
+        $key=substr(hash('sha256','kapouch|refund|'.$orderId.'|'.$paymentId.'|'.number_format($amount,2,'.','').'|'.$retrySeed),0,64);
+        $response=customer_payment_yookassa_request($connection,'POST','refunds',[
+            'payment_id'=>$paymentId,
+            'amount'=>['value'=>number_format($amount,2,'.',''),'currency'=>'RUB'],
+            'description'=>mb_substr('Возврат заказа '.(string)$payment['order_number'],0,250),
+        ],$key);
+        $refundId=trim((string)($response['id']??''));$state=trim((string)($response['status']??''));
+        if($refundId==='')throw new RuntimeException('ЮKassa не вернула идентификатор возврата.');
+        if(!in_array($state,['pending','succeeded','canceled'],true))throw new RuntimeException('ЮKassa вернула неизвестный статус возврата: '.$state);
+        customer_payment_apply_refund_state($refundId,$response);
+        return ['status'=>$state,'refund_id'=>$refundId];
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+}
+
+function customer_payment_apply_refund_state(string $refundId,array $response): ?array
+{
+    $refundId=trim($refundId);if($refundId==='')return null;
+    $paymentId=trim((string)($response['payment_id']??''));
+    $stmt=db()->prepare("SELECT p.*,o.status order_status FROM customer_payments p JOIN online_orders o ON o.id=p.order_id WHERE p.provider='yookassa_sbp' AND (p.provider_refund_id=? OR (?<>'' AND p.provider_order_id=?)) LIMIT 1");
+    $stmt->execute([$refundId,$paymentId,$paymentId]);$payment=$stmt->fetch();if(!$payment)return null;
+    $state=(string)($response['status']??'');$amount=round((float)($response['amount']['value']??0),2);$expected=round((float)$payment['amount'],2);
+    if(abs($amount-$expected)>0.001)throw new RuntimeException('Сумма возврата ЮKassa не совпадает с суммой платежа.');
+    $json=json_encode($response,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+    if($state==='succeeded'){
+        db()->prepare("UPDATE customer_payments SET status='refunded',provider_refund_id=?,refund_status='succeeded',refunded_amount=?,refund_response=?,refunded_at=COALESCE(refunded_at,NOW()) WHERE id=?")->execute([$refundId,$amount,$json,(int)$payment['id']]);
+        db()->prepare("UPDATE online_orders SET payment_status='refunded',status=CASE WHEN status IN ('new','preparing','ready') THEN 'cancelled' ELSE status END,cancelled_at=CASE WHEN status IN ('new','preparing','ready') THEN COALESCE(cancelled_at,NOW()) ELSE cancelled_at END WHERE id=?")->execute([(int)$payment['order_id']]);
+        audit_write('customer_payment_refund','ЮKassa: полный возврат '.number_format($amount,2,'.','').' ₽ завершён','online_order',(string)$payment['order_id']);
+    }elseif($state==='pending'){
+        db()->prepare("UPDATE customer_payments SET status='refund_pending',provider_refund_id=?,refund_status='pending',refunded_amount=?,refund_response=? WHERE id=?")->execute([$refundId,$amount,$json,(int)$payment['id']]);
+    }elseif($state==='canceled'){
+        db()->prepare("UPDATE customer_payments SET status='paid',provider_refund_id=?,refund_status='canceled',refunded_amount=NULL,refund_response=? WHERE id=?")->execute([$refundId,$json,(int)$payment['id']]);
+    }
+    return ['order_id'=>(int)$payment['order_id'],'status'=>$state];
+}
+
+function customer_payment_yookassa_sync_refund(string $refundId): ?array
+{
+    if(!preg_match('/^[A-Za-z0-9_-]{10,190}$/',$refundId))return null;
+    $connection=customer_payment_connection('yookassa_sbp');if(!$connection)return null;
+    $response=customer_payment_yookassa_request($connection,'GET','refunds/'.rawurlencode($refundId));
+    return customer_payment_apply_refund_state($refundId,$response);
 }
