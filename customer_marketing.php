@@ -3,6 +3,9 @@ require __DIR__.'/inc/bootstrap.php';
 require __DIR__.'/inc/layout.php';
 require_auth();
 
+function customer_marketing_datetime(string $value): string{
+    $value=trim($value);if($value==='')return '';$ts=strtotime($value);if($ts===false)throw new RuntimeException('Проверьте дату акции.');return date('Y-m-d H:i:s',$ts);
+}
 if($_SERVER['REQUEST_METHOD']==='POST'){
     verify_csrf();
     try{
@@ -13,6 +16,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
         set_app_setting('customer_promo_text',mb_substr(trim((string)($_POST['customer_promo_text']??'')),0,500));
         set_app_setting('customer_promo_button',mb_substr(trim((string)($_POST['customer_promo_button']??'')),0,80));
         $target=(string)($_POST['customer_promo_target']??'menu');if(!in_array($target,['menu','profile','cart'],true))$target='menu';set_app_setting('customer_promo_target',$target);
+        $start=customer_marketing_datetime((string)($_POST['customer_promo_start']??''));$end=customer_marketing_datetime((string)($_POST['customer_promo_end']??''));if($start!==''&&$end!==''&&strtotime($end)<=strtotime($start))throw new RuntimeException('Дата окончания акции должна быть позже даты начала.');set_app_setting('customer_promo_start',$start);set_app_setting('customer_promo_end',$end);
         set_app_setting('customer_personal_offer_enabled',isset($_POST['customer_personal_offer_enabled'])?'1':'0');
         set_app_setting('customer_loyalty_levels_enabled',isset($_POST['customer_loyalty_levels_enabled'])?'1':'0');
         audit_write('customer_marketing_updated','Обновлены акции и персонализация клиентского PWA');
@@ -21,15 +25,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     redirect('customer_marketing.php');
 }
 $s=[
-'scheduled'=>(string)app_setting('customer_scheduled_pickup_enabled','1')==='1',
-'promo'=>(string)app_setting('customer_promo_enabled','0')==='1',
-'kicker'=>(string)app_setting('customer_promo_kicker','АКЦИЯ'),
-'title'=>(string)app_setting('customer_promo_title',''),
-'text'=>(string)app_setting('customer_promo_text',''),
-'button'=>(string)app_setting('customer_promo_button','Выбрать напиток'),
-'target'=>(string)app_setting('customer_promo_target','menu'),
-'personal'=>(string)app_setting('customer_personal_offer_enabled','1')==='1',
-'levels'=>(string)app_setting('customer_loyalty_levels_enabled','1')==='1'];
+'scheduled'=>(string)app_setting('customer_scheduled_pickup_enabled','1')==='1','promo'=>(string)app_setting('customer_promo_enabled','0')==='1','kicker'=>(string)app_setting('customer_promo_kicker','АКЦИЯ'),'title'=>(string)app_setting('customer_promo_title',''),'text'=>(string)app_setting('customer_promo_text',''),'button'=>(string)app_setting('customer_promo_button','Выбрать напиток'),'target'=>(string)app_setting('customer_promo_target','menu'),'start'=>(string)app_setting('customer_promo_start',''),'end'=>(string)app_setting('customer_promo_end',''),'personal'=>(string)app_setting('customer_personal_offer_enabled','1')==='1','levels'=>(string)app_setting('customer_loyalty_levels_enabled','1')==='1'];
 page_header('Акции PWA');
 ?>
 <div class="card"><div class="chart-head"><div><h2>Акции и персонализация PWA</h2><p>Управление промо-блоком, предзаказом ко времени и персональными подсказками.</p></div><a class="btn ghost" href="customer_app.php">← Клиентское PWA</a></div></div>
@@ -41,6 +37,8 @@ page_header('Акции PWA');
 <label>Надпись над акцией<input name="customer_promo_kicker" value="<?=e($s['kicker'])?>" placeholder="АКЦИЯ"></label>
 <label>Заголовок акции<input name="customer_promo_title" value="<?=e($s['title'])?>" placeholder="Например: Двойные бонусы до 12:00"></label>
 <label style="grid-column:1/-1">Текст акции<textarea name="customer_promo_text" rows="3"><?=e($s['text'])?></textarea></label>
+<label>Начало акции<input type="datetime-local" name="customer_promo_start" value="<?=$s['start']?e(date('Y-m-d\TH:i',strtotime($s['start']))):''?>"></label>
+<label>Окончание акции<input type="datetime-local" name="customer_promo_end" value="<?=$s['end']?e(date('Y-m-d\TH:i',strtotime($s['end']))):''?>"></label>
 <label>Текст кнопки<input name="customer_promo_button" value="<?=e($s['button'])?>"></label>
 <label>Куда ведёт кнопка<select name="customer_promo_target"><option value="menu" <?=$s['target']==='menu'?'selected':''?>>Меню</option><option value="profile" <?=$s['target']==='profile'?'selected':''?>>Профиль</option><option value="cart" <?=$s['target']==='cart'?'selected':''?>>Корзина</option></select></label>
 <div><button class="btn primary">Сохранить</button></div></form>
