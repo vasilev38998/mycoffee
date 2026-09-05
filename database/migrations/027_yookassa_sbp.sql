@@ -1,8 +1,9 @@
 -- Switch customer online payments from direct Sber gateway to YooKassa.
-SET @db := DATABASE();
-
 -- Existing generic payment tables from migration 026 are reused.
--- Rename stored provider identifiers only when those rows exist.
-UPDATE customer_payment_connections SET provider='yookassa_sbp' WHERE provider='sber_sbp';
-UPDATE customer_payments SET provider='yookassa_sbp' WHERE provider='sber_sbp';
-UPDATE online_orders SET payment_provider='yookassa_sbp' WHERE payment_provider='sber_sbp';
+
+-- Old direct-Sber credentials cannot be reused for YooKassa, so disable/remove them.
+DELETE FROM customer_payment_connections WHERE provider='sber_sbp';
+
+-- Preserve any historical direct-Sber payment identifiers without pretending they are YooKassa IDs.
+UPDATE customer_payments SET provider='sber_sbp_legacy' WHERE provider='sber_sbp';
+UPDATE online_orders SET payment_provider='sber_sbp_legacy' WHERE payment_provider='sber_sbp';
