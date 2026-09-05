@@ -24,7 +24,7 @@ ok((int)$status['available_version']>=31,'all migrations are visible');
 ok(!$status['pending'],'no pending migrations after bootstrap');
 ok(!$status['changed'],'no applied migration checksum drift');
 
-$pdo->exec("DELETE FROM customer_push_queue; DELETE FROM customer_push_subscriptions; DELETE FROM customer_push_campaigns; DELETE FROM customer_loyalty_ledger; DELETE FROM customer_order_access; DELETE FROM customer_payments; DELETE FROM online_order_items; DELETE FROM online_orders; DELETE FROM customer_sessions; DELETE FROM customer_auth_codes; DELETE FROM customer_accounts; DELETE FROM customer_product_group_variants; DELETE FROM customer_product_groups; DELETE FROM customer_product_settings; DELETE FROM customer_categories; DELETE FROM recipe_items; DELETE FROM inventory_movements; DELETE FROM products; DELETE FROM ingredients;");
+$pdo->exec("DELETE FROM customer_push_queue; DELETE FROM customer_push_subscriptions; DELETE FROM customer_push_campaigns; DELETE FROM customer_loyalty_ledger; DELETE FROM customer_order_access; DELETE FROM customer_payments; DELETE FROM online_order_items; DELETE FROM online_orders; DELETE FROM customer_sessions; DELETE FROM customer_auth_codes; DELETE FROM customer_accounts; DELETE FROM customer_product_group_variants; DELETE FROM customer_product_groups; DELETE FROM customer_product_settings; DELETE FROM recipe_items; DELETE FROM inventory_movements; DELETE FROM products; DELETE FROM ingredients;");
 
 $pdo->prepare("INSERT INTO products(name,category,sale_price,active) VALUES('Капучино тест','Кофе',250,1)")->execute();
 $productId=(int)$pdo->lastInsertId();
