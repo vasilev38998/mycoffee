@@ -183,10 +183,12 @@ function customer_payment_yookassa_refund_full(int $orderId): array
         if((string)$payment['status']!=='paid')throw new RuntimeException('Вернуть можно только успешно оплаченный заказ.');
         $paymentId=trim((string)$payment['provider_order_id']);if($paymentId==='')throw new RuntimeException('У платежа отсутствует идентификатор ЮKassa.');
         $amount=round((float)$payment['amount'],2);if($amount<=0)throw new RuntimeException('Некорректная сумма возврата.');
+        $retrySeed=(string)($payment['refund_status']??'')==='canceled'?(string)($payment['provider_refund_id']??''):'';
         $pdo->commit();
 
-        $connection=customer_payment_connection('yookassa_sbp');if(!$connection||empty($connection['enabled']))throw new RuntimeException('Подключение ЮKassa выключено.');
-        $key=substr(hash('sha256','kapouch|refund|'.$orderId.'|'.$paymentId.'|'.number_format($amount,2,'.','')),0,64);
+        $connection=customer_payment_connection('yookassa_sbp');
+        if(!$connection||empty($connection['merchant_login'])||empty($connection['secret_ciphertext']))throw new RuntimeException('Не настроены реквизиты ЮKassa для возврата.');
+        $key=substr(hash('sha256','kapouch|refund|'.$orderId.'|'.$paymentId.'|'.number_format($amount,2,'.','').'|'.$retrySeed),0,64);
         $response=customer_payment_yookassa_request($connection,'POST','refunds',[
             'payment_id'=>$paymentId,
             'amount'=>['value'=>number_format($amount,2,'.',''),'currency'=>'RUB'],
@@ -216,7 +218,7 @@ function customer_payment_apply_refund_state(string $refundId,array $response): 
     }elseif($state==='pending'){
         db()->prepare("UPDATE customer_payments SET status='refund_pending',provider_refund_id=?,refund_status='pending',refunded_amount=?,refund_response=? WHERE id=?")->execute([$refundId,$amount,$json,(int)$payment['id']]);
     }elseif($state==='canceled'){
-        db()->prepare("UPDATE customer_payments SET status='paid',provider_refund_id=?,refund_status='canceled',refund_response=? WHERE id=?")->execute([$refundId,$json,(int)$payment['id']]);
+        db()->prepare("UPDATE customer_payments SET status='paid',provider_refund_id=?,refund_status='canceled',refunded_amount=NULL,refund_response=? WHERE id=?")->execute([$refundId,$json,(int)$payment['id']]);
     }
     return ['order_id'=>(int)$payment['order_id'],'status'=>$state];
 }
