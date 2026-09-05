@@ -19,6 +19,10 @@ function customer_order_account(string $phone,string $name): int
 {
     $stmt=db()->prepare('SELECT id FROM customer_accounts WHERE phone=?');$stmt->execute([$phone]);$id=(int)($stmt->fetchColumn()?:0);if($id>0){if($name!=='')db()->prepare('UPDATE customer_accounts SET name=? WHERE id=?')->execute([mb_substr($name,0,160),$id]);return $id;}$stmt=db()->prepare('INSERT INTO customer_accounts(phone,name) VALUES(?,?)');$stmt->execute([$phone,$name!==''?mb_substr($name,0,160):null]);return (int)db()->lastInsertId();
 }
+function customer_order_account_email(int $customerId): string
+{
+    try{$stmt=db()->prepare('SELECT email FROM customer_accounts WHERE id=? LIMIT 1');$stmt->execute([$customerId]);return trim((string)($stmt->fetchColumn()?:''));}catch(Throwable $e){return '';}
+}
 function customer_order_modifier_option_ids(mixed $raw): array
 {
     if(!is_array($raw))return [];$ids=[];foreach($raw as $value){$id=is_array($value)?(int)($value['option_id']??$value['id']??0):(int)$value;if($id>0)$ids[$id]=true;}return array_keys($ids);
@@ -53,16 +57,18 @@ function customer_order_create(array $data): array
         $items[]=['external_id'=>(string)$id,'name'=>(string)$p['name'],'quantity'=>$qty,'unit_price'=>$price,'line_total'=>$lineTotal,'comment'=>null];
         foreach($modifiers as $m){$mPrice=(float)$m['price'];$mTotal=$mPrice*$qty;$total+=$mTotal;$items[]=['external_id'=>(string)$m['product_id'],'name'=>(string)$m['product_name'],'variant'=>(string)$m['label'],'quantity'=>$qty,'unit_price'=>$mPrice,'line_total'=>$mTotal,'comment'=>null];}
     }
-    $customerId=customer_order_account($phone,$name);$publicId='customer-web-'.$clientOrderId;$orderNumber='W'.date('Hi').'-'.strtoupper(substr(hash('sha256',$clientOrderId),0,2));
+    $customerId=customer_order_account($phone,$name);$email=customer_order_account_email($customerId);
+    if($paymentMethod['id']==='sbp'&&!filter_var($email,FILTER_VALIDATE_EMAIL))throw new RuntimeException('Для оплаты по СБП сначала войдите в профиль Kapouch и укажите электронную почту для чека.');
+    $publicId='customer-web-'.$clientOrderId;$orderNumber='W'.date('Hi').'-'.strtoupper(substr(hash('sha256',$clientOrderId),0,2));
     $initialPayment=$paymentMethod['id']==='sbp'?'pending':'unpaid';
     $payload=['external_id'=>$publicId,'order_number'=>$orderNumber,'source'=>'customer-web','customer'=>['name'=>$name!==''?$name:'Гость','phone'=>$phone],'fulfillment'=>['type'=>$fulfillment,'label'=>(string)app_setting('customer_pickup_label','Самовывоз')],'payment_status'=>$initialPayment,'total_amount'=>round($total,2),'comment'=>$comment!==''?mb_substr($comment,0,1000):null,'created_at'=>date('c'),'items'=>$items];
     $result=online_orders_upsert_from_api($payload);$orderId=(int)$result['id'];customer_order_attach_product_identity($orderId);
     $findAccess=db()->prepare('SELECT tracking_token,customer_id FROM customer_order_access WHERE order_id=?');$findAccess->execute([$orderId]);$existingAccess=$findAccess->fetch();if($existingAccess){$token=(string)$existingAccess['tracking_token'];$customerId=(int)($existingAccess['customer_id']?:$customerId);}else{$token=bin2hex(random_bytes(32));db()->prepare('INSERT INTO customer_order_access(order_id,customer_id,tracking_token) VALUES(?,?,?)')->execute([$orderId,$customerId,$token]);}
     $payment=null;
     try{
-        if($paymentMethod['id']==='sbp')$payment=customer_payment_create_sbp($orderId,$orderNumber,round($total,2),$phone);else customer_payment_mark_cash($orderId);
+        if($paymentMethod['id']==='sbp')$payment=customer_payment_create_sbp($orderId,$orderNumber,round($total,2),$phone,$email);else customer_payment_mark_cash($orderId);
     }catch(Throwable $e){
-        if($paymentMethod['id']==='sbp')db()->prepare("UPDATE online_orders SET status='cancelled',cancelled_at=NOW(),payment_status='failed',payment_method='sbp',payment_provider='sber_sbp' WHERE id=? AND status IN ('new','awaiting_payment')")->execute([$orderId]);
+        if($paymentMethod['id']==='sbp')db()->prepare("UPDATE online_orders SET status='cancelled',cancelled_at=NOW(),payment_status='failed',payment_method='sbp',payment_provider='yookassa_sbp' WHERE id=? AND status IN ('new','awaiting_payment')")->execute([$orderId]);
         throw $e;
     }
     $status=$paymentMethod['id']==='sbp'?'awaiting_payment':(string)$result['status'];
@@ -71,7 +77,7 @@ function customer_order_create(array $data): array
 function customer_order_public_status(string $token): ?array
 {
     if(!preg_match('/^[a-f0-9]{64}$/',$token))return null;$stmt=db()->prepare("SELECT o.id,o.order_number,o.status,o.payment_status,o.payment_method,o.total_amount,o.fulfillment_type,o.fulfillment_label,o.external_created_at,o.created_at,o.updated_at,a.customer_id,a.loyalty_earned_at FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.tracking_token=? LIMIT 1");$stmt->execute([$token]);$order=$stmt->fetch();if(!$order)return null;
-    if((string)$order['payment_method']==='sbp'&&(string)$order['payment_status']==='pending'){$pay=customer_payment_status_for_order((int)$order['id']);if($pay&&!empty($pay['provider_order_id'])){try{customer_payment_sber_sync_by_provider_id((string)$pay['provider_order_id']);$stmt->execute([$token]);$order=$stmt->fetch()?:$order;}catch(Throwable $e){}}}
+    if((string)$order['payment_method']==='sbp'&&(string)$order['payment_status']==='pending'){$pay=customer_payment_status_for_order((int)$order['id']);if($pay&&!empty($pay['provider_order_id'])&&(string)$pay['provider']==='yookassa_sbp'){try{customer_payment_yookassa_sync_by_provider_id((string)$pay['provider_order_id']);$stmt->execute([$token]);$order=$stmt->fetch()?:$order;}catch(Throwable $e){}}}
     $items=db()->prepare('SELECT product_name,variant_name,quantity,unit_price,line_total,item_comment FROM online_order_items WHERE order_id=? ORDER BY sort_order,id');$items->execute([(int)$order['id']]);$customerId=(int)($order['customer_id']??0);$status=(string)$order['status'];
     return ['order_number'=>(string)$order['order_number'],'status'=>$status,'status_label'=>$status==='awaiting_payment'?'Ожидает оплаты':online_orders_status_label($status),'payment_status'=>(string)($order['payment_status']??''),'payment_method'=>(string)($order['payment_method']??''),'total_amount'=>(float)$order['total_amount'],'fulfillment_label'=>online_orders_fulfillment_label($order),'created_at'=>(string)($order['external_created_at']?:$order['created_at']),'updated_at'=>(string)$order['updated_at'],'items'=>$items->fetchAll(),'loyalty_balance'=>customer_loyalty_balance($customerId),'loyalty_expected'=>customer_loyalty_preview((float)$order['total_amount']),'loyalty_earned'=>(bool)$order['loyalty_earned_at'],'loyalty_percent'=>customer_loyalty_rate()];
 }
