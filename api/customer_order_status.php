@@ -17,4 +17,8 @@ if(preg_match('/^[a-f0-9]{64}$/',$token)){
 }
 $order=customer_order_public_status($token);
 if(!$order)customer_api_reply(404,['ok'=>false,'error'=>'Заказ не найден.']);
+if(preg_match('/^[a-f0-9]{64}$/',$token)){
+    $stmt=db()->prepare('SELECT o.promised_at FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.tracking_token=? LIMIT 1');$stmt->execute([$token]);
+    $promised=trim((string)($stmt->fetchColumn()?:''));$order['promised_at']=$promised;$order['promised_display']=$promised!==''?date('H:i',strtotime($promised)):'';
+}
 customer_api_reply(200,['ok'=>true,'order'=>$order]);
