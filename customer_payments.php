@@ -42,7 +42,7 @@ if(!in_array($paymentMode,['full_payment','full_prepayment'],true))$paymentMode=
 try{$webhook=customer_payment_public_url('api/customer_payment_yookassa_webhook.php');}catch(Throwable $e){$webhook='https://kapouch.store/api/customer_payment_yookassa_webhook.php';}
 page_header('Оплата в PWA');
 ?>
-<div class="card"><div class="chart-head"><div><h2>Способы оплаты</h2><p>Для покупателя способ называется «Оплата по СБП». Технически платёж и фискальный чек проходят через ЮKassa.</p></div><a class="btn ghost" href="customer_app.php">← Клиентское PWA</a></div></div>
+<div class="card"><div class="chart-head"><div><h2>Способы оплаты</h2><p>Для покупателя способ называется «Оплата по СБП». Технически платёж и фискальный чек проходят через ЮKassa.</p></div><div class="actions"><a class="btn ghost" href="customer_refunds.php">Возвраты ЮKassa</a><a class="btn ghost" href="customer_app.php">← Клиентское PWA</a></div></div></div>
 
 <div class="alert info section"><strong>Безопасность:</strong> секретный ключ ЮKassa хранится в Kapouch зашифрованным и после сохранения не показывается. Не отправляйте его в чат и не добавляйте в Git.</div>
 
@@ -76,8 +76,8 @@ page_header('Оплата в PWA');
 <div class="alert warning" style="margin-top:14px"><strong>Маркированные товары:</strong> текущий контур рассчитан на обычные позиции кофейни. Если через Kapouch будут продаваться товары с обязательной маркировкой, потребуется отдельная передача кода маркировки и связанных реквизитов чека.</div>
 </div>
 
-<div class="card section"><h2>Webhook ЮKassa</h2><p class="muted">Добавьте этот HTTPS-адрес в настройках входящих уведомлений ЮKassa для события <code>payment.succeeded</code> (также можно включить <code>payment.canceled</code>):</p><div class="token-box" style="margin-top:10px;letter-spacing:0;word-break:break-all"><?=e($webhook)?></div><p class="muted">Kapouch не доверяет статусу из тела webhook: после уведомления он повторно запрашивает платёж у API ЮKassa и сверяет статус и сумму.</p></div>
+<div class="card section"><h2>Webhook ЮKassa</h2><p class="muted">Добавьте этот HTTPS-адрес в настройках входящих уведомлений ЮKassa для событий <code>payment.succeeded</code>, <code>payment.canceled</code> и <code>refund.succeeded</code>:</p><div class="token-box" style="margin-top:10px;letter-spacing:0;word-break:break-all"><?=e($webhook)?></div><p class="muted">Kapouch не доверяет статусу из тела webhook: после уведомления он повторно запрашивает платёж или возврат у API ЮKassa и сверяет сумму.</p></div>
 
-<div class="card section"><div class="actions"><button class="btn primary">Сохранить оплату</button><a class="btn ghost" href="customer/" target="_blank">Открыть PWA ↗</a></div></div>
+<div class="card section"><div class="actions"><button class="btn primary">Сохранить оплату</button><a class="btn ghost" href="customer_refunds.php">Открыть возвраты</a><a class="btn ghost" href="customer/" target="_blank">Открыть PWA ↗</a></div></div>
 </form>
 <?php page_footer();?>
