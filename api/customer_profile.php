@@ -14,14 +14,18 @@ try{
     $customer=customer_auth_require();
     if($method==='POST'){
         $data=customer_api_json();
+        $name=trim((string)($data['name']??$customer['name']??''));
         $email=mb_strtolower(trim((string)($data['email']??'')));
-        if($email===''||mb_strlen($email)>254||!filter_var($email,FILTER_VALIDATE_EMAIL))customer_api_reply(422,['ok'=>false,'error'=>'Укажите корректную электронную почту.']);
-        db()->prepare('UPDATE customer_accounts SET email=? WHERE id=?')->execute([$email,(int)$customer['id']]);
+        if(mb_strlen($name)>160)customer_api_reply(422,['ok'=>false,'error'=>'Имя слишком длинное.']);
+        if($email!==''&&(mb_strlen($email)>254||!filter_var($email,FILTER_VALIDATE_EMAIL)))customer_api_reply(422,['ok'=>false,'error'=>'Укажите корректную электронную почту.']);
+        db()->prepare('UPDATE customer_accounts SET name=?,email=? WHERE id=?')->execute([$name!==''?$name:null,$email!==''?$email:null,(int)$customer['id']]);
+        $customer['name']=$name;
     }
     customer_loyalty_refresh_customer((int)$customer['id']);
     $profile=customer_auth_profile($customer);
-    $stmt=db()->prepare('SELECT email FROM customer_accounts WHERE id=? LIMIT 1');$stmt->execute([(int)$customer['id']]);
-    $profile['customer']['email']=trim((string)($stmt->fetchColumn()?:''));
+    $stmt=db()->prepare('SELECT email,name FROM customer_accounts WHERE id=? LIMIT 1');$stmt->execute([(int)$customer['id']]);$account=$stmt->fetch()?:[];
+    $profile['customer']['email']=trim((string)($account['email']??''));
+    $profile['customer']['name']=trim((string)($account['name']??''));
     customer_api_reply(200,['ok'=>true,'profile'=>$profile]);
 }catch(JsonException $e){
     customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);
