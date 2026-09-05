@@ -31,21 +31,35 @@ function online_orders_fulfillment_label(array $order): string
 function online_orders_transition(int $id,string $status): void
 {
     if($id<=0||!in_array($status,online_orders_allowed_statuses(),true))throw new RuntimeException('Некорректный статус заказа.');
-    $stmt=db()->prepare('SELECT id,status FROM online_orders WHERE id=?');$stmt->execute([$id]);$order=$stmt->fetch();
-    if(!$order)throw new RuntimeException('Заказ не найден.');
-    $allowed=['new'=>['preparing','ready','cancelled'],'preparing'=>['ready','cancelled'],'ready'=>['completed','preparing','cancelled'],'completed'=>[],'cancelled'=>[]];
-    $from=(string)$order['status'];
-    if($from===$status)return;
-    if(!in_array($status,$allowed[$from]??[],true))throw new RuntimeException('Нельзя перевести заказ из «'.online_orders_status_label($from).'» в «'.online_orders_status_label($status).'».');
-    $sql=match($status){
-        'preparing'=>'UPDATE online_orders SET status=?,preparing_at=NOW(),ready_at=NULL,completed_at=NULL,cancelled_at=NULL WHERE id=?',
-        'ready'=>'UPDATE online_orders SET status=?,ready_at=NOW(),completed_at=NULL,cancelled_at=NULL WHERE id=?',
-        'completed'=>'UPDATE online_orders SET status=?,completed_at=NOW(),cancelled_at=NULL WHERE id=?',
-        'cancelled'=>'UPDATE online_orders SET status=?,cancelled_at=NOW() WHERE id=?',
-        default=>'UPDATE online_orders SET status=? WHERE id=?',
-    };
-    db()->prepare($sql)->execute([$status,$id]);
-    audit_write('online_order_status','Статус онлайн-заказа: '.online_orders_status_label($from).' → '.online_orders_status_label($status),'online_order',(string)$id);
+    $pdo=db();$pdo->beginTransaction();
+    try{
+        $stmt=$pdo->prepare('SELECT id,status FROM online_orders WHERE id=? FOR UPDATE');$stmt->execute([$id]);$order=$stmt->fetch();
+        if(!$order)throw new RuntimeException('Заказ не найден.');
+        $allowed=['new'=>['preparing','ready','cancelled'],'preparing'=>['ready','cancelled'],'ready'=>['completed','preparing','cancelled'],'completed'=>[],'cancelled'=>[]];
+        $from=(string)$order['status'];
+        if($from===$status){$pdo->commit();return;}
+        if(!in_array($status,$allowed[$from]??[],true))throw new RuntimeException('Нельзя перевести заказ из «'.online_orders_status_label($from).'» в «'.online_orders_status_label($status).'». Обновите очередь: возможно, заказ уже изменил другой сотрудник.');
+        $sql=match($status){
+            'preparing'=>'UPDATE online_orders SET status=?,preparing_at=NOW(),ready_at=NULL,completed_at=NULL,cancelled_at=NULL WHERE id=? AND status=?',
+            'ready'=>'UPDATE online_orders SET status=?,ready_at=NOW(),completed_at=NULL,cancelled_at=NULL WHERE id=? AND status=?',
+            'completed'=>'UPDATE online_orders SET status=?,completed_at=NOW(),cancelled_at=NULL WHERE id=? AND status=?',
+            'cancelled'=>'UPDATE online_orders SET status=?,cancelled_at=NOW() WHERE id=? AND status=?',
+            default=>'UPDATE online_orders SET status=? WHERE id=? AND status=?',
+        };
+        $update=$pdo->prepare($sql);$update->execute([$status,$id,$from]);
+        if($update->rowCount()!==1)throw new RuntimeException('Статус заказа уже изменился. Обновите очередь и повторите действие.');
+        $pdo->commit();
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+
+    try{audit_write('online_order_status','Статус онлайн-заказа: '.online_orders_status_label($from).' → '.online_orders_status_label($status),'online_order',(string)$id);}catch(Throwable $e){error_log('[Kapouch order audit] '.$e->getMessage());}
+    if($status==='ready'){
+        try{require_once __DIR__.'/customer_push.php';customer_push_enqueue_order_ready($id);}catch(Throwable $e){error_log('[Kapouch order ready push] '.$e->getMessage());}
+    }elseif($status==='completed'){
+        try{
+            require_once __DIR__.'/customer_loyalty.php';$amount=customer_loyalty_on_order_completed($id);
+            if($amount>0){require_once __DIR__.'/customer_push.php';$stmt=db()->prepare('SELECT customer_id FROM customer_order_access WHERE order_id=?');$stmt->execute([$id]);$customerId=(int)($stmt->fetchColumn()?:0);if($customerId>0)customer_push_enqueue_loyalty($customerId,$id,$amount);}
+        }catch(Throwable $e){error_log('[Kapouch order completion] '.$e->getMessage());}
+    }
 }
 
 function online_orders_fetch(string $filter='active',int $limit=80): array
@@ -156,12 +170,17 @@ function online_orders_upsert_from_api(array $data): array
             $stmt->execute([$externalId,...$values]);$id=(int)$pdo->lastInsertId();$status='new';
         }else{
             $id=(int)$existing['id'];$status=(string)$existing['status'];
-            $stmt=$pdo->prepare('UPDATE online_orders SET order_number=?,source=?,customer_name=?,customer_phone=?,fulfillment_type=?,fulfillment_label=?,payment_status=?,total_amount=?,customer_comment=?,promised_at=?,external_created_at=COALESCE(?,external_created_at) WHERE id=?');
-            $stmt->execute([...$values,$id]);$pdo->prepare('DELETE FROM online_order_items WHERE order_id=?')->execute([$id]);
+            if(in_array($status,['new','awaiting_payment'],true)){
+                $stmt=$pdo->prepare('UPDATE online_orders SET order_number=?,source=?,customer_name=?,customer_phone=?,fulfillment_type=?,fulfillment_label=?,payment_status=?,total_amount=?,customer_comment=?,promised_at=?,external_created_at=COALESCE(?,external_created_at) WHERE id=?');
+                $stmt->execute([...$values,$id]);$pdo->prepare('DELETE FROM online_order_items WHERE order_id=?')->execute([$id]);
+            }else{
+                $pdo->commit();
+                return ['id'=>$id,'external_id'=>$externalId,'order_number'=>$orderNumber,'created'=>false,'status'=>$status,'locked'=>true];
+            }
         }
         $insert=$pdo->prepare('INSERT INTO online_order_items(order_id,external_item_id,product_name,variant_name,quantity,unit_price,line_total,item_comment,sort_order) VALUES(?,?,?,?,?,?,?,?,?)');
         foreach($preparedItems as $item)$insert->execute([$id,$item['external_item_id'],$item['product_name'],$item['variant_name'],$item['quantity'],$item['unit_price'],$item['line_total'],$item['item_comment'],$item['sort_order']]);
-        $pdo->commit();return ['id'=>$id,'external_id'=>$externalId,'order_number'=>$orderNumber,'created'=>$new,'status'=>$status];
+        $pdo->commit();return ['id'=>$id,'external_id'=>$externalId,'order_number'=>$orderNumber,'created'=>$new,'status'=>$status,'locked'=>false];
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 
