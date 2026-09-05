@@ -33,12 +33,13 @@ function online_orders_transition(int $id,string $status): void
     if($id<=0||!in_array($status,online_orders_allowed_statuses(),true))throw new RuntimeException('Некорректный статус заказа.');
     $pdo=db();$pdo->beginTransaction();
     try{
-        $stmt=$pdo->prepare('SELECT id,status FROM online_orders WHERE id=? FOR UPDATE');$stmt->execute([$id]);$order=$stmt->fetch();
+        $stmt=$pdo->prepare('SELECT id,status,payment_status,payment_provider FROM online_orders WHERE id=? FOR UPDATE');$stmt->execute([$id]);$order=$stmt->fetch();
         if(!$order)throw new RuntimeException('Заказ не найден.');
         $allowed=['new'=>['preparing','ready','cancelled'],'preparing'=>['ready','cancelled'],'ready'=>['completed','preparing','cancelled'],'completed'=>[],'cancelled'=>[]];
         $from=(string)$order['status'];
         if($from===$status){$pdo->commit();return;}
         if(!in_array($status,$allowed[$from]??[],true))throw new RuntimeException('Нельзя перевести заказ из «'.online_orders_status_label($from).'» в «'.online_orders_status_label($status).'». Обновите очередь: возможно, заказ уже изменил другой сотрудник.');
+        if($status==='cancelled'&&(string)($order['payment_status']??'')==='paid'&&(string)($order['payment_provider']??'')==='yookassa_sbp')throw new RuntimeException('Заказ уже оплачен через ЮKassa. Сначала выполните возврат покупателю, затем заказ будет отменён автоматически.');
         $sql=match($status){
             'preparing'=>'UPDATE online_orders SET status=?,preparing_at=NOW(),ready_at=NULL,completed_at=NULL,cancelled_at=NULL WHERE id=? AND status=?',
             'ready'=>'UPDATE online_orders SET status=?,ready_at=NOW(),completed_at=NULL,cancelled_at=NULL WHERE id=? AND status=?',
@@ -163,20 +164,20 @@ function online_orders_upsert_from_api(array $data): array
     if(!array_key_exists('total_amount',$data))$total=$calculated;
     $pdo=db();$pdo->beginTransaction();
     try{
-        $find=$pdo->prepare('SELECT id,status FROM online_orders WHERE external_id=? FOR UPDATE');$find->execute([$externalId]);$existing=$find->fetch();$new=!$existing;
+        $find=$pdo->prepare('SELECT id,status,source,payment_status FROM online_orders WHERE external_id=? FOR UPDATE');$find->execute([$externalId]);$existing=$find->fetch();$new=!$existing;
         $values=[mb_substr($orderNumber,0,80),mb_substr($source,0,80),mb_substr(trim((string)($customer['name']??$data['customer_name']??'')),0,160)?:null,mb_substr(trim((string)($customer['phone']??$data['customer_phone']??'')),0,80)?:null,$type,mb_substr(trim((string)($fulfillment['label']??$fulfillment['address']??$data['fulfillment_label']??'')),0,160)?:null,mb_substr(trim((string)($data['payment_status']??'')),0,40)?:null,$total,trim((string)($data['comment']??$data['customer_comment']??''))?:null,online_orders_parse_datetime($data['promised_at']??null),online_orders_parse_datetime($data['created_at']??null)];
         if($new){
             $stmt=$pdo->prepare("INSERT INTO online_orders(external_id,order_number,source,status,customer_name,customer_phone,fulfillment_type,fulfillment_label,payment_status,total_amount,customer_comment,promised_at,external_created_at) VALUES(?,?,?,'new',?,?,?,?,?,?,?,?,?)");
             $stmt->execute([$externalId,...$values]);$id=(int)$pdo->lastInsertId();$status='new';
         }else{
             $id=(int)$existing['id'];$status=(string)$existing['status'];
-            if(in_array($status,['new','awaiting_payment'],true)){
-                $stmt=$pdo->prepare('UPDATE online_orders SET order_number=?,source=?,customer_name=?,customer_phone=?,fulfillment_type=?,fulfillment_label=?,payment_status=?,total_amount=?,customer_comment=?,promised_at=?,external_created_at=COALESCE(?,external_created_at) WHERE id=?');
-                $stmt->execute([...$values,$id]);$pdo->prepare('DELETE FROM online_order_items WHERE order_id=?')->execute([$id]);
-            }else{
+            $customerWeb=(string)($existing['source']??'')==='customer-web'||$source==='customer-web';
+            if($customerWeb||!in_array($status,['new','awaiting_payment'],true)||in_array((string)($existing['payment_status']??''),['paid','refunded'],true)){
                 $pdo->commit();
                 return ['id'=>$id,'external_id'=>$externalId,'order_number'=>$orderNumber,'created'=>false,'status'=>$status,'locked'=>true];
             }
+            $stmt=$pdo->prepare('UPDATE online_orders SET order_number=?,source=?,customer_name=?,customer_phone=?,fulfillment_type=?,fulfillment_label=?,payment_status=?,total_amount=?,customer_comment=?,promised_at=?,external_created_at=COALESCE(?,external_created_at) WHERE id=?');
+            $stmt->execute([...$values,$id]);$pdo->prepare('DELETE FROM online_order_items WHERE order_id=?')->execute([$id]);
         }
         $insert=$pdo->prepare('INSERT INTO online_order_items(order_id,external_item_id,product_name,variant_name,quantity,unit_price,line_total,item_comment,sort_order) VALUES(?,?,?,?,?,?,?,?,?)');
         foreach($preparedItems as $item)$insert->execute([$id,$item['external_item_id'],$item['product_name'],$item['variant_name'],$item['quantity'],$item['unit_price'],$item['line_total'],$item['item_comment'],$item['sort_order']]);
@@ -215,7 +216,7 @@ function online_orders_pull_once(): array
     $decoded=json_decode((string)$body,true,64,JSON_THROW_ON_ERROR);$orders=is_array($decoded)&&array_key_exists('orders',$decoded)?$decoded['orders']:$decoded;
     if(!is_array($orders))throw new RuntimeException('Источник заказов вернул некорректный JSON. Ожидается массив заказов или объект с полем orders.');
     $received=0;$created=0;$updated=0;
-    foreach($orders as $payload){if(!is_array($payload))continue;$received++;$result=online_orders_upsert_from_api($payload);if($result['created'])$created++;else $updated++;}
+    foreach($orders as $payload){if(!is_array($payload))continue;$received++;$result=online_orders_upsert_from_api($payload);if($result['created'])$created++;elseif(empty($result['locked']))$updated++;}
     set_system_meta('online_orders_last_pull_at',date('Y-m-d H:i:s'));set_system_meta('online_orders_last_pull_error','');
     return ['configured'=>true,'received'=>$received,'created'=>$created,'updated'=>$updated];
 }
