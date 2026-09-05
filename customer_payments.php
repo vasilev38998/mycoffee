@@ -12,7 +12,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
         if($cash==='0'&&$sbp==='0')throw new RuntimeException('Оставьте включённым хотя бы один способ оплаты.');
         $vat=(int)($_POST['vat_code']??1);if($vat<1||$vat>12)throw new RuntimeException('Выберите корректный код НДС.');
         $subject=(string)($_POST['payment_subject']??'commodity');if(!in_array($subject,['commodity','service','excise','payment','another'],true))throw new RuntimeException('Выберите корректный предмет расчёта.');
-        $mode=(string)($_POST['payment_mode']??'full_payment');if(!in_array($mode,['full_prepayment','partial_prepayment','advance','full_payment','partial_payment','credit','credit_payment'],true))throw new RuntimeException('Выберите корректный способ расчёта.');
+        $mode=(string)($_POST['payment_mode']??'full_payment');if(!in_array($mode,['full_prepayment','full_payment'],true))throw new RuntimeException('«Чеки от ЮKassa» поддерживают только полную предоплату или полный расчёт.');
         set_app_setting('customer_payment_cash_enabled',$cash);
         set_app_setting('customer_payment_sbp_enabled',$sbp);
         set_app_setting('customer_yookassa_vat_code',(string)$vat);
@@ -38,6 +38,7 @@ $testMode=$connection?((int)$connection['test_mode']===1):true;
 $vatCode=(int)app_setting('customer_yookassa_vat_code','1');
 $paymentSubject=(string)app_setting('customer_yookassa_payment_subject','commodity');
 $paymentMode=(string)app_setting('customer_yookassa_payment_mode','full_payment');
+if(!in_array($paymentMode,['full_payment','full_prepayment'],true))$paymentMode='full_payment';
 try{$webhook=customer_payment_public_url('api/customer_payment_yookassa_webhook.php');}catch(Throwable $e){$webhook='https://kapouch.store/api/customer_payment_yookassa_webhook.php';}
 page_header('Оплата в PWA');
 ?>
@@ -66,11 +67,13 @@ page_header('Оплата в PWA');
 <?php foreach(['commodity'=>'Товар','service'=>'Услуга','excise'=>'Подакцизный товар','payment'=>'Платёж','another'=>'Иное'] as $value=>$label): ?><option value="<?=e($value)?>" <?=$paymentSubject===$value?'selected':''?>><?=e($label)?></option><?php endforeach; ?>
 </select></label>
 <label>Способ расчёта<select name="payment_mode">
-<?php foreach(['full_payment'=>'Полный расчёт','full_prepayment'=>'Полная предоплата','partial_prepayment'=>'Частичная предоплата','advance'=>'Аванс','partial_payment'=>'Частичный расчёт','credit'=>'Передача в кредит','credit_payment'=>'Оплата кредита'] as $value=>$label): ?><option value="<?=e($value)?>" <?=$paymentMode===$value?'selected':''?>><?=e($label)?></option><?php endforeach; ?>
+<?php foreach(['full_payment'=>'Полный расчёт','full_prepayment'=>'Полная предоплата'] as $value=>$label): ?><option value="<?=e($value)?>" <?=$paymentMode===$value?'selected':''?>><?=e($label)?></option><?php endforeach; ?>
 </select></label>
 </div>
 <div class="alert warning" style="margin-top:14px"><strong>Налоговые параметры нужно сверить с бухгалтерией.</strong> Kapouch не пытается определять ставку НДС или признак расчёта автоматически.</div>
+<div class="alert info" style="margin-top:14px"><strong>Система налогообложения (СНО):</strong> для «Чеков от ЮKassa» в текущем API Kapouch не передаёт <code>tax_system_code</code>. СНО должна быть правильно указана при подключении/настройке магазина в ЮKassa. Если у бизнеса одновременно несколько СНО, это нужно отдельно согласовать с ЮKassa до запуска.</div>
 <div class="alert info" style="margin-top:14px"><strong>Email покупателя обязателен для оплаты по СБП.</strong> Покупатель сохраняет его в профиле Kapouch. Без корректного email создание онлайн-платежа блокируется до появления заказа.</div>
+<div class="alert warning" style="margin-top:14px"><strong>Маркированные товары:</strong> текущий контур рассчитан на обычные позиции кофейни. Если через Kapouch будут продаваться товары с обязательной маркировкой, потребуется отдельная передача кода маркировки и связанных реквизитов чека.</div>
 </div>
 
 <div class="card section"><h2>Webhook ЮKassa</h2><p class="muted">Добавьте этот HTTPS-адрес в настройках входящих уведомлений ЮKassa для события <code>payment.succeeded</code> (также можно включить <code>payment.canceled</code>):</p><div class="token-box" style="margin-top:10px;letter-spacing:0;word-break:break-all"><?=e($webhook)?></div><p class="muted">Kapouch не доверяет статусу из тела webhook: после уведомления он повторно запрашивает платёж у API ЮKassa и сверяет статус и сумму.</p></div>

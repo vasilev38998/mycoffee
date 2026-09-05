@@ -82,8 +82,9 @@ function customer_payment_receipt_subject(): string
 }
 function customer_payment_receipt_mode(): string
 {
+    // «Чеки от ЮKassa» поддерживают только полную предоплату и полный расчёт.
     $value=(string)app_setting('customer_yookassa_payment_mode','full_payment');
-    return in_array($value,['full_prepayment','partial_prepayment','advance','full_payment','partial_payment','credit','credit_payment'],true)?$value:'full_payment';
+    return in_array($value,['full_prepayment','full_payment'],true)?$value:'full_payment';
 }
 
 function customer_payment_yookassa_receipt(int $orderId,string $email,float $total): array
