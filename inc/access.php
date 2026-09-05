@@ -17,7 +17,7 @@ function can_access_page(string $page,?array $user=null): bool{$user=$user??curr
 function kapouch_public_pages(): array{
     return [
       'login.php','logout.php','install.php','api_online_orders.php','receipt_proverkacheka_proxy.php',
-      'customer_catalog.php','customer_order.php','customer_order_status.php','customer_order_detail.php','customer_favorites.php','customer_reorder.php','customer_manifest.php','customer_payment_sber_callback.php','customer_payment_yookassa_webhook.php',
+      'customer_catalog.php','customer_order.php','customer_order_status.php','customer_order_detail.php','customer_favorites.php','customer_reorder.php','customer_manifest.php','customer_payment_yookassa_webhook.php',
       'customer_auth_request.php','customer_auth_verify.php','customer_profile.php','customer_logout.php',
       'customer_push_config.php','customer_push_subscribe.php','customer_push_unsubscribe.php'
     ];
