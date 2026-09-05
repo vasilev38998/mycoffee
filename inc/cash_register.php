@@ -64,7 +64,7 @@ function cash_document_values(array $document): array
         'report_cash_out_sum'=>isset($body['cash_out_sum'])?(float)$body['cash_out_sum']:null,
         'report_collection'=>isset($body['collection'])?(float)$body['collection']:null,
         'report_proceeds'=>isset($body['proceeds'])?(float)$body['proceeds']:null,
-        'session_number'=>isset($body['session_number'])?(int)$body['session_number']:(isset($document['session_number'])?(int)$document['session_number']:null),
+        'session_number'=>isset($document['session_number'])?(int)$document['session_number']:(isset($body['session_number'])?(int)$body['session_number']:null),
         'document_number'=>$body['document_number']??$document['number']??null,
     ];
 }
@@ -80,6 +80,21 @@ function repair_cash_register_payment_amounts(string $from,string $to): int
         $v=cash_document_values($doc);
         if(abs((float)$row['cash_delta']-(float)$v['cash_delta'])<0.005&&abs((float)$row['cash_sale_amount']-(float)$v['cash_sale_amount'])<0.005&&abs((float)$row['cash_return_amount']-(float)$v['cash_return_amount'])<0.005)continue;
         $update->execute([$v['cash_delta'],$v['cash_sale_amount'],$v['cash_return_amount'],(int)$row['id']]);$fixed++;
+    }
+    return $fixed;
+}
+
+function repair_cash_register_session_numbers(string $from,string $to): int
+{
+    ensure_cash_register_tables();
+    $stmt=db()->prepare("SELECT id,session_number,raw_json FROM cash_register_documents WHERE raw_json IS NOT NULL AND occurred_at>=? AND occurred_at<DATE_ADD(?,INTERVAL 1 DAY)");
+    $stmt->execute([$from.' 00:00:00',$to]);$fixed=0;
+    $update=db()->prepare('UPDATE cash_register_documents SET session_number=? WHERE id=?');
+    foreach($stmt->fetchAll() as $row){
+        $doc=json_decode((string)$row['raw_json'],true);if(!is_array($doc))continue;
+        $topLevel=isset($doc['session_number'])?(int)$doc['session_number']:null;
+        if($topLevel===null||$topLevel<=0||$topLevel===(int)($row['session_number']??0))continue;
+        $update->execute([$topLevel,(int)$row['id']]);$fixed++;
     }
     return $fixed;
 }
