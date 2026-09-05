@@ -1,4 +1,4 @@
-const CACHE='kapouch-pwa-v20';
+const CACHE='kapouch-pwa-v21';
 const SHELL=['./','./index.html','./payment-return.html','./config.js?v=9','./assets/app.css?v=5','./assets/variants.css?v=1','./assets/pwa-v2.css?v=1','./assets/modifiers.css?v=3','./assets/payments.css?v=1','./assets/app.js?v=10','./assets/profile-plus.js?v=1','./assets/modifier-price-ui.js?v=1','./assets/payments.js?v=3','./assets/personalization.js?v=1','./assets/current-order.js?v=1','./assets/growth-suite.js?v=1','./assets/push.js?v=1','./assets/icon.svg'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
