@@ -1,7 +1,15 @@
 Options -Indexes
 DirectoryIndex index.php
 
-<FilesMatch "^(config\.php|config\.example\.php)$">
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^(?:inc|database|docs|cron)(?:/|$) - [F,L,NC]
+</IfModule>
+
+<FilesMatch "^(config\.php|config\.example\.php|README\.md)$">
+  Require all denied
+</FilesMatch>
+<FilesMatch "\.(?:sql|md)$">
   Require all denied
 </FilesMatch>
 
@@ -9,4 +17,5 @@ DirectoryIndex index.php
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "SAMEORIGIN"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set X-Permitted-Cross-Domain-Policies "none"
 </IfModule>
