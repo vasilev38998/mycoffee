@@ -21,11 +21,19 @@ try{
         db()->prepare('UPDATE customer_accounts SET name=?,email=? WHERE id=?')->execute([$name!==''?$name:null,$email!==''?$email:null,(int)$customer['id']]);
         $customer['name']=$name;
     }
-    customer_loyalty_refresh_customer((int)$customer['id']);
+    $customerId=(int)$customer['id'];
+    customer_loyalty_refresh_customer($customerId);
     $profile=customer_auth_profile($customer);
-    $stmt=db()->prepare('SELECT email,name FROM customer_accounts WHERE id=? LIMIT 1');$stmt->execute([(int)$customer['id']]);$account=$stmt->fetch()?:[];
+    $stmt=db()->prepare('SELECT email,name FROM customer_accounts WHERE id=? LIMIT 1');$stmt->execute([$customerId]);$account=$stmt->fetch()?:[];
     $profile['customer']['email']=trim((string)($account['email']??''));
     $profile['customer']['name']=trim((string)($account['name']??''));
+
+    $stmt=db()->prepare("SELECT COUNT(*) completed_orders,COALESCE(SUM(o.total_amount),0) completed_spend FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.customer_id=? AND o.status='completed'");
+    $stmt->execute([$customerId]);$orderStats=$stmt->fetch()?:[];
+    $stmt=db()->prepare("SELECT oi.product_name,COALESCE(SUM(oi.quantity),0) qty,COUNT(DISTINCT o.id) order_count FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id JOIN online_order_items oi ON oi.order_id=o.id WHERE a.customer_id=? AND o.status='completed' AND oi.variant_name IS NULL GROUP BY oi.product_name ORDER BY qty DESC,order_count DESC,oi.product_name LIMIT 1");
+    $stmt->execute([$customerId]);$favorite=$stmt->fetch()?:[];
+    $stmt=db()->prepare('SELECT COALESCE(SUM(amount),0) FROM customer_loyalty_ledger WHERE customer_id=? AND amount>0');$stmt->execute([$customerId]);$earned=(float)$stmt->fetchColumn();
+    $profile['stats']=['completed_orders'=>(int)($orderStats['completed_orders']??0),'completed_spend'=>(float)($orderStats['completed_spend']??0),'favorite_product'=>trim((string)($favorite['product_name']??'')),'favorite_quantity'=>(float)($favorite['qty']??0),'loyalty_earned'=>$earned];
     customer_api_reply(200,['ok'=>true,'profile'=>$profile]);
 }catch(JsonException $e){
     customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);
