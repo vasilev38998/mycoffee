@@ -141,11 +141,16 @@ jobs:
       - name: Owner admin routes smoke
         run: |
           set -euo pipefail
+          product_id=$(mysql -N -s -h127.0.0.1 -uroot -proot kapouch_test -e "SELECT id FROM products ORDER BY id LIMIT 1")
           routes=$(php -r 'require "inc/bootstrap.php"; echo implode(" ",role_pages()["owner"]);')
           for route in $routes; do
-            code=$(curl -sS -b /tmp/cookies.txt -o /tmp/route.out -w '%{http_code}' "http://127.0.0.1:8080/$route")
+            case "$route" in
+              recipe.php) url="http://127.0.0.1:8080/recipe.php?id=$product_id" ;;
+              *) url="http://127.0.0.1:8080/$route" ;;
+            esac
+            code=$(curl -sS -b /tmp/cookies.txt -o /tmp/route.out -w '%{http_code}' "$url")
             if [ "$code" != "200" ]; then
-              echo "Route $route returned HTTP $code"
+              echo "Route $url returned HTTP $code"
               cat /tmp/route.out
               exit 1
             fi
