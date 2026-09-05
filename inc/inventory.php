@@ -17,29 +17,29 @@ function apply_inventory_movement(
     ?string $note = null
 ): bool {
     ensure_inventory_tables();
+    if($ingredientId<=0||!is_finite($quantityDelta)||abs($quantityDelta)<0.0000001)throw new RuntimeException('Некорректное движение склада.');
+    if(!in_array($movementType,['purchase','sale','return','writeoff','inventory_adjustment','manual'],true))throw new RuntimeException('Некорректный тип движения склада.');
     $pdo = db();
 
     $pdo->beginTransaction();
     try {
-        if ($referenceType !== null && $referenceId !== null) {
-            $check = $pdo->prepare('SELECT id FROM inventory_movements WHERE ingredient_id=? AND movement_type=? AND reference_type=? AND reference_id=? LIMIT 1');
-            $check->execute([$ingredientId,$movementType,$referenceType,$referenceId]);
-            if ($check->fetchColumn()) {
-                $pdo->rollBack();
-                return false;
-            }
-        }
-
         $insert = $pdo->prepare('INSERT INTO inventory_movements(ingredient_id,movement_type,quantity_delta,reference_type,reference_id,occurred_at,note) VALUES(?,?,?,?,?,?,?)');
-        $insert->execute([$ingredientId,$movementType,$quantityDelta,$referenceType,$referenceId,$occurredAt,$note]);
+        try{
+            $insert->execute([$ingredientId,$movementType,$quantityDelta,$referenceType,$referenceId,$occurredAt,$note]);
+        }catch(PDOException $e){
+            $driverCode=(int)($e->errorInfo[1]??0);
+            if($referenceType!==null&&$referenceId!==null&&$driverCode===1062){$pdo->rollBack();return false;}
+            throw $e;
+        }
 
         $update = $pdo->prepare('UPDATE ingredients SET stock_quantity = stock_quantity + ? WHERE id=?');
         $update->execute([$quantityDelta,$ingredientId]);
+        if($update->rowCount()!==1)throw new RuntimeException('Ингредиент для движения склада не найден.');
 
         $pdo->commit();
         return true;
     } catch (Throwable $e) {
-        $pdo->rollBack();
+        if($pdo->inTransaction())$pdo->rollBack();
         throw $e;
     }
 }
@@ -92,7 +92,9 @@ function sync_inventory_from_sales(?string $from = null): int
 
 function ingredient_expected_stock(int $ingredientId): float
 {
-    $stmt = db()->prepare('SELECT stock_quantity FROM ingredients WHERE id=?');
+    $stmt = db()->prepare('SELECT stock_quantity FROM ingredients WHERE id=? FOR UPDATE');
     $stmt->execute([$ingredientId]);
-    return (float)($stmt->fetchColumn() ?: 0);
+    $value=$stmt->fetchColumn();
+    if($value===false)throw new RuntimeException('Ингредиент не найден.');
+    return (float)$value;
 }
