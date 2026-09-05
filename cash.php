@@ -19,7 +19,9 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
 }
 
 repair_cash_register_payment_amounts($from,$to);
-$today=date('Y-m-d');if($today<$from||$today>$to)repair_cash_register_payment_amounts($today,$today);
+repair_cash_register_session_numbers($from,$to);
+$today=date('Y-m-d');
+if($today<$from||$today>$to){repair_cash_register_payment_amounts($today,$today);repair_cash_register_session_numbers($today,$today);}
 $summary=cash_period_summary($from,$to);
 $current=current_cash_balance();
 $sessions=cash_session_reports($from,$to);
