@@ -134,13 +134,17 @@ function online_orders_api_authorized(): bool
 }
 function online_orders_api_payload(): array
 {
-    $raw=file_get_contents('php://input');if($raw===false||trim($raw)==='')throw new RuntimeException('Пустое тело запроса.');
+    $raw=file_get_contents('php://input');if($raw===false||trim($raw)==='')throw new RuntimeException('Пустое тело запроса.');if(strlen($raw)>2097152)throw new RuntimeException('Тело запроса слишком большое.');
     $data=json_decode($raw,true,64,JSON_THROW_ON_ERROR);if(!is_array($data))throw new RuntimeException('JSON должен быть объектом.');return $data;
 }
 function online_orders_parse_datetime(mixed $value): ?string
 {
     if($value===null||trim((string)$value)==='')return null;
-    try{$d=new DateTime((string)$value);$d->setTimezone(new DateTimeZone(date_default_timezone_get()));return $d->format('Y-m-d H:i:s');}catch(Throwable $e){throw new RuntimeException('Некорректная дата/время: '.(string)$value);}
+    try{$d=new DateTime((string)$value);$d->setTimezone(new DateTimeZone(date_default_timezone_get()));return $d->format('Y-m-d H:i:s');}catch(Throwable $e){throw new RuntimeException('Некорректная дата/время: '.mb_substr((string)$value,0,120));}
+}
+function online_orders_number(mixed $value,string $field): float
+{
+    if(!is_numeric($value))throw new RuntimeException($field.' должен быть числом.');$number=(float)$value;if(!is_finite($number))throw new RuntimeException($field.' содержит недопустимое число.');return $number;
 }
 
 function online_orders_upsert_from_api(array $data): array
@@ -148,46 +152,46 @@ function online_orders_upsert_from_api(array $data): array
     $externalId=trim((string)($data['external_id']??''));$orderNumber=trim((string)($data['order_number']??$externalId));
     if($externalId===''||mb_strlen($externalId)>190)throw new RuntimeException('Поле external_id обязательно и должно быть короче 191 символа.');
     if($orderNumber==='')$orderNumber=$externalId;
-    $source=trim((string)($data['source']??'online'))?:'online';$customer=is_array($data['customer']??null)?$data['customer']:[];$fulfillment=is_array($data['fulfillment']??null)?$data['fulfillment']:[];
+    $source=mb_substr(trim((string)($data['source']??'online'))?:'online',0,80);$customer=is_array($data['customer']??null)?$data['customer']:[];$fulfillment=is_array($data['fulfillment']??null)?$data['fulfillment']:[];
     $type=(string)($fulfillment['type']??$data['fulfillment_type']??'pickup');if(!in_array($type,['pickup','delivery','other'],true))$type='other';
-    $items=$data['items']??null;if(!is_array($items)||!$items)throw new RuntimeException('Добавьте хотя бы одну позицию в items.');
-    $total=array_key_exists('total_amount',$data)?(float)$data['total_amount']:0.0;if($total<0)throw new RuntimeException('total_amount не может быть отрицательным.');
+    $items=$data['items']??null;if(!is_array($items)||!$items)throw new RuntimeException('Добавьте хотя бы одну позицию в items.');if(count($items)>200)throw new RuntimeException('Слишком много позиций в одном заказе.');
+    $total=array_key_exists('total_amount',$data)?online_orders_number($data['total_amount'],'total_amount'):0.0;if($total<0||$total>10000000)throw new RuntimeException('total_amount вне допустимого диапазона.');
     $preparedItems=[];$calculated=0.0;$sort=0;
     foreach($items as $row){
         if(!is_array($row))throw new RuntimeException('Каждая позиция items должна быть объектом.');
-        $name=trim((string)($row['name']??$row['product_name']??''));$qty=(float)($row['quantity']??1);$price=(float)($row['unit_price']??0);
-        if($name===''||$qty<=0||$price<0)throw new RuntimeException('У каждой позиции нужны name, quantity > 0 и unit_price >= 0.');
-        $line=array_key_exists('line_total',$row)?(float)$row['line_total']:$qty*$price;if($line<0)throw new RuntimeException('line_total не может быть отрицательным.');
-        $calculated+=$line;$sort++;
-        $preparedItems[]=['external_item_id'=>trim((string)($row['external_id']??$row['id']??''))?:null,'product_name'=>mb_substr($name,0,190),'variant_name'=>mb_substr(trim((string)($row['variant']??$row['variant_name']??'')),0,160)?:null,'quantity'=>$qty,'unit_price'=>$price,'line_total'=>$line,'item_comment'=>mb_substr(trim((string)($row['comment']??'')),0,500)?:null,'sort_order'=>$sort];
+        $name=trim((string)($row['name']??$row['product_name']??''));$qty=online_orders_number($row['quantity']??1,'quantity');$price=online_orders_number($row['unit_price']??0,'unit_price');
+        if($name===''||$qty<=0||$qty>1000||$price<0||$price>10000000)throw new RuntimeException('У каждой позиции нужны name, разумное quantity > 0 и unit_price >= 0.');
+        $line=array_key_exists('line_total',$row)?online_orders_number($row['line_total'],'line_total'):$qty*$price;if(!is_finite($line)||$line<0||$line>100000000)throw new RuntimeException('line_total вне допустимого диапазона.');
+        $calculated+=$line;if(!is_finite($calculated)||$calculated>100000000)throw new RuntimeException('Сумма заказа слишком велика.');$sort++;
+        $preparedItems[]=['external_item_id'=>mb_substr(trim((string)($row['external_id']??$row['id']??'')),0,190)?:null,'product_name'=>mb_substr($name,0,190),'variant_name'=>mb_substr(trim((string)($row['variant']??$row['variant_name']??'')),0,160)?:null,'quantity'=>$qty,'unit_price'=>$price,'line_total'=>$line,'item_comment'=>mb_substr(trim((string)($row['comment']??'')),0,500)?:null,'sort_order'=>$sort];
     }
     if(!array_key_exists('total_amount',$data))$total=$calculated;
     $pdo=db();$pdo->beginTransaction();
     try{
-        $find=$pdo->prepare('SELECT id,status,source,payment_status FROM online_orders WHERE external_id=? FOR UPDATE');$find->execute([$externalId]);$existing=$find->fetch();$new=!$existing;
-        $values=[mb_substr($orderNumber,0,80),mb_substr($source,0,80),mb_substr(trim((string)($customer['name']??$data['customer_name']??'')),0,160)?:null,mb_substr(trim((string)($customer['phone']??$data['customer_phone']??'')),0,80)?:null,$type,mb_substr(trim((string)($fulfillment['label']??$fulfillment['address']??$data['fulfillment_label']??'')),0,160)?:null,mb_substr(trim((string)($data['payment_status']??'')),0,40)?:null,$total,trim((string)($data['comment']??$data['customer_comment']??''))?:null,online_orders_parse_datetime($data['promised_at']??null),online_orders_parse_datetime($data['created_at']??null)];
+        $find=$pdo->prepare('SELECT id,status,source,payment_status,order_number,total_amount FROM online_orders WHERE external_id=? FOR UPDATE');$find->execute([$externalId]);$existing=$find->fetch();$new=!$existing;
+        $values=[mb_substr($orderNumber,0,80),$source,mb_substr(trim((string)($customer['name']??$data['customer_name']??'')),0,160)?:null,mb_substr(trim((string)($customer['phone']??$data['customer_phone']??'')),0,80)?:null,$type,mb_substr(trim((string)($fulfillment['label']??$fulfillment['address']??$data['fulfillment_label']??'')),0,160)?:null,mb_substr(trim((string)($data['payment_status']??'')),0,40)?:null,round($total,2),mb_substr(trim((string)($data['comment']??$data['customer_comment']??'')),0,1000)?:null,online_orders_parse_datetime($data['promised_at']??null),online_orders_parse_datetime($data['created_at']??null)];
         if($new){
             $stmt=$pdo->prepare("INSERT INTO online_orders(external_id,order_number,source,status,customer_name,customer_phone,fulfillment_type,fulfillment_label,payment_status,total_amount,customer_comment,promised_at,external_created_at) VALUES(?,?,?,'new',?,?,?,?,?,?,?,?,?)");
-            $stmt->execute([$externalId,...$values]);$id=(int)$pdo->lastInsertId();$status='new';
+            $stmt->execute([$externalId,...$values]);$id=(int)$pdo->lastInsertId();$status='new';$canonicalOrderNumber=mb_substr($orderNumber,0,80);$canonicalTotal=round($total,2);
         }else{
-            $id=(int)$existing['id'];$status=(string)$existing['status'];
+            $id=(int)$existing['id'];$status=(string)$existing['status'];$canonicalOrderNumber=(string)$existing['order_number'];$canonicalTotal=(float)$existing['total_amount'];
             $customerWeb=(string)($existing['source']??'')==='customer-web'||$source==='customer-web';
             if($customerWeb||!in_array($status,['new','awaiting_payment'],true)||in_array((string)($existing['payment_status']??''),['paid','refunded'],true)){
                 $pdo->commit();
-                return ['id'=>$id,'external_id'=>$externalId,'order_number'=>$orderNumber,'created'=>false,'status'=>$status,'locked'=>true];
+                return ['id'=>$id,'external_id'=>$externalId,'order_number'=>$canonicalOrderNumber,'total_amount'=>$canonicalTotal,'created'=>false,'status'=>$status,'locked'=>true];
             }
             $stmt=$pdo->prepare('UPDATE online_orders SET order_number=?,source=?,customer_name=?,customer_phone=?,fulfillment_type=?,fulfillment_label=?,payment_status=?,total_amount=?,customer_comment=?,promised_at=?,external_created_at=COALESCE(?,external_created_at) WHERE id=?');
-            $stmt->execute([...$values,$id]);$pdo->prepare('DELETE FROM online_order_items WHERE order_id=?')->execute([$id]);
+            $stmt->execute([...$values,$id]);$pdo->prepare('DELETE FROM online_order_items WHERE order_id=?')->execute([$id]);$canonicalOrderNumber=mb_substr($orderNumber,0,80);$canonicalTotal=round($total,2);
         }
         $insert=$pdo->prepare('INSERT INTO online_order_items(order_id,external_item_id,product_name,variant_name,quantity,unit_price,line_total,item_comment,sort_order) VALUES(?,?,?,?,?,?,?,?,?)');
         foreach($preparedItems as $item)$insert->execute([$id,$item['external_item_id'],$item['product_name'],$item['variant_name'],$item['quantity'],$item['unit_price'],$item['line_total'],$item['item_comment'],$item['sort_order']]);
-        $pdo->commit();return ['id'=>$id,'external_id'=>$externalId,'order_number'=>$orderNumber,'created'=>$new,'status'=>$status,'locked'=>false];
+        $pdo->commit();return ['id'=>$id,'external_id'=>$externalId,'order_number'=>$canonicalOrderNumber,'total_amount'=>$canonicalTotal,'created'=>$new,'status'=>$status,'locked'=>false];
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 
 function online_orders_get_by_external_id(string $externalId): ?array
 {
-    $stmt=db()->prepare('SELECT id,external_id,order_number,status,total_amount,promised_at,created_at,updated_at FROM online_orders WHERE external_id=?');$stmt->execute([$externalId]);$row=$stmt->fetch();
+    if($externalId===''||mb_strlen($externalId)>190)return null;$stmt=db()->prepare('SELECT id,external_id,order_number,status,total_amount,promised_at,created_at,updated_at FROM online_orders WHERE external_id=?');$stmt->execute([$externalId]);$row=$stmt->fetch();
     if(!$row)return null;$row['status_label']=online_orders_status_label((string)$row['status']);return $row;
 }
 
@@ -203,18 +207,24 @@ function online_orders_decrypt_secret(string $value): string
 {
     if($value==='')return '';$raw=base64_decode($value,true);if($raw===false||strlen($raw)<29)throw new RuntimeException('Не удалось прочитать токен источника заказов.');$iv=substr($raw,0,12);$tag=substr($raw,12,16);$cipher=substr($raw,28);$plain=openssl_decrypt($cipher,'aes-256-gcm',online_orders_secret_key(),OPENSSL_RAW_DATA,$iv,$tag);if($plain===false)throw new RuntimeException('Не удалось расшифровать токен источника заказов.');return $plain;
 }
+function online_orders_validate_pull_url(string $url): array
+{
+    return kapouch_public_https_target(trim($url));
+}
 function online_orders_pull_once(): array
 {
     $url=trim((string)app_setting('online_orders_pull_url',''));
     if($url==='')return ['configured'=>false,'received'=>0,'created'=>0,'updated'=>0];
-    if(!filter_var($url,FILTER_VALIDATE_URL)||!preg_match('#^https?://#i',$url))throw new RuntimeException('Некорректный URL источника онлайн-заказов.');
+    $target=online_orders_validate_pull_url($url);
     $token=online_orders_decrypt_secret((string)app_setting('online_orders_pull_token',''));
     $headers=['Accept: application/json'];if($token!=='')$headers[]='Authorization: Bearer '.$token;
-    $ch=curl_init($url);curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>45,CURLOPT_HTTPHEADER=>$headers]);$body=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
+    $ch=curl_init($url);curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>45,CURLOPT_HTTPHEADER=>$headers]);kapouch_curl_pin_public_target($ch,$target);$body=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
     if($body===false||$error!=='')throw new RuntimeException('Ошибка подключения к сайту онлайн-заказов: '.$error);
+    if(strlen((string)$body)>5242880)throw new RuntimeException('Источник заказов вернул слишком большой ответ.');
     if($status<200||$status>=300)throw new RuntimeException('Сайт онлайн-заказов вернул HTTP '.$status.'.');
     $decoded=json_decode((string)$body,true,64,JSON_THROW_ON_ERROR);$orders=is_array($decoded)&&array_key_exists('orders',$decoded)?$decoded['orders']:$decoded;
     if(!is_array($orders))throw new RuntimeException('Источник заказов вернул некорректный JSON. Ожидается массив заказов или объект с полем orders.');
+    if(count($orders)>1000)throw new RuntimeException('Источник заказов вернул слишком много заказов за один запрос.');
     $received=0;$created=0;$updated=0;
     foreach($orders as $payload){if(!is_array($payload))continue;$received++;$result=online_orders_upsert_from_api($payload);if($result['created'])$created++;elseif(empty($result['locked']))$updated++;}
     set_system_meta('online_orders_last_pull_at',date('Y-m-d H:i:s'));set_system_meta('online_orders_last_pull_error','');

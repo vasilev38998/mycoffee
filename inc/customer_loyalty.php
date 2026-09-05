@@ -25,9 +25,13 @@ function customer_loyalty_on_order_completed(int $orderId): float
     if($orderId<=0)return 0.0;
     $pdo=db();$pdo->beginTransaction();
     try{
-        $stmt=$pdo->prepare("SELECT a.customer_id,a.loyalty_earned_at,o.total_amount,o.status FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.order_id=? FOR UPDATE");
+        $stmt=$pdo->prepare("SELECT a.customer_id,a.loyalty_earned_at,o.total_amount,o.status,o.payment_status FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.order_id=? FOR UPDATE");
         $stmt->execute([$orderId]);$row=$stmt->fetch();
         if(!$row||(string)$row['status']!=='completed'||!$row['customer_id']||$row['loyalty_earned_at']){$pdo->commit();return 0.0;}
+        if((string)($row['payment_status']??'')==='refunded'){
+            $pdo->prepare('UPDATE customer_order_access SET loyalty_earned_at=NOW() WHERE order_id=? AND loyalty_earned_at IS NULL')->execute([$orderId]);
+            $pdo->commit();return 0.0;
+        }
         $customerId=(int)$row['customer_id'];$amount=customer_loyalty_preview((float)$row['total_amount']);
         if($amount>0){
             $pdo->prepare("INSERT INTO customer_loyalty_ledger(customer_id,order_id,amount,operation_type,note) VALUES(?,?,?,'earn',?)")->execute([$customerId,$orderId,$amount,'Начисление за завершённый онлайн-заказ']);
@@ -35,6 +39,23 @@ function customer_loyalty_on_order_completed(int $orderId): float
         }
         $pdo->prepare('UPDATE customer_order_access SET loyalty_earned_at=NOW() WHERE order_id=?')->execute([$orderId]);
         $pdo->commit();return $amount;
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+}
+
+function customer_loyalty_reverse_order(int $orderId): float
+{
+    if($orderId<=0)return 0.0;
+    $pdo=db();$pdo->beginTransaction();
+    try{
+        $stmt=$pdo->prepare('SELECT customer_id FROM customer_order_access WHERE order_id=? FOR UPDATE');$stmt->execute([$orderId]);$customerId=(int)($stmt->fetchColumn()?:0);
+        if($customerId<=0){$pdo->commit();return 0.0;}
+        $check=$pdo->prepare("SELECT COUNT(*) FROM customer_loyalty_ledger WHERE order_id=? AND operation_type='adjust' AND note='Отмена бонусов: полный возврат заказа'");$check->execute([$orderId]);
+        if((int)$check->fetchColumn()>0){$pdo->commit();return 0.0;}
+        $earnedStmt=$pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM customer_loyalty_ledger WHERE order_id=? AND operation_type='earn' AND amount>0");$earnedStmt->execute([$orderId]);$earned=round((float)$earnedStmt->fetchColumn(),2);
+        if($earned<=0){$pdo->commit();return 0.0;}
+        $pdo->prepare("INSERT INTO customer_loyalty_ledger(customer_id,order_id,amount,operation_type,note) VALUES(?,?,?,'adjust',?)")->execute([$customerId,$orderId,-$earned,'Отмена бонусов: полный возврат заказа']);
+        $pdo->prepare('UPDATE customer_accounts SET loyalty_balance=loyalty_balance-? WHERE id=?')->execute([$earned,$customerId]);
+        $pdo->commit();return $earned;
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 

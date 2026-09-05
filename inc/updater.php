@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const KAPOUCH_APP_VERSION = '2026.09.03';
+const KAPOUCH_APP_VERSION = '2026.09.05';
 const KAPOUCH_LEGACY_BASELINE_MAX = 8;
 
 function kapouch_migrations_dir(): string
@@ -29,7 +29,6 @@ function kapouch_normalize_sql_line_endings(string $sql): string
 
 function kapouch_migration_checksum(string $sql): string
 {
-    // Канонический checksum не зависит от ОС/FTP text mode: LF и CRLF означают тот же SQL.
     return hash('sha256', kapouch_normalize_sql_line_endings($sql));
 }
 
@@ -95,9 +94,6 @@ function kapouch_baseline_legacy_migrations(PDO $pdo): int
 {
     kapouch_ensure_migration_registry($pdo);
     if (!kapouch_table_exists($pdo, 'users')) return 0;
-
-    // Старые установки до появления центра обновлений могли применять миграции через ensure_*.
-    // Отмечаем baseline только когда ожидаемые таблицы/колонки реально существуют.
     $baselined = 0;
     foreach (kapouch_migration_files() as $file) {
         $number = kapouch_migration_number($file);
@@ -115,68 +111,53 @@ function kapouch_migration_status(PDO $pdo): array
 {
     kapouch_ensure_migration_registry($pdo);
     $applied = [];
-    foreach ($pdo->query("SELECT * FROM schema_migrations WHERE status IN ('applied','baseline') ORDER BY migration_number,migration")->fetchAll() as $row) {
-        $applied[$row['migration']] = $row;
-    }
-
-    $pending = [];
-    $changed = [];
+    foreach ($pdo->query("SELECT * FROM schema_migrations WHERE status IN ('applied','baseline') ORDER BY migration_number,migration")->fetchAll() as $row) $applied[$row['migration']] = $row;
+    $pending = [];$changed = [];
     foreach (kapouch_migration_files() as $file) {
-        $name = basename($file);
-        $sql = file_get_contents($file);
-        if ($sql === false) continue;
-        $checksum = kapouch_migration_checksum($sql);
-        if (!isset($applied[$name])) {
-            $pending[] = ['name'=>$name,'number'=>kapouch_migration_number($file),'file'=>$file,'checksum'=>$checksum];
-        } elseif (!kapouch_migration_checksum_matches((string)$applied[$name]['checksum'], $sql)) {
-            $changed[] = ['name'=>$name,'recorded'=>$applied[$name]['checksum'],'current'=>$checksum];
-        }
+        $name = basename($file);$sql = file_get_contents($file);if ($sql === false) continue;$checksum = kapouch_migration_checksum($sql);
+        if (!isset($applied[$name])) $pending[] = ['name'=>$name,'number'=>kapouch_migration_number($file),'file'=>$file,'checksum'=>$checksum];
+        elseif (!kapouch_migration_checksum_matches((string)$applied[$name]['checksum'], $sql)) $changed[] = ['name'=>$name,'recorded'=>$applied[$name]['checksum'],'current'=>$checksum];
     }
-
-    $latest = 0;
-    foreach ($applied as $row) $latest = max($latest, (int)$row['migration_number']);
-    $available = 0;
-    foreach (kapouch_migration_files() as $file) $available = max($available, kapouch_migration_number($file));
-
+    $latest=0;foreach($applied as $row)$latest=max($latest,(int)$row['migration_number']);$available=0;foreach(kapouch_migration_files() as $file)$available=max($available,kapouch_migration_number($file));
     return ['current_version'=>$latest,'available_version'=>$available,'pending'=>$pending,'changed'=>$changed,'applied'=>$applied];
 }
 
 function kapouch_apply_pending_migrations(PDO $pdo, bool $baselineLegacy=true): array
 {
-    kapouch_ensure_migration_registry($pdo);
-    if ($baselineLegacy) kapouch_baseline_legacy_migrations($pdo);
-    $status = kapouch_migration_status($pdo);
-    if ($status['changed']) {
-        throw new RuntimeException('Обнаружено изменение уже применённой миграции: ' . $status['changed'][0]['name'] . '. Обновление остановлено для защиты данных.');
-    }
-
-    $result = ['applied'=>[], 'failed'=>null];
-    foreach ($status['pending'] as $migration) {
-        $sql = file_get_contents($migration['file']);
-        if ($sql === false) throw new RuntimeException('Не удалось прочитать миграцию ' . $migration['name']);
-        $started = microtime(true);
-        try {
-            $pdo->exec($sql);
-            $ms = (int)round((microtime(true)-$started)*1000);
-            $stmt = $pdo->prepare("INSERT INTO schema_migrations(migration,migration_number,checksum,status,execution_ms,applied_at,error_message,app_version) VALUES(?,?,?,'applied',?,NOW(),NULL,?) ON DUPLICATE KEY UPDATE checksum=VALUES(checksum),status='applied',execution_ms=VALUES(execution_ms),applied_at=NOW(),error_message=NULL,app_version=VALUES(app_version)");
-            $stmt->execute([$migration['name'],$migration['number'],$migration['checksum'],$ms,KAPOUCH_APP_VERSION]);
-            $result['applied'][] = ['name'=>$migration['name'],'number'=>$migration['number'],'execution_ms'=>$ms];
-        } catch (Throwable $e) {
-            $ms = (int)round((microtime(true)-$started)*1000);
-            $stmt = $pdo->prepare("INSERT INTO schema_migrations(migration,migration_number,checksum,status,execution_ms,applied_at,error_message,app_version) VALUES(?,?,?,'failed',?,NULL,?,?) ON DUPLICATE KEY UPDATE checksum=VALUES(checksum),status='failed',execution_ms=VALUES(execution_ms),error_message=VALUES(error_message),app_version=VALUES(app_version)");
-            $stmt->execute([$migration['name'],$migration['number'],$migration['checksum'],$ms,mb_substr($e->getMessage(),0,4000),KAPOUCH_APP_VERSION]);
-            $result['failed'] = ['name'=>$migration['name'],'message'=>$e->getMessage()];
-            throw new RuntimeException('Не удалось применить ' . $migration['name'] . ': ' . $e->getMessage(), 0, $e);
+    $lockName='kapouch_schema_migrations';$lock=$pdo->prepare('SELECT GET_LOCK(?,30)');$lock->execute([$lockName]);
+    if((int)$lock->fetchColumn()!==1)throw new RuntimeException('Другая копия Kapouch уже обновляет базу. Повторите запрос через несколько секунд.');
+    try{
+        kapouch_ensure_migration_registry($pdo);
+        if ($baselineLegacy) kapouch_baseline_legacy_migrations($pdo);
+        $status = kapouch_migration_status($pdo);
+        if ($status['changed']) throw new RuntimeException('Обнаружено изменение уже применённой миграции: ' . $status['changed'][0]['name'] . '. Обновление остановлено для защиты данных.');
+        $result = ['applied'=>[], 'failed'=>null];
+        foreach ($status['pending'] as $migration) {
+            $sql = file_get_contents($migration['file']);
+            if ($sql === false) throw new RuntimeException('Не удалось прочитать миграцию ' . $migration['name']);
+            $started = microtime(true);
+            try {
+                $pdo->exec($sql);$ms = (int)round((microtime(true)-$started)*1000);
+                $stmt = $pdo->prepare("INSERT INTO schema_migrations(migration,migration_number,checksum,status,execution_ms,applied_at,error_message,app_version) VALUES(?,?,?,'applied',?,NOW(),NULL,?) ON DUPLICATE KEY UPDATE checksum=VALUES(checksum),status='applied',execution_ms=VALUES(execution_ms),applied_at=NOW(),error_message=NULL,app_version=VALUES(app_version)");
+                $stmt->execute([$migration['name'],$migration['number'],$migration['checksum'],$ms,KAPOUCH_APP_VERSION]);
+                $result['applied'][] = ['name'=>$migration['name'],'number'=>$migration['number'],'execution_ms'=>$ms];
+            } catch (Throwable $e) {
+                $ms = (int)round((microtime(true)-$started)*1000);
+                $stmt = $pdo->prepare("INSERT INTO schema_migrations(migration,migration_number,checksum,status,execution_ms,applied_at,error_message,app_version) VALUES(?,?,?,'failed',?,NULL,?,?) ON DUPLICATE KEY UPDATE checksum=VALUES(checksum),status='failed',execution_ms=VALUES(execution_ms),error_message=VALUES(error_message),app_version=VALUES(app_version)");
+                $stmt->execute([$migration['name'],$migration['number'],$migration['checksum'],$ms,mb_substr($e->getMessage(),0,4000),KAPOUCH_APP_VERSION]);
+                $result['failed'] = ['name'=>$migration['name'],'message'=>$e->getMessage()];
+                throw new RuntimeException('Не удалось применить ' . $migration['name'] . ': ' . $e->getMessage(), 0, $e);
+            }
         }
+        return $result;
+    } finally {
+        try{$unlock=$pdo->prepare('SELECT RELEASE_LOCK(?)');$unlock->execute([$lockName]);}catch(Throwable $e){}
     }
-    return $result;
 }
 
 function kapouch_update_history(PDO $pdo, int $limit=30): array
 {
     kapouch_ensure_migration_registry($pdo);
     $stmt=$pdo->prepare('SELECT * FROM schema_migrations ORDER BY migration_number DESC,migration DESC LIMIT ?');
-    $stmt->bindValue(1,$limit,PDO::PARAM_INT);
-    $stmt->execute();
-    return $stmt->fetchAll();
+    $stmt->bindValue(1,$limit,PDO::PARAM_INT);$stmt->execute();return $stmt->fetchAll();
 }

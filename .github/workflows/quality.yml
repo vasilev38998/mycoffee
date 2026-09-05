@@ -1,0 +1,102 @@
+name: Project quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runtime versions
+        run: |
+          php -v
+          node -v
+          python3 --version
+
+      - name: PHP syntax
+        run: |
+          set -euo pipefail
+          find . -type f -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -print0 \
+            | xargs -0 -r -n1 php -l
+
+      - name: JavaScript syntax
+        run: |
+          set -euo pipefail
+          find assets customer -type f -name '*.js' -print0 \
+            | xargs -0 -r -n1 node --check
+
+      - name: Repository integrity
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          errors = []
+          root = Path('.')
+
+          # Sensitive runtime files must never be committed.
+          for forbidden in ('config.php', '.env'):
+              if (root / forbidden).exists():
+                  errors.append(f'tracked/runtime secret file present: {forbidden}')
+
+          # Migration numbers must be unique and ordered by filename.
+          migrations = sorted((root / 'database' / 'migrations').glob('*.sql'))
+          seen = {}
+          for path in migrations:
+              match = re.match(r'^(\d+)_', path.name)
+              if not match:
+                  errors.append(f'migration has no numeric prefix: {path.name}')
+                  continue
+              number = int(match.group(1))
+              if number in seen:
+                  errors.append(f'duplicate migration number {number}: {seen[number]} and {path.name}')
+              seen[number] = path.name
+              if path.stat().st_size == 0:
+                  errors.append(f'empty migration: {path.name}')
+
+          # Every top-level PHP entrypoint must be explicitly public or reachable by owner role.
+          access = (root / 'inc' / 'access.php').read_text(encoding='utf-8')
+          public_match = re.search(r'function\s+kapouch_public_pages\(\).*?return\s*\[(.*?)\];', access, re.S)
+          all_match = re.search(r'\$all\s*=\s*\[(.*?)\];', access, re.S)
+          public = set(re.findall(r"'([^']+\.php)'", public_match.group(1) if public_match else ''))
+          owner = set(re.findall(r"'([^']+\.php)'", all_match.group(1) if all_match else ''))
+          if not public_match or not all_match:
+              errors.append('could not parse route allowlists from inc/access.php')
+          ignored = {'config.example.php'}
+          for path in root.glob('*.php'):
+              if path.name in ignored:
+                  continue
+              if path.name not in public and path.name not in owner:
+                  errors.append(f'top-level PHP entrypoint is not classified by access policy: {path.name}')
+
+          # Public API basenames listed in access policy must actually exist somewhere in the repo.
+          php_basenames = {p.name for p in root.rglob('*.php')}
+          for name in sorted(public):
+              if name not in php_basenames:
+                  errors.append(f'public route listed but file is missing: {name}')
+
+          # Local customer app assets referenced by the HTML shell must exist.
+          html = (root / 'customer' / 'index.html').read_text(encoding='utf-8')
+          refs = re.findall(r'(?:src|href)=["\']([^"\']+)["\']', html)
+          for ref in refs:
+              clean = ref.split('?', 1)[0].split('#', 1)[0]
+              if not clean or clean.startswith(('http://', 'https://', 'data:', '#', '../api/')):
+                  continue
+              target = (root / 'customer' / clean).resolve()
+              if not target.exists():
+                  errors.append(f'customer/index.html references missing local asset: {ref}')
+
+          if errors:
+              print('\n'.join(f'ERROR: {e}' for e in errors))
+              sys.exit(1)
+          print(f'Integrity checks passed: {len(migrations)} migrations, {len(owner)} staff routes, {len(public)} public routes.')
+          PY
