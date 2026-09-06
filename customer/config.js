@@ -1,5 +1,6 @@
 window.KAPOUCH_CUSTOMER_CONFIG = {
-  apiBase: '../api',
+  apiBase: 'https://kapouch.store/api',
+  appBase: 'https://app.kapouch.store/',
   pollIntervalMs: 3000
 };
 window.addEventListener('DOMContentLoaded',function(){
