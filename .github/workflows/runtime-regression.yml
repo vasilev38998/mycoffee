@@ -99,13 +99,18 @@ jobs:
           code=$(curl -sS -o /tmp/webhook.json -w '%{http_code}' -X POST http://127.0.0.1:8080/api/customer_payment_yookassa_webhook.php -H 'Content-Type: application/json' --data '{}')
           test "$code" = "400"
 
+          curl -fsS http://127.0.0.1:8080/api/customer_legal.php >/tmp/legal.json
+          php -r '$d=json_decode(file_get_contents("/tmp/legal.json"),true); if(empty($d["ok"])||empty($d["legal"]["configured"])||($d["legal"]["offer"]["version"]??"")!=="1.0") exit(1);'
+
           product_id=$(php -r '$d=json_decode(file_get_contents("/tmp/catalog.json"),true); echo $d["products"][0]["id"];')
           req="runtime-http-$(date +%s)-123456"
           code=$(curl -sS -o /tmp/order.json -w '%{http_code}' -X POST http://127.0.0.1:8080/api/customer_order.php \
             -H 'Content-Type: application/json' \
-            --data "{\"client_order_id\":\"$req\",\"name\":\"HTTP Test\",\"phone\":\"+79005554433\",\"fulfillment_type\":\"pickup\",\"pickup_delay_minutes\":15,\"payment_method\":\"cash\",\"items\":[{\"product_id\":$product_id,\"quantity\":1,\"modifiers\":[]}]}" )
+            --data "{\"client_order_id\":\"$req\",\"name\":\"HTTP Test\",\"phone\":\"+79005554433\",\"fulfillment_type\":\"pickup\",\"pickup_delay_minutes\":15,\"payment_method\":\"cash\",\"offer_acceptance\":{\"accepted\":true,\"version\":\"1.0\"},\"items\":[{\"product_id\":$product_id,\"quantity\":1,\"modifiers\":[]}]}" )
           test "$code" = "201"
           php -r '$d=json_decode(file_get_contents("/tmp/order.json"),true); if(empty($d["ok"])||empty($d["order"]["tracking_token"])||empty($d["order"]["promised_at"])) exit(1);'
+          order_id=$(php -r '$d=json_decode(file_get_contents("/tmp/order.json"),true); echo $d["order"]["order_id"];')
+          mysql -N -s -h127.0.0.1 -uroot -proot kapouch_test -e "SELECT offer_version FROM customer_order_legal_acceptance WHERE order_id=$order_id" | grep -qx '1.0'
           token=$(php -r '$d=json_decode(file_get_contents("/tmp/order.json"),true); echo $d["order"]["tracking_token"];')
           curl -fsS "http://127.0.0.1:8080/api/customer_order_status.php?token=$token" >/tmp/order-status.json
           php -r '$d=json_decode(file_get_contents("/tmp/order-status.json"),true); if(empty($d["ok"])||empty($d["order"]["promised_display"])) exit(1);'
@@ -134,15 +139,13 @@ jobs:
           curl -fsS "http://127.0.0.1:8080/api_online_orders.php?external_id=$external" -H "X-Kapouch-Token: $api_token" >/tmp/ext-get.json
           php -r '$d=json_decode(file_get_contents("/tmp/ext-get.json"),true); if(empty($d["ok"])||empty($d["order"]["id"])&&empty($d["order"]["external_id"])) exit(1);'
 
-          curl -fsS http://127.0.0.1:8080/api/customer_legal.php >/tmp/legal.json
-          php -r '$d=json_decode(file_get_contents("/tmp/legal.json"),true); if(empty($d["ok"])||!isset($d["legal"]["offer"]["text"])||!isset($d["legal"]["seller"]["inn"])) exit(1);'
           curl -fsS http://127.0.0.1:8080/customer/legal.html >/tmp/legal.html
           grep -q 'Публичная оферта' /tmp/legal.html
 
           curl -fsS http://127.0.0.1:8080/customer/ >/tmp/pwa.html
           grep -q 'checkoutForm' /tmp/pwa.html
           grep -q 'legalConsent' /tmp/pwa.html
-          curl -fsS http://127.0.0.1:8080/customer/sw.js | grep -q 'kapouch-pwa-v23'
+          curl -fsS http://127.0.0.1:8080/customer/sw.js | grep -q 'kapouch-pwa-v24'
 
       - name: Owner admin routes smoke
         run: |
