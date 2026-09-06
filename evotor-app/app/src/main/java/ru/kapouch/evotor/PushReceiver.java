@@ -22,7 +22,7 @@ public class PushReceiver extends PushNotificationReceiver {
         if (!"new_order".equals(type) && !"test".equals(type)) return;
 
         String title = value(data, "title", "Kapouch · новый заказ");
-        String description = value(data, "description", "Откройте Kapouch для просмотра заказа.");
+        String description = normalizeDescription(value(data, "description", "Откройте Kapouch для просмотра заказа."));
         String orderId = value(data, "order_id", "");
 
         SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE);
@@ -68,6 +68,12 @@ public class PushReceiver extends PushNotificationReceiver {
                 .setVisibility(Notification.VISIBILITY_PUBLIC);
 
         manager.notify(notificationId(messageId, orderId), builder.build());
+    }
+
+    static String normalizeDescription(String value) {
+        if (value == null || value.isEmpty()) return value;
+        String normalized = value.replace("\\u" + "20bd", "₽");
+        return normalized.replaceAll("(?i)(\\d)\\s+20bd\\b", "$1 ₽");
     }
 
     private static String value(Bundle data, String key, String fallback) {
