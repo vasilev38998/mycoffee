@@ -15,7 +15,7 @@ on:
       evotor_app_uuid:
         description: 'Application ID из кабинета разработчика Эвотор'
         required: false
-        default: '00000000-0000-0000-0000-000000000000'
+        default: 'bc17ef43-f590-49ca-a6f2-e940f57d0a72'
 
 permissions:
   contents: read
@@ -32,25 +32,48 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
-
-      - name: Install Android SDK platform
+      - name: Install Evotor-era Android SDK
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
-          yes | "$SDKMANAGER" 'platforms;android-34' 'build-tools;34.0.0' >/dev/null || true
-          test -d "$ANDROID_HOME/platforms/android-34"
+          yes | "$SDKMANAGER" 'platforms;android-27' 'build-tools;27.0.3' >/dev/null || true
+          test -x "$ANDROID_HOME/build-tools/27.0.3/aapt"
 
-      - name: Build debug APK
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '4.4'
+
+      - name: Build debug APK with Evotor-compatible toolchain
         env:
-          EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || '00000000-0000-0000-0000-000000000000' }}
+          EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
         run: gradle -p evotor-app :app:assembleDebug -PEVOTOR_APP_UUID="$EVOTOR_APP_UUID" --no-daemon
+
+      - name: Validate APK metadata for Evotor portal
+        env:
+          EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
+        run: |
+          APK=evotor-app/app/build/outputs/apk/debug/app-debug.apk
+          AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
+          test -s "$APK"
+          "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='2' versionName='1.0.1'" /tmp/evotor-badging.txt
+          grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
+          grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
+          "$AAPT" dump xmltree "$APK" AndroidManifest.xml > /tmp/evotor-manifest.txt
+          grep -q 'app_uuid' /tmp/evotor-manifest.txt
+          grep -q "$EVOTOR_APP_UUID" /tmp/evotor-manifest.txt
+          unzip -l "$APK" | tee /tmp/evotor-apk-files.txt
+          grep -q 'classes.dex' /tmp/evotor-apk-files.txt
+          if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then echo 'Unexpected multidex APK for Evotor portal' >&2; exit 1; fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: kapouch-orders-evotor-debug
+          name: kapouch-orders-evotor-compatible
           path: evotor-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
