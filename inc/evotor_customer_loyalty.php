@@ -35,7 +35,7 @@ function evotor_customer_loyalty_register_scan(int $connectionId,int $customerId
     try{
         $customer=$pdo->prepare('SELECT id,name,loyalty_balance FROM customer_accounts WHERE id=? FOR UPDATE');$customer->execute([$customerId]);$row=$customer->fetch();
         if(!$row)throw new RuntimeException('Клиент не найден.');
-        $pdo->prepare("UPDATE evotor_customer_scans SET status=IF(expires_at_unix<?,'expired','cancelled') WHERE connection_id=? AND status='pending'")->execute([$now,$connectionId]);
+        $pdo->prepare("UPDATE evotor_customer_scans SET status='expired' WHERE connection_id=? AND status='pending' AND expires_at_unix<?")->execute([$connectionId,$now]);
         $stmt=$pdo->prepare("INSERT INTO evotor_customer_scans(connection_id,customer_id,card_version,device_uuid,status,scanned_at,scanned_at_unix,expires_at,expires_at_unix) VALUES(?,?,1,?,'pending',NOW(),?,DATE_ADD(NOW(),INTERVAL 1 HOUR),?)");
         $stmt->execute([$connectionId,$customerId,$deviceUuid!==null&&trim($deviceUuid)!==''?mb_substr(trim($deviceUuid),0,200):null,$now,$expires]);
         $scanId=(int)$pdo->lastInsertId();$pdo->commit();
