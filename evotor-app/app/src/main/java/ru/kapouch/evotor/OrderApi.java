@@ -29,8 +29,9 @@ final class OrderApi {
             if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен только по HTTPS.");
             HttpsURLConnection secure = (HttpsURLConnection) connection;
             secure.setSSLSocketFactory(LegacyTls.socketFactory());
-            // HostnameVerifier deliberately stays the platform default: the compatibility
-            // TLS layer only completes a cryptographically verified CA chain.
+            // HostnameVerifier deliberately stays the platform default. The compatibility
+            // layer only adds official CA anchors and cryptographically verified issuers;
+            // it never disables hostname or certificate verification.
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(7000);
             connection.setReadTimeout(10000);
@@ -40,7 +41,7 @@ final class OrderApi {
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Authorization", "Bearer " + order.actionToken);
             connection.setRequestProperty("X-Kapouch-Order-Token", order.actionToken);
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.0");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.1");
 
             JSONObject body = new JSONObject();
             body.put("action", action);
