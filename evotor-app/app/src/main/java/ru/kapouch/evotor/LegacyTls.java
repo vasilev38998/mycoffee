@@ -1,12 +1,23 @@
 package ru.kapouch.evotor;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
@@ -16,10 +27,17 @@ import javax.net.ssl.X509TrustManager;
 
 final class LegacyTls {
     private static volatile SSLSocketFactory cachedFactory;
+    private static final Object ISSUER_CACHE_LOCK = new Object();
+    private static final Map<String, X509Certificate> ISSUER_CACHE = new HashMap<>();
+    private static final int MAX_CHAIN_LENGTH = 8;
+    private static final int MAX_ISSUER_BYTES = 64 * 1024;
 
-    // Official self-signed ISRG Root X1. It is bundled only as an additional trust anchor
-    // for old Evotor Android trust stores. Hostname verification remains handled by
-    // HttpsURLConnection and is never disabled.
+    // Official self-signed ISRG Root X1 remains the only additional trust anchor.
+    // Old Evotor Android builds sometimes fail when a server omits one of the Let's
+    // Encrypt intermediates. In that case we complete only the missing Let's Encrypt
+    // chain from its signed AIA issuer URLs, verify every signature, and then hand the
+    // completed chain back to the normal PKIX validator. Hostname verification is never
+    // disabled and the order request itself always remains HTTPS.
     private static final String ISRG_ROOT_X1 =
             "-----BEGIN CERTIFICATE-----\n" +
             "MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw\n" +
@@ -89,6 +107,158 @@ final class LegacyTls {
         throw new IllegalStateException("X509TrustManager недоступен");
     }
 
+    private static X509Certificate[] completeLetsEncryptChain(X509Certificate[] presented) throws CertificateException {
+        if (presented == null || presented.length == 0) return presented;
+
+        List<X509Certificate> result = new ArrayList<>();
+        result.add(presented[0]);
+        Set<String> used = new HashSet<>();
+        used.add(certificateKey(presented[0]));
+
+        while (result.size() < MAX_CHAIN_LENGTH) {
+            X509Certificate child = result.get(result.size() - 1);
+            if (isSelfSigned(child)) break;
+
+            X509Certificate issuer = findPresentedIssuer(child, presented, used);
+            if (issuer == null) issuer = fetchLetsEncryptIssuer(child);
+            if (issuer == null) break;
+
+            String issuerKey = certificateKey(issuer);
+            if (!used.add(issuerKey)) break;
+            verifyIssuer(child, issuer);
+            result.add(issuer);
+        }
+        return result.toArray(new X509Certificate[result.size()]);
+    }
+
+    private static X509Certificate findPresentedIssuer(X509Certificate child, X509Certificate[] presented, Set<String> used) {
+        for (X509Certificate candidate : presented) {
+            if (candidate == null || used.contains(certificateKey(candidate))) continue;
+            if (!child.getIssuerX500Principal().equals(candidate.getSubjectX500Principal())) continue;
+            try {
+                verifyIssuer(child, candidate);
+                return candidate;
+            } catch (CertificateException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static X509Certificate fetchLetsEncryptIssuer(X509Certificate child) throws CertificateException {
+        String issuerUrl = letsEncryptIssuerUrl(child);
+        if (issuerUrl == null) return null;
+
+        synchronized (ISSUER_CACHE_LOCK) {
+            X509Certificate cached = ISSUER_CACHE.get(issuerUrl);
+            if (cached != null) {
+                verifyIssuer(child, cached);
+                return cached;
+            }
+        }
+
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL(issuerUrl);
+            if (!isAllowedLetsEncryptIssuerUrl(url)) return null;
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(2500);
+            connection.setReadTimeout(2500);
+            connection.setInstanceFollowRedirects(false);
+            connection.setUseCaches(true);
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.1.2 certificate-chain-helper");
+            int status = connection.getResponseCode();
+            if (status != HttpURLConnection.HTTP_OK) return null;
+
+            byte[] encoded = readLimited(connection.getInputStream(), MAX_ISSUER_BYTES);
+            CertificateFactory factory = CertificateFactory.getInstance("X.509");
+            X509Certificate issuer = (X509Certificate) factory.generateCertificate(new ByteArrayInputStream(encoded));
+            verifyIssuer(child, issuer);
+            synchronized (ISSUER_CACHE_LOCK) {
+                ISSUER_CACHE.put(issuerUrl, issuer);
+            }
+            return issuer;
+        } catch (Exception ignored) {
+            return null;
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private static void verifyIssuer(X509Certificate child, X509Certificate issuer) throws CertificateException {
+        if (!child.getIssuerX500Principal().equals(issuer.getSubjectX500Principal())) {
+            throw new CertificateException("TLS issuer subject mismatch");
+        }
+        try {
+            child.verify(issuer.getPublicKey());
+        } catch (Exception e) {
+            throw new CertificateException("TLS issuer signature mismatch", e);
+        }
+    }
+
+    private static String letsEncryptIssuerUrl(X509Certificate certificate) {
+        byte[] aia = certificate.getExtensionValue("1.3.6.1.5.5.7.1.1");
+        if (aia == null || aia.length == 0) return null;
+        byte[] prefix = "http://".getBytes(StandardCharsets.US_ASCII);
+        for (int i = 0; i <= aia.length - prefix.length; i++) {
+            boolean matches = true;
+            for (int j = 0; j < prefix.length; j++) {
+                if (aia[i + j] != prefix[j]) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (!matches) continue;
+            int end = i + prefix.length;
+            while (end < aia.length) {
+                int value = aia[end] & 0xff;
+                if (value < 0x21 || value > 0x7e) break;
+                end++;
+            }
+            try {
+                URL candidate = new URL(new String(aia, i, end - i, StandardCharsets.US_ASCII));
+                if (isAllowedLetsEncryptIssuerUrl(candidate)) return candidate.toString();
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static boolean isAllowedLetsEncryptIssuerUrl(URL url) {
+        if (url == null || !"http".equalsIgnoreCase(url.getProtocol())) return false;
+        int port = url.getPort();
+        if (port != -1 && port != 80) return false;
+        String host = url.getHost() == null ? "" : url.getHost().toLowerCase(Locale.US);
+        return host.endsWith(".i.lencr.org") && host.length() > ".i.lencr.org".length();
+    }
+
+    private static byte[] readLimited(InputStream input, int maxBytes) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[4096];
+        int total = 0;
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            total += read;
+            if (total > maxBytes) throw new CertificateException("TLS issuer certificate is too large");
+            output.write(buffer, 0, read);
+        }
+        input.close();
+        return output.toByteArray();
+    }
+
+    private static boolean isSelfSigned(X509Certificate certificate) {
+        if (!certificate.getSubjectX500Principal().equals(certificate.getIssuerX500Principal())) return false;
+        try {
+            certificate.verify(certificate.getPublicKey());
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static String certificateKey(X509Certificate certificate) {
+        return certificate.getSubjectX500Principal().getName() + "#" + certificate.getSerialNumber().toString(16);
+    }
+
     private static final class CombinedTrustManager implements X509TrustManager {
         private final X509TrustManager system;
         private final X509TrustManager extra;
@@ -108,7 +278,8 @@ final class LegacyTls {
             try {
                 system.checkServerTrusted(chain, authType);
             } catch (CertificateException systemError) {
-                extra.checkServerTrusted(chain, authType);
+                X509Certificate[] completed = completeLetsEncryptChain(chain);
+                extra.checkServerTrusted(completed, authType);
             }
         }
 
