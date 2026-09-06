@@ -1,7 +1,7 @@
-const CACHE='kapouch-pwa-v29';
-const PREVIOUS_CACHE='kapouch-pwa-v28';
+const CACHE='kapouch-pwa-v30';
+const PREVIOUS_CACHE='kapouch-pwa-v29';
 const LEGACY_CACHE='kapouch-pwa-v27';
-const SHELL=['./','./index.html','./legal.html','./payment-return.html','./config.js?v=10','./assets/app.css?v=5','./assets/variants.css?v=1','./assets/pwa-v2.css?v=1','./assets/modifiers.css?v=3','./assets/payments.css?v=1','./assets/legal.css?v=2','./assets/app.js?v=10','./assets/profile-plus.js?v=1','./assets/profile-compact.js?v=1','./assets/loyalty-card.js?v=4','./assets/status-once.js?v=1','./assets/phone-mask.js?v=1','./assets/modifier-price-ui.js?v=1','./assets/payments.js?v=6','./assets/personalization.js?v=2','./assets/current-order.js?v=2','./assets/growth-suite.js?v=2','./assets/push.js?v=1','./assets/legal.js?v=3','./assets/icon.svg'];
+const SHELL=['./','./index.html','./legal.html','./payment-return.html','./config.js?v=10','./assets/app.css?v=5','./assets/variants.css?v=1','./assets/pwa-v2.css?v=1','./assets/modifiers.css?v=3','./assets/payments.css?v=1','./assets/legal.css?v=2','./assets/auth-required.css?v=1','./assets/app.js?v=10','./assets/profile-plus.js?v=1','./assets/profile-compact.js?v=1','./assets/loyalty-card.js?v=4','./assets/status-once.js?v=1','./assets/phone-mask.js?v=1','./assets/auth-required.js?v=1','./assets/modifier-price-ui.js?v=1','./assets/payments.js?v=6','./assets/personalization.js?v=2','./assets/current-order.js?v=2','./assets/growth-suite.js?v=2','./assets/push.js?v=1','./assets/legal.js?v=3','./assets/icon.svg'];
 const SCOPE_PATH=new URL(self.registration.scope).pathname;
 const inAppScope=url=>url.origin===self.location.origin&&url.pathname.startsWith(SCOPE_PATH);
 const navShell=url=>url.pathname.endsWith('/legal.html')?'./legal.html':url.pathname.endsWith('/payment-return.html')?'./payment-return.html':'./index.html';
