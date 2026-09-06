@@ -15,7 +15,7 @@ import android.os.Build;
 import android.os.SystemClock;
 
 final class OrderNotifications {
-    static final String CHANNEL_ID = "kapouch_new_orders_v3";
+    static final String CHANNEL_ID = "kapouch_new_orders_v4";
     private static final long[] VIBRATION = new long[]{0, 350, 140, 350, 140, 650};
     private static final long REMINDER_DELAY_MS = 45_000L;
     private static final int MAX_REMINDERS = 3;
@@ -53,6 +53,10 @@ final class OrderNotifications {
         builder.addAction(android.R.drawable.ic_menu_send, "ПРИНЯТЬ", accept);
         builder.addAction(android.R.drawable.ic_menu_view, "ОТКРЫТЬ", open);
         manager.notify(notificationId(order.orderId), builder.build());
+
+        // Some Evotor Android builds suppress the sound attached to Notification.Builder.
+        // Play a short alarm-stream sequence explicitly as a compatibility fallback.
+        BaristaAlertPlayer.playNewOrder(context.getApplicationContext());
     }
 
     static void showPreparing(Context context, OrderRecord order) {
@@ -112,6 +116,7 @@ final class OrderNotifications {
                 .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
                 .setVibrate(new long[]{0, 250, 120, 250});
         manager.notify(id, builder.build());
+        BaristaAlertPlayer.playTest(context.getApplicationContext());
     }
 
     static void scheduleReminder(Context context, String orderId) {
