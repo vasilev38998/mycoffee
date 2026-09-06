@@ -4,6 +4,7 @@ require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty.php';
+require_once dirname(__DIR__).'/inc/customer_drink_loyalty.php';
 
 customer_api_headers();
 $method=strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'));
@@ -34,6 +35,7 @@ try{
     $stmt->execute([$customerId]);$favorite=$stmt->fetch()?:[];
     $stmt=db()->prepare('SELECT COALESCE(SUM(amount),0) FROM customer_loyalty_ledger WHERE customer_id=? AND amount>0');$stmt->execute([$customerId]);$earned=(float)$stmt->fetchColumn();
     $profile['stats']=['completed_orders'=>(int)($orderStats['completed_orders']??0),'completed_spend'=>(float)($orderStats['completed_spend']??0),'favorite_product'=>trim((string)($favorite['product_name']??'')),'favorite_quantity'=>(float)($favorite['qty']??0),'loyalty_earned'=>$earned];
+    $profile['drink_loyalty']=customer_drink_loyalty_summary($customerId);
     customer_api_reply(200,['ok'=>true,'profile'=>$profile]);
 }catch(JsonException $e){
     customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);

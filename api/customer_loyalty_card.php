@@ -6,6 +6,7 @@ require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty_card.php';
+require_once dirname(__DIR__).'/inc/customer_drink_loyalty.php';
 
 customer_api_headers();
 $method=strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'));
@@ -20,6 +21,7 @@ try{
     $card=customer_loyalty_card_payload($customerId);
     $card['customer']['loyalty_balance']=customer_loyalty_balance($customerId);
     $card['loyalty_rate']=customer_loyalty_rate();
+    $card['drink_loyalty']=customer_drink_loyalty_summary($customerId);
     customer_api_reply(200,['ok'=>true,'card'=>$card]);
 }catch(RuntimeException $e){
     if($e->getMessage()==='AUTH_REQUIRED')customer_api_reply(401,['ok'=>false,'error'=>'Требуется вход.']);

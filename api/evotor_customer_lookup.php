@@ -5,6 +5,7 @@ require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty_card.php';
+require_once dirname(__DIR__).'/inc/customer_drink_loyalty.php';
 require_once dirname(__DIR__).'/inc/evotor_customer_loyalty.php';
 require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
 
@@ -26,7 +27,7 @@ try{
             $issuedTerminalToken=evotor_loyalty_terminal_token($connectionId);
         }
     }
-    if($connectionId===null)customer_api_reply(401,['ok'=>false,'error'=>'Терминал Kapouch не авторизован. После установки 1.2.0 получите хотя бы один новый PWA-заказ, затем повторите сканирование.']);
+    if($connectionId===null)customer_api_reply(401,['ok'=>false,'error'=>'Терминал Kapouch не авторизован. После установки приложения получите хотя бы один новый PWA-заказ, затем повторите сканирование.']);
 
     $limit=kapouch_rate_limit_hit('evotor_customer_lookup','connection:'.$connectionId,600,3600);
     if(!$limit['allowed']){header('Retry-After: '.(int)$limit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много сканирований. Повторите позже.']);}
@@ -40,10 +41,12 @@ try{
     customer_loyalty_refresh_customer($customerId);
     $scan=evotor_customer_loyalty_register_scan($connectionId,$customerId,$deviceUuid);
     $customer=$scan['customer'];$customer['loyalty_balance']=customer_loyalty_balance($customerId);
+    $drink=customer_drink_loyalty_summary($customerId);
     $response=[
         'ok'=>true,
         'customer'=>$customer,
         'loyalty'=>['balance'=>$customer['loyalty_balance'],'earn_percent'=>customer_loyalty_rate()],
+        'drink_loyalty'=>$drink,
         'link'=>['active'=>true,'scan_id'=>$scan['scan_id'],'expires_at'=>$scan['expires_at'],'message'=>'Клиент будет привязан к следующей продаже на этом Эвоторе.'],
     ];
     if($issuedTerminalToken!=='')$response['terminal_token']=$issuedTerminalToken;

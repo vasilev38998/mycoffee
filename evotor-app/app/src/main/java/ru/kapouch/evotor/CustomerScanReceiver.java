@@ -31,8 +31,16 @@ public class CustomerScanReceiver extends BroadcastReceiver {
                 SharedPreferences prefs = appContext.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE);
                 String message;
                 if (result.ok) {
-                    String balance = new DecimalFormat("0.##").format(result.balance);
+                    DecimalFormat format = new DecimalFormat("0.##");
+                    String balance = format.format(result.balance);
                     message = result.name + " · " + balance + " ★" + (result.linked ? " · клиент определён" : "");
+                    if (result.drinkProgramEnabled) {
+                        if (result.availableRewards > 0) {
+                            message += "\n🎁 Бесплатный напиток" + (result.giftCap > 0 ? " до " + format.format(result.giftCap) + " ₽" : " доступен");
+                        } else {
+                            message += "\n☕ Карта напитков: " + result.drinkProgress + "/" + result.drinkRequired;
+                        }
+                    }
                     prefs.edit()
                             .putString(KEY_ACTIVE_CUSTOMER_NAME, result.name)
                             .putString(KEY_ACTIVE_CUSTOMER_BALANCE, balance)

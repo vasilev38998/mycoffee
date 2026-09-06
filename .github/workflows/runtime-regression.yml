@@ -49,6 +49,9 @@ jobs:
       - name: Bootstrap migrations and run core runtime regression
         run: php tests/runtime_regression.php
 
+      - name: Sixth-drink loyalty runtime
+        run: php tests/sixth_drink_runtime.php
+
       - name: Seed staff login
         run: |
           HASH=$(php -r 'echo password_hash("RegressionPass123!", PASSWORD_DEFAULT);')
@@ -86,6 +89,8 @@ jobs:
           test "$code" = "302"
           curl -fsS -b /tmp/cookies.txt http://127.0.0.1:8080/index.php >/tmp/index.html
           grep -q 'Kapouch' /tmp/index.html
+          curl -fsS -b /tmp/cookies.txt http://127.0.0.1:8080/customer_loyalty_settings.php >/tmp/loyalty-settings.html
+          grep -q 'Каждый 6-й напиток' /tmp/loyalty-settings.html
 
           curl -fsS http://127.0.0.1:8080/api/customer_catalog.php >/tmp/catalog.json
           php -r '$d=json_decode(file_get_contents("/tmp/catalog.json"),true); if(!is_array($d)||empty($d["ok"])||empty($d["products"])) exit(1);'
@@ -120,7 +125,9 @@ jobs:
           customer_hash=$(php -r 'echo hash("sha256",$argv[1]);' "$customer_token")
           mysql -h127.0.0.1 -uroot -proot kapouch_test -e "INSERT INTO customer_sessions(customer_id,token_hash,expires_at,last_seen_at) VALUES($customer_id,'$customer_hash',DATE_ADD(NOW(),INTERVAL 1 DAY),NOW());"
           curl -fsS http://127.0.0.1:8080/api/customer_profile.php -H "X-Customer-Token: $customer_token" >/tmp/profile.json
-          php -r '$d=json_decode(file_get_contents("/tmp/profile.json"),true); if(empty($d["ok"])||empty($d["profile"]["customer"]["id"])) exit(1);'
+          php -r '$d=json_decode(file_get_contents("/tmp/profile.json"),true); if(empty($d["ok"])||empty($d["profile"]["customer"]["id"])||!array_key_exists("drink_loyalty",$d["profile"])) exit(1);'
+          curl -fsS http://127.0.0.1:8080/api/customer_loyalty_card.php -H "X-Customer-Token: $customer_token" >/tmp/loyalty-card.json
+          php -r '$d=json_decode(file_get_contents("/tmp/loyalty-card.json"),true); if(empty($d["ok"])||strpos((string)($d["card"]["code"]??""),"KAPOUCH:LOYALTY:1:")!==0||!array_key_exists("drink_loyalty",$d["card"])) exit(1);'
 
           curl -fsS -X POST http://127.0.0.1:8080/api/customer_favorites.php -H 'Content-Type: application/json' -H "X-Customer-Token: $customer_token" --data "{\"favorites\":[\"p$product_id\"]}" >/tmp/fav-post.json
           curl -fsS http://127.0.0.1:8080/api/customer_favorites.php -H "X-Customer-Token: $customer_token" >/tmp/fav-get.json
@@ -145,7 +152,7 @@ jobs:
           curl -fsS http://127.0.0.1:8080/customer/ >/tmp/pwa.html
           grep -q 'checkoutForm' /tmp/pwa.html
           grep -q 'legalConsent' /tmp/pwa.html
-          curl -fsS http://127.0.0.1:8080/customer/sw.js | grep -q 'kapouch-pwa-v25'
+          curl -fsS http://127.0.0.1:8080/customer/sw.js | grep -q 'kapouch-pwa-v26'
 
       - name: Owner admin routes smoke
         run: |

@@ -59,7 +59,7 @@ jobs:
           grep -q 'completeLetsEncryptChain' "$SRC"
           grep -q '.i.lencr.org' "$SRC"
           grep -q 'TLS chain not trusted' "$SRC"
-          grep -q 'Kapouch-Orders-Evotor/1.2.1 certificate-chain-helper' "$SRC"
+          grep -q 'certificate-chain-helper' "$SRC"
           mkdir -p /tmp/kapouch-tls-smoke
           cat > /tmp/LegacyTlsSmoke.java <<'JAVA'
           package ru.kapouch.evotor;
@@ -86,7 +86,7 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='8' versionName='1.2.1'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='9' versionName='1.2.2'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
           "$AAPT" dump permissions "$APK" | tee /tmp/evotor-permissions.txt
@@ -111,8 +111,9 @@ jobs:
           grep -q 'certificate-chain-helper' /tmp/evotor-dex-strings.txt
           grep -q '.i.lencr.org' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch-order-sound' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.1' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.2' /tmp/evotor-dex-strings.txt
           grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt
+          grep -q 'drink_loyalty' /tmp/evotor-dex-strings.txt
           grep -q 'ScannedCode' /tmp/evotor-dex-strings.txt
 
       - name: Upload APK

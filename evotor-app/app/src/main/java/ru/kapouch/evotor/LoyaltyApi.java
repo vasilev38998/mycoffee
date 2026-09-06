@@ -46,7 +46,7 @@ final class LoyaltyApi {
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.0");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.2");
             if (terminalToken != null && !terminalToken.isEmpty()) connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
 
             JSONObject body = new JSONObject();
@@ -69,12 +69,18 @@ final class LoyaltyApi {
             JSONObject customer = json.optJSONObject("customer");
             JSONObject loyalty = json.optJSONObject("loyalty");
             JSONObject link = json.optJSONObject("link");
+            JSONObject drinks = json.optJSONObject("drink_loyalty");
             if (customer == null) return Result.error("Kapouch не вернул профиль клиента.");
             String name = customer.optString("name", "").trim();
             if (name.isEmpty()) name = "Клиент Kapouch";
             double balance = loyalty != null ? loyalty.optDouble("balance", customer.optDouble("loyalty_balance", 0d)) : customer.optDouble("loyalty_balance", 0d);
             boolean linked = link != null && link.optBoolean("active", false);
-            return Result.success(name, balance, linked);
+            boolean drinkEnabled = drinks != null && drinks.optBoolean("enabled", false);
+            int progress = drinks != null ? drinks.optInt("progress", 0) : 0;
+            int required = drinks != null ? Math.max(1, drinks.optInt("required_paid", 5)) : 5;
+            int availableRewards = drinks != null ? Math.max(0, drinks.optInt("available_rewards", 0)) : 0;
+            double giftCap = drinks != null ? Math.max(0d, drinks.optDouble("gift_cap", 0d)) : 0d;
+            return Result.success(name, balance, linked, drinkEnabled, progress, required, availableRewards, giftCap);
         } catch (Exception e) {
             String message = e.getMessage();
             return Result.error(message == null || message.trim().isEmpty() ? "Нет связи с Kapouch." : message);
@@ -103,8 +109,9 @@ final class LoyaltyApi {
 
     static final class Result {
         final boolean ok;final String name;final double balance;final boolean linked;final String error;
-        private Result(boolean ok,String name,double balance,boolean linked,String error){this.ok=ok;this.name=name;this.balance=balance;this.linked=linked;this.error=error;}
-        static Result success(String name,double balance,boolean linked){return new Result(true,name,balance,linked,"");}
-        static Result error(String error){return new Result(false,"",0d,false,error==null?"Ошибка":error);}
+        final boolean drinkProgramEnabled;final int drinkProgress;final int drinkRequired;final int availableRewards;final double giftCap;
+        private Result(boolean ok,String name,double balance,boolean linked,String error,boolean drinkProgramEnabled,int drinkProgress,int drinkRequired,int availableRewards,double giftCap){this.ok=ok;this.name=name;this.balance=balance;this.linked=linked;this.error=error;this.drinkProgramEnabled=drinkProgramEnabled;this.drinkProgress=drinkProgress;this.drinkRequired=drinkRequired;this.availableRewards=availableRewards;this.giftCap=giftCap;}
+        static Result success(String name,double balance,boolean linked,boolean drinkProgramEnabled,int drinkProgress,int drinkRequired,int availableRewards,double giftCap){return new Result(true,name,balance,linked,"",drinkProgramEnabled,drinkProgress,drinkRequired,availableRewards,giftCap);}
+        static Result error(String error){return new Result(false,"",0d,false,error==null?"Ошибка":error,false,0,5,0,0d);}
     }
 }
