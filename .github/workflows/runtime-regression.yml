@@ -108,22 +108,32 @@ jobs:
           php -r '$d=json_decode(file_get_contents("/tmp/legal.json"),true); if(empty($d["ok"])||empty($d["legal"]["configured"])||($d["legal"]["offer"]["version"]??"")!=="1.0") exit(1);'
 
           product_id=$(php -r '$d=json_decode(file_get_contents("/tmp/catalog.json"),true); echo $d["products"][0]["id"];')
-          req="runtime-http-$(date +%s)-123456"
-          code=$(curl -sS -o /tmp/order.json -w '%{http_code}' -X POST http://127.0.0.1:8080/api/customer_order.php \
-            -H 'Content-Type: application/json' \
-            --data "{\"client_order_id\":\"$req\",\"name\":\"HTTP Test\",\"phone\":\"+79005554433\",\"fulfillment_type\":\"pickup\",\"pickup_delay_minutes\":15,\"payment_method\":\"cash\",\"offer_acceptance\":{\"accepted\":true,\"version\":\"1.0\"},\"items\":[{\"product_id\":$product_id,\"quantity\":1,\"modifiers\":[]}]}" )
-          test "$code" = "201"
-          php -r '$d=json_decode(file_get_contents("/tmp/order.json"),true); if(empty($d["ok"])||empty($d["order"]["tracking_token"])||empty($d["order"]["promised_at"])) exit(1);'
-          order_id=$(php -r '$d=json_decode(file_get_contents("/tmp/order.json"),true); echo $d["order"]["order_id"];')
-          mysql -N -s -h127.0.0.1 -uroot -proot kapouch_test -e "SELECT offer_version FROM customer_order_legal_acceptance WHERE order_id=$order_id" | grep -qx '1.0'
-          token=$(php -r '$d=json_decode(file_get_contents("/tmp/order.json"),true); echo $d["order"]["tracking_token"];')
-          curl -fsS "http://127.0.0.1:8080/api/customer_order_status.php?token=$token" >/tmp/order-status.json
-          php -r '$d=json_decode(file_get_contents("/tmp/order-status.json"),true); if(empty($d["ok"])||empty($d["order"]["promised_display"])) exit(1);'
-
           customer_id=$(mysql -N -s -h127.0.0.1 -uroot -proot kapouch_test -e "SELECT id FROM customer_accounts WHERE phone='+79001234567' LIMIT 1")
           customer_token=$(php -r 'echo bin2hex(random_bytes(32));')
           customer_hash=$(php -r 'echo hash("sha256",$argv[1]);' "$customer_token")
           mysql -h127.0.0.1 -uroot -proot kapouch_test -e "INSERT INTO customer_sessions(customer_id,token_hash,expires_at,last_seen_at) VALUES($customer_id,'$customer_hash',DATE_ADD(NOW(),INTERVAL 1 DAY),NOW());"
+
+          unauth_req="runtime-unauth-$(date +%s)-123456"
+          code=$(curl -sS -o /tmp/order-unauth.json -w '%{http_code}' -X POST http://127.0.0.1:8080/api/customer_order.php \
+            -H 'Content-Type: application/json' \
+            --data "{\"client_order_id\":\"$unauth_req\",\"name\":\"HTTP Test\",\"phone\":\"+79001234567\",\"fulfillment_type\":\"pickup\",\"pickup_delay_minutes\":15,\"payment_method\":\"cash\",\"offer_acceptance\":{\"accepted\":true,\"version\":\"1.0\"},\"items\":[{\"product_id\":$product_id,\"quantity\":1,\"modifiers\":[]}]}" )
+          test "$code" = "401"
+          php -r '$d=json_decode(file_get_contents("/tmp/order-unauth.json"),true); if(($d["ok"]??true)!==false||stripos((string)($d["error"]??""),"войдите")===false) exit(1);'
+
+          req="runtime-http-$(date +%s)-123456"
+          code=$(curl -sS -o /tmp/order.json -w '%{http_code}' -X POST http://127.0.0.1:8080/api/customer_order.php \
+            -H 'Content-Type: application/json' \
+            -H "X-Customer-Token: $customer_token" \
+            --data "{\"client_order_id\":\"$req\",\"name\":\"HTTP Test\",\"phone\":\"+79999999999\",\"fulfillment_type\":\"pickup\",\"pickup_delay_minutes\":15,\"payment_method\":\"cash\",\"offer_acceptance\":{\"accepted\":true,\"version\":\"1.0\"},\"items\":[{\"product_id\":$product_id,\"quantity\":1,\"modifiers\":[]}]}" )
+          test "$code" = "201"
+          php -r '$d=json_decode(file_get_contents("/tmp/order.json"),true); if(empty($d["ok"])||empty($d["order"]["tracking_token"])||empty($d["order"]["promised_at"])) exit(1);'
+          order_id=$(php -r '$d=json_decode(file_get_contents("/tmp/order.json"),true); echo $d["order"]["order_id"];')
+          mysql -N -s -h127.0.0.1 -uroot -proot kapouch_test -e "SELECT offer_version FROM customer_order_legal_acceptance WHERE order_id=$order_id" | grep -qx '1.0'
+          mysql -N -s -h127.0.0.1 -uroot -proot kapouch_test -e "SELECT customer_id FROM customer_order_access WHERE order_id=$order_id" | grep -qx "$customer_id"
+          token=$(php -r '$d=json_decode(file_get_contents("/tmp/order.json"),true); echo $d["order"]["tracking_token"];')
+          curl -fsS "http://127.0.0.1:8080/api/customer_order_status.php?token=$token" >/tmp/order-status.json
+          php -r '$d=json_decode(file_get_contents("/tmp/order-status.json"),true); if(empty($d["ok"])||empty($d["order"]["promised_display"])) exit(1);'
+
           curl -fsS http://127.0.0.1:8080/api/customer_profile.php -H "X-Customer-Token: $customer_token" >/tmp/profile.json
           php -r '$d=json_decode(file_get_contents("/tmp/profile.json"),true); if(empty($d["ok"])||empty($d["profile"]["customer"]["id"])||!array_key_exists("drink_loyalty",$d["profile"])) exit(1);'
           curl -fsS http://127.0.0.1:8080/api/customer_loyalty_card.php -H "X-Customer-Token: $customer_token" >/tmp/loyalty-card.json

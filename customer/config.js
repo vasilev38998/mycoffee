@@ -13,6 +13,16 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
   };
 })();
 window.addEventListener('DOMContentLoaded',function(){
+  var authStyle=document.createElement('link');
+  authStyle.rel='stylesheet';
+  authStyle.href='assets/auth-required.css?v=1';
+  document.head.appendChild(authStyle);
+
+  var authRequired=document.createElement('script');
+  authRequired.src='assets/auth-required.js?v=1';
+  authRequired.defer=true;
+  document.body.appendChild(authRequired);
+
   var phoneMask=document.createElement('script');
   phoneMask.src='assets/phone-mask.js?v=1';
   phoneMask.defer=true;
