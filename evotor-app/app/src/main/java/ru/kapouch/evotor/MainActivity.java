@@ -60,8 +60,13 @@ public class MainActivity extends Activity {
         enabled.setPadding(0, dp(10), 0, dp(10));
         enabled.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean(KEY_ENABLED, isChecked).apply();
-            if (!isChecked) {
-                for (OrderRecord order : OrderStore.list(this)) OrderNotifications.cancelReminder(this, order.orderId);
+            for (OrderRecord order : OrderStore.list(this)) {
+                if (!isChecked) {
+                    OrderNotifications.cancel(this, order.orderId);
+                } else if ("new".equals(order.status) || "preparing".equals(order.status)) {
+                    OrderNotifications.showCurrent(this, order);
+                    if ("new".equals(order.status)) OrderNotifications.scheduleReminder(this, order.orderId);
+                }
             }
         });
         root.addView(enabled, matchWrap());
