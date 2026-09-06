@@ -68,6 +68,15 @@ jobs:
           java -cp /tmp/kapouch-tls-classes ru.kapouch.evotor.LegacyTlsChainCheck \
             /tmp/kapouch-cert-1.pem /tmp/kapouch-cert-2.pem /tmp/kapouch-cert-3.pem
 
+      - name: Validate compatibility source contract
+        run: |
+          set -euo pipefail
+          grep -q 'verifyLegacyServerChain' evotor-app/app/src/main/java/ru/kapouch/evotor/LegacyTls.java
+          grep -q 'last.verify(trustedRoot.getPublicKey())' evotor-app/app/src/main/java/ru/kapouch/evotor/LegacyTls.java
+          grep -q 'HostnameVerifier deliberately stays the platform default' evotor-app/app/src/main/java/ru/kapouch/evotor/OrderApi.java
+          grep -q 'Kapouch-Orders-Evotor/1.1.2' evotor-app/app/src/main/java/ru/kapouch/evotor/OrderApi.java
+          grep -q 'BaristaAlertPlayer.playNewOrder' evotor-app/app/src/main/java/ru/kapouch/evotor/OrderNotifications.java
+
       - name: Build debug APK with Evotor-compatible toolchain
         env:
           EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
@@ -94,11 +103,6 @@ jobs:
           unzip -l "$APK" | tee /tmp/evotor-apk-files.txt
           grep -q 'classes.dex' /tmp/evotor-apk-files.txt
           if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then echo 'Unexpected multidex APK for Evotor portal' >&2; exit 1; fi
-          unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'ISRG Root X1' /tmp/evotor-dex-strings.txt
-          grep -q 'TLS-цепочка не заканчивается доверенным ISRG Root X1' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.1.2' /tmp/evotor-dex-strings.txt
-          grep -q 'kapouch-order-sound' /tmp/evotor-dex-strings.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
