@@ -17,3 +17,12 @@ CREATE TABLE IF NOT EXISTS customer_drink_loyalty_ledger (
     KEY idx_customer_drink_loyalty_customer_created (customer_id,created_at),
     KEY idx_customer_drink_loyalty_source (source_type,source_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO app_settings(setting_key,setting_value) VALUES
+('customer_sixth_drink_enabled','1'),
+('customer_sixth_drink_paid_count','5'),
+('customer_sixth_drink_products_mode','auto'),
+('customer_sixth_drink_product_ids',''),
+('customer_sixth_drink_reference_product_id','0'),
+('customer_sixth_drink_started_at',DATE_FORMAT(NOW(),'%Y-%m-%d %H:%i:%s'))
+ON DUPLICATE KEY UPDATE setting_key=VALUES(setting_key);
