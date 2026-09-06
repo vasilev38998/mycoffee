@@ -4,6 +4,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_payments.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty.php';
+require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -31,6 +32,9 @@ try{
     }elseif(str_starts_with($event,'payment.')){
         $result=customer_payment_yookassa_sync_by_provider_id($objectId);
         if(!$result)throw new RuntimeException('payment not found');
+        if(!empty($result['paid'])&&!empty($result['order_id'])){
+            try{evotor_order_notify_new((int)$result['order_id']);}catch(Throwable $pushError){error_log('[Kapouch Evotor push paid webhook] '.$pushError->getMessage());}
+        }
     }else{
         echo json_encode(['ok'=>true,'ignored'=>true],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);exit;
     }
