@@ -3,10 +3,36 @@ require __DIR__.'/inc/bootstrap.php';
 require __DIR__.'/inc/layout.php';
 require_auth();
 require_once __DIR__.'/inc/customer_payments.php';
+require_once __DIR__.'/inc/customer_legal.php';
 
 if($_SERVER['REQUEST_METHOD']==='POST'){
     verify_csrf();
+    $action=(string)($_POST['action']??'payment');
     try{
+        if($action==='legal'){
+            customer_legal_save([
+                'enabled'=>isset($_POST['legal_enabled']),
+                'seller_name'=>(string)($_POST['seller_name']??''),
+                'inn'=>(string)($_POST['inn']??''),
+                'ogrnip'=>(string)($_POST['ogrnip']??''),
+                'legal_address'=>(string)($_POST['legal_address']??''),
+                'trade_address'=>(string)($_POST['trade_address']??''),
+                'bank_name'=>(string)($_POST['bank_name']??''),
+                'bik'=>(string)($_POST['bik']??''),
+                'settlement_account'=>(string)($_POST['settlement_account']??''),
+                'correspondent_account'=>(string)($_POST['correspondent_account']??''),
+                'contact_email'=>(string)($_POST['contact_email']??''),
+                'contact_phone'=>(string)($_POST['contact_phone']??''),
+                'offer_title'=>(string)($_POST['offer_title']??''),
+                'offer_version'=>(string)($_POST['offer_version']??''),
+                'offer_date'=>(string)($_POST['offer_date']??''),
+                'offer_text'=>(string)($_POST['offer_text']??''),
+                'extra_terms'=>(string)($_POST['extra_terms']??''),
+            ]);
+            audit_write('customer_legal_settings','Обновлены реквизиты ИП и публичная оферта клиентского PWA');
+            flash('success','Юридическая информация и оферта сохранены.');
+            redirect('customer_payments.php#legal');
+        }
         $cash=isset($_POST['cash_enabled'])?'1':'0';
         $sbp=isset($_POST['sbp_enabled'])?'1':'0';
         if($cash==='0'&&$sbp==='0')throw new RuntimeException('Оставьте включённым хотя бы один способ оплаты.');
@@ -39,17 +65,51 @@ $vatCode=(int)app_setting('customer_yookassa_vat_code','1');
 $paymentSubject=(string)app_setting('customer_yookassa_payment_subject','commodity');
 $paymentMode=(string)app_setting('customer_yookassa_payment_mode','full_payment');
 if(!in_array($paymentMode,['full_payment','full_prepayment'],true))$paymentMode='full_payment';
+$legal=customer_legal_settings();$legalMissing=customer_legal_missing($legal);$legalReady=$legal['enabled']&&!$legalMissing;
 try{$webhook=customer_payment_public_url('api/customer_payment_yookassa_webhook.php');}catch(Throwable $e){$webhook='https://kapouch.store/api/customer_payment_yookassa_webhook.php';}
+try{$legalUrl=customer_payment_public_url('customer/legal.html');}catch(Throwable $e){$legalUrl='/customer/legal.html';}
 page_header('Оплата в PWA');
 ?>
-<div class="card"><div class="chart-head"><div><h2>Способы оплаты</h2><p>Для покупателя способ называется «Оплата по СБП». Технически платёж и фискальный чек проходят через ЮKassa.</p></div><div class="actions"><a class="btn ghost" href="customer_refunds.php">Возвраты ЮKassa</a><a class="btn ghost" href="customer_app.php">← Клиентское PWA</a></div></div></div>
+<div class="card"><div class="chart-head"><div><h2>Способы оплаты</h2><p>Для покупателя способ называется «Оплата по СБП». Технически платёж и фискальный чек проходят через ЮKassa.</p></div><div class="actions"><a class="btn ghost" href="#legal">Оферта и реквизиты</a><a class="btn ghost" href="customer_refunds.php">Возвраты ЮKassa</a><a class="btn ghost" href="customer_app.php">← Клиентское PWA</a></div></div></div>
 
 <div class="alert info section"><strong>Безопасность:</strong> секретный ключ ЮKassa хранится в Kapouch зашифрованным и после сохранения не показывается. Не отправляйте его в чат и не добавляйте в Git.</div>
 
-<form method="post" class="section"><input type="hidden" name="csrf" value="<?=csrf_token()?>">
+<div class="card section" id="legal"><div class="chart-head"><div><h2>Оферта, контакты и реквизиты ИП</h2><p>Эти данные публикуются в клиентском PWA на отдельной странице и используются в публичной оферте. После заполнения можно передать ЮKassa прямую ссылку на документ.</p></div><span class="pill <?=$legalReady?'connected':''?>"><?=$legalReady?'Готово к публикации':'Нужно заполнить'?></span></div>
+<?php if($legalMissing):?><div class="alert warning" style="margin:14px 0"><strong>Не заполнено:</strong> <?=e(implode(', ',$legalMissing))?>. До заполнения PWA покажет предупреждение, что юридическая информация готовится.</div><?php else:?><div class="alert success" style="margin:14px 0"><strong>Публичная страница готова:</strong> <a href="<?=e($legalUrl)?>" target="_blank" rel="noopener"><?=e($legalUrl)?> ↗</a></div><?php endif;?>
+<form method="post" class="stack"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="legal">
+<label style="display:flex;gap:9px;align-items:center"><input type="checkbox" name="legal_enabled" value="1" style="width:auto" <?=$legal['enabled']?'checked':''?>> Публиковать правовую информацию в клиентском PWA</label>
+<div class="form-grid">
+<label>Наименование продавца / ИП<input name="seller_name" maxlength="255" value="<?=e($legal['seller_name'])?>" placeholder="Индивидуальный предприниматель Иванов Иван Иванович"></label>
+<label>ИНН ИП<input name="inn" inputmode="numeric" maxlength="12" value="<?=e($legal['inn'])?>" placeholder="12 цифр"></label>
+<label>ОГРНИП<input name="ogrnip" inputmode="numeric" maxlength="15" value="<?=e($legal['ogrnip'])?>" placeholder="15 цифр"></label>
+<label>Адрес регистрации ИП<textarea name="legal_address" rows="2" maxlength="500" placeholder="Индекс, регион, город, улица, дом"><?=e($legal['legal_address'])?></textarea></label>
+<label>Адрес точки самовывоза<textarea name="trade_address" rows="2" maxlength="500" placeholder="Адрес кофейни, где покупатель получает заказ"><?=e($legal['trade_address'])?></textarea></label>
+<label>Email для покупателей<input type="email" name="contact_email" value="<?=e($legal['contact_email'])?>" placeholder="info@example.ru"></label>
+<label>Телефон для покупателей<input name="contact_phone" maxlength="80" value="<?=e($legal['contact_phone'])?>" placeholder="+7 ..."></label>
+</div>
+<h3 style="margin:8px 0 0">Банковские реквизиты</h3>
+<div class="form-grid">
+<label>Банк<input name="bank_name" maxlength="255" value="<?=e($legal['bank_name'])?>" placeholder="Наименование банка"></label>
+<label>БИК<input name="bik" inputmode="numeric" maxlength="9" value="<?=e($legal['bik'])?>" placeholder="9 цифр"></label>
+<label>Расчётный счёт<input name="settlement_account" inputmode="numeric" maxlength="20" value="<?=e($legal['settlement_account'])?>" placeholder="20 цифр"></label>
+<label>Корреспондентский счёт<input name="correspondent_account" inputmode="numeric" maxlength="20" value="<?=e($legal['correspondent_account'])?>" placeholder="20 цифр"></label>
+</div>
+<h3 style="margin:8px 0 0">Публичная оферта</h3>
+<div class="form-grid">
+<label>Название документа<input name="offer_title" maxlength="255" value="<?=e($legal['offer_title'])?>"></label>
+<label>Версия<input name="offer_version" maxlength="40" value="<?=e($legal['offer_version'])?>" placeholder="1.0"></label>
+<label>Дата начала действия<input type="date" name="offer_date" value="<?=e($legal['offer_date']!==''?$legal['offer_date']:date('Y-m-d'))?>"></label>
+</div>
+<label>Собственный текст оферты — необязательно<textarea name="offer_text" rows="12" maxlength="40000" placeholder="Оставьте пустым: Kapouch автоматически сформирует базовую оферту из реквизитов и правил клиентского заказа."><?=e($legal['offer_text'])?></textarea><small class="muted">Если поле пустое, Kapouch генерирует оферту автоматически. Если вставить свой текст, он полностью заменит автоматический шаблон.</small></label>
+<label>Дополнительные условия для автоматической оферты — необязательно<textarea name="extra_terms" rows="4" maxlength="10000" placeholder="Например, особенности выдачи заказов или дополнительные контакты."><?=e($legal['extra_terms'])?></textarea></label>
+<div class="alert warning"><strong>Шаблон — техническая основа, а не юридическая консультация.</strong> Перед коммерческим запуском проверьте текст оферты, реквизиты, порядок возврата и налоговые формулировки с вашим бухгалтером или юристом.</div>
+<div class="actions"><button class="btn primary">Сохранить оферту и реквизиты</button><a class="btn ghost" href="<?=e($legalUrl)?>" target="_blank" rel="noopener">Открыть публичную страницу ↗</a></div>
+</form></div>
+
+<form method="post" class="section"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="payment">
 <div class="two-col">
   <div class="card"><div class="chart-head"><div><h2>Наличными при самовывозе</h2><p>Заказ сразу попадает бариста со статусом «Не оплачено».</p></div><span class="pill <?=$cashEnabled?'connected':''?>"><?=$cashEnabled?'Включено':'Выключено'?></span></div><label style="display:flex;gap:9px;align-items:center"><input type="checkbox" name="cash_enabled" value="1" style="width:auto" <?=$cashEnabled?'checked':''?>> Разрешить оплату наличными при получении</label></div>
-  <div class="card"><div class="chart-head"><div><h2>Оплата по СБП · ЮKassa</h2><p>Неоплаченный заказ скрыт из очереди бариста. После подтверждения ЮKassa он автоматически становится новым.</p></div><span class="pill <?=$sbpEnabled&&$hasSecret?'connected':''?>"><?=$sbpEnabled&&$hasSecret?'Подключено':($sbpEnabled?'Нужны реквизиты':'Выключено')?></span></div><label style="display:flex;gap:9px;align-items:center"><input type="checkbox" name="sbp_enabled" value="1" style="width:auto" <?=$sbpEnabled?'checked':''?>> Показывать покупателям «Оплата по СБП»</label></div>
+  <div class="card"><div class="chart-head"><div><h2>Оплата по СБП · ЮKassa</h2><p>Неоплаченный заказ скрыт из очереди бариста. После подтверждения ЮKassa он автоматически становится новым.</p></div><span class="pill <?=$sbpEnabled&&$hasSecret?'connected':''?>"><?=$sbpEnabled&&$hasSecret?'Подключено':($sbpEnabled?'Нужны реквизиты':'Выключено')?></span></div><label style="display:flex;gap:9px;align-items:center"><input type="checkbox" name="sbp_enabled" value="1" style="width:auto" <?=$sbpEnabled?'checked':''?>> Показывать покупателям «Оплата по СБП»</label><?php if(!$legalReady):?><p class="muted" style="margin-top:8px">Перед передачей сайта на проверку ЮKassa заполните блок «Оферта, контакты и реквизиты ИП» выше.</p><?php endif;?></div>
 </div>
 
 <div class="card section"><div class="chart-head"><div><h2>Подключение ЮKassa</h2><p>Используются серверный API ЮKassa и способ оплаты <code>sbp</code>. Для тестов укажите реквизиты тестового магазина ЮKassa.</p></div></div><div class="form-grid">
