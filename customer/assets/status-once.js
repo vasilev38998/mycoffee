@@ -14,7 +14,7 @@ function writeSeen(signature){const seen=readSeen();seen[signature]=Date.now();c
 function isHomeVisible(){return !document.hidden&&home.classList.contains('active')}
 function notificationType(text){const value=String(text||'').trim();if(!value)return '';
   if(/бонусы начислены/i.test(value))return 'completed';
-  if(/заказ\s+#?.*готов/i.test(value)||/готов\s+[—-]\s+можно забирать/i.test(value))return 'ready';
+  if(/готов\s*[—-]\s*можно\s+забирать/i.test(value))return 'ready';
   return '';
 }
 function signature(text,type){const order=(String(text).match(/#([^\s·]+)/)||[])[1]||String(text).slice(0,80);return type+':'+order}
