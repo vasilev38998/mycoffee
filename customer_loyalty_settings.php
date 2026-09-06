@@ -2,6 +2,7 @@
 require __DIR__.'/inc/bootstrap.php';
 require __DIR__.'/inc/layout.php';
 require_auth();
+require_once __DIR__.'/inc/customer_loyalty.php';
 require_once __DIR__.'/inc/customer_drink_loyalty.php';
 
 $user=current_user();if(!in_array($user['role']??'',['owner','manager'],true)){http_response_code(403);exit('Недостаточно прав.');}
