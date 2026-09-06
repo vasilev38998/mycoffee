@@ -23,4 +23,18 @@ $checks=[
   'customer document root disables indexes'=>str_contains($htaccess,'Options -Indexes')&&str_contains($htaccess,'DirectoryIndex index.html'),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"Customer subdomain contract failed: {$label}\n");exit(1);}}
+
+function app_setting(string $key,string $default=''): string
+{
+    $values=[
+      'customer_app_public_url'=>'https://app.kapouch.store/',
+      'customer_api_allowed_origin'=>'https://preview.example https://app.kapouch.store',
+    ];
+    return $values[$key]??$default;
+}
+function kapouch_is_https_request(): bool{return true;}
+require_once $root.'/inc/customer_api.php';
+if(!customer_api_is_allowed_origin('https://app.kapouch.store')){fwrite(STDERR,"Customer subdomain contract failed: app origin rejected\n");exit(1);}
+if(customer_api_is_allowed_origin('https://evil.example')){fwrite(STDERR,"Customer subdomain contract failed: foreign origin accepted\n");exit(1);}
+
 echo "Customer subdomain contract passed\n";
