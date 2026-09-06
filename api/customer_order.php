@@ -4,6 +4,7 @@ require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_legal.php';
+require_once dirname(__DIR__).'/inc/customer_operations.php';
 
 customer_api_headers();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))==='OPTIONS'){http_response_code(204);exit;}
@@ -13,26 +14,46 @@ try{
     $ipLimit=kapouch_rate_limit_hit('customer_order_ip',kapouch_client_ip(),25,600);
     if(!$ipLimit['allowed']){header('Retry-After: '.(int)$ipLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много попыток оформления. Подождите немного и повторите.']);}
     $data=customer_api_json();
-    $acceptance=customer_legal_checkout_acceptance($data);
+    $clientOrderId=trim((string)($data['client_order_id']??''));
+    $externalId=$clientOrderId!==''?'customer-web-'.$clientOrderId:'';
+    $existingId=0;
+    if($externalId!==''){$existing=db()->prepare('SELECT id FROM online_orders WHERE external_id=? LIMIT 1');$existing->execute([$externalId]);$existingId=(int)($existing->fetchColumn()?:0);}
+    $acceptance=$existingId>0?null:customer_legal_checkout_acceptance($data);
     $phoneKey='';try{$phoneKey=customer_order_normalize_phone((string)($data['phone']??''));}catch(Throwable $e){}
     if($phoneKey!==''){$phoneLimit=kapouch_rate_limit_hit('customer_order_phone',$phoneKey,10,600);if(!$phoneLimit['allowed']){header('Retry-After: '.(int)$phoneLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много заказов для этого номера. Подождите немного и повторите.']);}}
-    $delay=array_key_exists('pickup_delay_minutes',$data)?(int)$data['pickup_delay_minutes']:0;
-    $comment=(string)($data['comment']??'');
+    $comment=(string)($data['comment']??'');$delay=array_key_exists('pickup_delay_minutes',$data)?(int)$data['pickup_delay_minutes']:0;
     if(!array_key_exists('pickup_delay_minutes',$data)&&preg_match('/\[\[pickup:(\d{1,3})\]\]/',$comment,$m))$delay=(int)$m[1];
     if(preg_match('/\[\[pickup:\d{1,3}\]\]/',$comment))$data['comment']=trim(preg_replace('/\s*\[\[pickup:\d{1,3}\]\]\s*/',' ',$comment)??$comment);
-    $allowed=[0,15,30,45,60,90,120];
-    if(!in_array($delay,$allowed,true))throw new RuntimeException('Выберите доступное время получения.');
-    if($delay>0&&(string)app_setting('customer_scheduled_pickup_enabled','1')!=='1')throw new RuntimeException('Предзаказ ко времени сейчас отключён.');
+    if($delay<0||$delay>720)throw new RuntimeException('Выберите доступное время получения.');
     $customer=customer_auth_current();
-    $order=customer_order_create($data,$customer);
-    customer_legal_record_acceptance((int)($order['order_id']??0),$acceptance);
-    if($delay>0&&!empty($order['order_id'])){
-        $promised=date('Y-m-d H:i:s',time()+$delay*60);
-        $stmt=db()->prepare("UPDATE online_orders SET promised_at=? WHERE id=? AND promised_at IS NULL AND status IN ('new','awaiting_payment')");$stmt->execute([$promised,(int)$order['order_id']]);
+
+    if($existingId>0){
+        $order=customer_order_create($data,$customer);
+    }else{
+        $requested=trim((string)($data['pickup_at']??''));
+        if($requested==='')$requested=customer_operations_legacy_slot($delay);
+        if($requested==='')throw new RuntimeException('Сейчас нет доступного времени для получения заказа.');
+        $lockPurpose='customer_pickup_slot:'.hash('sha256',$requested);
+        if(!kapouch_advisory_lock($lockPurpose,3))throw new RuntimeException('Этот временной интервал сейчас выбирает другой покупатель. Попробуйте ещё раз.');
+        try{
+            if($externalId!==''){$existing=db()->prepare('SELECT id FROM online_orders WHERE external_id=? LIMIT 1');$existing->execute([$externalId]);$existingId=(int)($existing->fetchColumn()?:0);}
+            if($existingId<=0)customer_operations_validate_slot($requested);
+            $order=customer_order_create($data,$customer);
+            customer_legal_record_acceptance((int)($order['order_id']??0),$acceptance);
+            if(!empty($order['order_id'])){
+                $stmt=db()->prepare("UPDATE online_orders SET promised_at=? WHERE id=? AND promised_at IS NULL AND status IN ('new','awaiting_payment')");$stmt->execute([$requested,(int)$order['order_id']]);
+            }
+        }finally{kapouch_advisory_unlock($lockPurpose);}
+    }
+
+    if(!empty($order['order_id'])){
         $read=db()->prepare('SELECT promised_at FROM online_orders WHERE id=?');$read->execute([(int)$order['order_id']]);$saved=trim((string)($read->fetchColumn()?:''));
-        if($saved!==''){$order['promised_at']=$saved;$order['pickup_delay_minutes']=$delay;}
+        if($saved!==''){$order['promised_at']=$saved;$order['promised_display']=date('H:i',strtotime($saved));}
     }
     customer_api_reply(201,['ok'=>true,'order'=>$order]);
 }catch(JsonException $e){customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);}
 catch(RuntimeException $e){customer_api_reply(422,['ok'=>false,'error'=>$e->getMessage()]);}
-catch(Throwable $e){customer_api_reply(500,['ok'=>false,'error'=>'Не удалось оформить заказ. Попробуйте ещё раз.']);}
+catch(Throwable $e){
+    error_log('[Kapouch customer order] '.$e->getMessage());
+    customer_api_reply(500,['ok'=>false,'error'=>'Не удалось оформить заказ. Попробуйте ещё раз.']);
+}

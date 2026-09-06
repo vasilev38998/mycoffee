@@ -145,7 +145,7 @@ jobs:
           curl -fsS http://127.0.0.1:8080/customer/ >/tmp/pwa.html
           grep -q 'checkoutForm' /tmp/pwa.html
           grep -q 'legalConsent' /tmp/pwa.html
-          curl -fsS http://127.0.0.1:8080/customer/sw.js | grep -q 'kapouch-pwa-v24'
+          curl -fsS http://127.0.0.1:8080/customer/sw.js | grep -q 'kapouch-pwa-v25'
 
       - name: Owner admin routes smoke
         run: |
