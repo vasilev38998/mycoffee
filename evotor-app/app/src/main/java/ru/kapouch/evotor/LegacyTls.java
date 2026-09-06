@@ -2,11 +2,12 @@ package ru.kapouch.evotor;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
+import java.util.List;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
@@ -16,10 +17,14 @@ import javax.net.ssl.X509TrustManager;
 
 final class LegacyTls {
     private static volatile SSLSocketFactory cachedFactory;
+    private static final String SERVER_AUTH_OID = "1.3.6.1.5.5.7.3.1";
 
-    // Official self-signed ISRG Root X1. It is bundled only as an additional trust anchor
-    // for old Evotor Android trust stores. Hostname verification remains handled by
-    // HttpsURLConnection and is never disabled.
+    // Official self-signed ISRG Root X1. kapouch.store currently serves:
+    // leaf -> Let's Encrypt YR1 -> ISRG Root YR -> ISRG Root X1.
+    // Some old Evotor Android builds fail to construct this modern cross-signed path even
+    // when X1 is supplied as a normal TrustManager anchor. We therefore keep the system
+    // trust manager first and use a strict signature/path fallback to this exact public CA.
+    // Hostname verification remains the platform default in HttpsURLConnection.
     private static final String ISRG_ROOT_X1 =
             "-----BEGIN CERTIFICATE-----\n" +
             "MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw\n" +
@@ -61,18 +66,9 @@ final class LegacyTls {
         synchronized (LegacyTls.class) {
             if (cachedFactory != null) return cachedFactory;
 
-            X509TrustManager system = trustManager(null);
-
-            CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-            X509Certificate root = (X509Certificate) certificateFactory.generateCertificate(
-                    new ByteArrayInputStream(ISRG_ROOT_X1.getBytes(StandardCharsets.US_ASCII))
-            );
-            KeyStore extraStore = KeyStore.getInstance(KeyStore.getDefaultType());
-            extraStore.load(null, null);
-            extraStore.setCertificateEntry("isrg-root-x1", root);
-            X509TrustManager extra = trustManager(extraStore);
-
-            X509TrustManager combined = new CombinedTrustManager(system, extra);
+            X509TrustManager system = trustManager();
+            X509Certificate root = parseCertificate(ISRG_ROOT_X1);
+            X509TrustManager combined = new CombinedTrustManager(system, root);
             SSLContext context = SSLContext.getInstance("TLS");
             context.init(null, new TrustManager[]{combined}, new SecureRandom());
             cachedFactory = context.getSocketFactory();
@@ -80,9 +76,16 @@ final class LegacyTls {
         }
     }
 
-    private static X509TrustManager trustManager(KeyStore store) throws Exception {
+    private static X509Certificate parseCertificate(String pem) throws Exception {
+        CertificateFactory factory = CertificateFactory.getInstance("X.509");
+        return (X509Certificate) factory.generateCertificate(
+                new ByteArrayInputStream(pem.getBytes(StandardCharsets.US_ASCII))
+        );
+    }
+
+    private static X509TrustManager trustManager() throws Exception {
         TrustManagerFactory factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        factory.init(store);
+        factory.init((java.security.KeyStore) null);
         for (TrustManager manager : factory.getTrustManagers()) {
             if (manager instanceof X509TrustManager) return (X509TrustManager) manager;
         }
@@ -91,11 +94,11 @@ final class LegacyTls {
 
     private static final class CombinedTrustManager implements X509TrustManager {
         private final X509TrustManager system;
-        private final X509TrustManager extra;
+        private final X509Certificate legacyRoot;
 
-        CombinedTrustManager(X509TrustManager system, X509TrustManager extra) {
+        CombinedTrustManager(X509TrustManager system, X509Certificate legacyRoot) {
             this.system = system;
-            this.extra = extra;
+            this.legacyRoot = legacyRoot;
         }
 
         @Override
@@ -107,19 +110,72 @@ final class LegacyTls {
         public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
             try {
                 system.checkServerTrusted(chain, authType);
+                return;
             } catch (CertificateException systemError) {
-                extra.checkServerTrusted(chain, authType);
+                try {
+                    verifyLegacyServerChain(chain, legacyRoot);
+                    return;
+                } catch (Exception legacyError) {
+                    CertificateException error = new CertificateException(
+                            "Сертификат Kapouch не прошёл проверку цепочки доверия.", legacyError
+                    );
+                    error.addSuppressed(systemError);
+                    throw error;
+                }
             }
         }
 
         @Override
         public X509Certificate[] getAcceptedIssuers() {
-            X509Certificate[] a = system.getAcceptedIssuers();
-            X509Certificate[] b = extra.getAcceptedIssuers();
-            X509Certificate[] all = new X509Certificate[a.length + b.length];
-            System.arraycopy(a, 0, all, 0, a.length);
-            System.arraycopy(b, 0, all, a.length, b.length);
+            X509Certificate[] systemIssuers = system.getAcceptedIssuers();
+            X509Certificate[] all = Arrays.copyOf(systemIssuers, systemIssuers.length + 1);
+            all[systemIssuers.length] = legacyRoot;
             return all;
+        }
+    }
+
+    static void verifyLegacyServerChain(X509Certificate[] chain, X509Certificate trustedRoot) throws Exception {
+        if (chain == null || chain.length == 0 || chain.length > 8) {
+            throw new CertificateException("Некорректная TLS-цепочка.");
+        }
+        trustedRoot.checkValidity();
+
+        X509Certificate leaf = chain[0];
+        if (leaf.getBasicConstraints() >= 0) throw new CertificateException("Серверный сертификат не должен быть CA.");
+        leaf.checkValidity();
+        List<String> eku = leaf.getExtendedKeyUsage();
+        if (eku != null && !eku.contains(SERVER_AUTH_OID)) {
+            throw new CertificateException("Сертификат не разрешён для TLS-сервера.");
+        }
+
+        for (int i = 0; i < chain.length; i++) {
+            X509Certificate cert = chain[i];
+            cert.checkValidity();
+            if (i > 0) verifyCa(cert);
+            if (i + 1 < chain.length) {
+                X509Certificate issuer = chain[i + 1];
+                if (!cert.getIssuerX500Principal().equals(issuer.getSubjectX500Principal())) {
+                    throw new CertificateException("Нарушен порядок сертификатов в TLS-цепочке.");
+                }
+                cert.verify(issuer.getPublicKey());
+            }
+        }
+
+        X509Certificate last = chain[chain.length - 1];
+        if (Arrays.equals(last.getEncoded(), trustedRoot.getEncoded())) return;
+        if (!last.getIssuerX500Principal().equals(trustedRoot.getSubjectX500Principal())) {
+            throw new CertificateException("TLS-цепочка не заканчивается доверенным ISRG Root X1.");
+        }
+        last.verify(trustedRoot.getPublicKey());
+    }
+
+    private static void verifyCa(X509Certificate certificate) throws CertificateException {
+        if (certificate.getBasicConstraints() < 0) {
+            throw new CertificateException("Промежуточный сертификат не является CA.");
+        }
+        boolean[] usage = certificate.getKeyUsage();
+        if (usage != null && (usage.length <= 5 || !usage[5])) {
+            throw new CertificateException("CA-сертификат не разрешён для подписи сертификатов.");
         }
     }
 }
