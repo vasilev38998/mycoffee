@@ -30,7 +30,7 @@ $stmt->execute([
 $connectionId=(int)$pdo->lastInsertId();
 action_ok($connectionId>0,'Evotor connection is seeded');
 
-$makeOrder=static function(string $number): int use ($pdo) {
+$makeOrder=static function(string $number) use ($pdo): int {
     $external='actions-'.strtolower($number).'-'.bin2hex(random_bytes(3));
     $pdo->prepare("INSERT INTO online_orders(external_id,order_number,source,status,fulfillment_type,payment_status,payment_method,total_amount) VALUES(?,?,'customer-web','new','pickup','unpaid','cash',210)")->execute([$external,$number]);
     $id=(int)$pdo->lastInsertId();
