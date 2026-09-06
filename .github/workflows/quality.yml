@@ -30,6 +30,9 @@ jobs:
       - name: YooKassa test-mode contract
         run: php tests/yookassa_test_mode.php
 
+      - name: Public legal footer contract
+        run: php tests/legal_public_contract.php
+
       - name: PWA payment return contract
         run: |
           set -euo pipefail
