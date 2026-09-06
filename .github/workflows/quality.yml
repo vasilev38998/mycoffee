@@ -51,6 +51,9 @@ jobs:
       - name: PWA subdomain image and phone contract
         run: php tests/customer_pwa_subdomain_fix_contract.php
 
+      - name: Sixth-drink PWA checkout contract
+        run: php tests/sixth_drink_pwa_contract.php
+
       - name: PWA payment return contract
         run: |
           set -euo pipefail
