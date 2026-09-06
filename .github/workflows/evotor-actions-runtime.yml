@@ -1,0 +1,64 @@
+name: Evotor order actions
+
+on:
+  pull_request:
+    paths:
+      - 'inc/evotor_order_notifications.php'
+      - 'inc/online_orders.php'
+      - 'api/evotor_order_action.php'
+      - 'inc/access.php'
+      - 'tests/evotor_order_actions.php'
+      - '.github/workflows/evotor-actions-runtime.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'inc/evotor_order_notifications.php'
+      - 'inc/online_orders.php'
+      - 'api/evotor_order_action.php'
+      - 'inc/access.php'
+      - 'tests/evotor_order_actions.php'
+      - '.github/workflows/evotor-actions-runtime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: kapouch_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring, curl, openssl
+          coverage: none
+
+      - name: Create isolated configuration
+        run: |
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Kapouch Test','timezone'=>'Asia/Irkutsk','currency'=>'₽'],
+            'db'=>['host'=>'127.0.0.1','name'=>'kapouch_test','user'=>'root','pass'=>'root','charset'=>'utf8mb4'],
+            'security'=>['encryption_key'=>'evotor-actions-runtime-key-0123456789abcdef0123456789abcdef'],
+          ];
+          PHP
+          mysql -h127.0.0.1 -uroot -proot kapouch_test < database/schema.sql
+
+      - name: Run signed action regression
+        run: php tests/evotor_order_actions.php
