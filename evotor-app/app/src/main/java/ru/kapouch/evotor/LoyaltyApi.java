@@ -16,6 +16,9 @@ import java.nio.charset.StandardCharsets;
 import javax.net.ssl.HttpsURLConnection;
 
 final class LoyaltyApi {
+    static final String KEY_LOOKUP_URL = "loyalty_lookup_url";
+    static final String KEY_TERMINAL_TOKEN = "loyalty_terminal_token";
+    static final String KEY_BOOTSTRAP_ORDER_TOKEN = "loyalty_bootstrap_order_token";
     private static final String DEFAULT_LOOKUP_URL = "https://kapouch.store/api/evotor_customer_lookup.php";
 
     private LoyaltyApi() {}
@@ -25,9 +28,9 @@ final class LoyaltyApi {
             return Result.error("Это не QR-карта Kapouch.");
         }
         SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE);
-        String lookupUrl = prefs.getString(MainActivity.KEY_LOYALTY_LOOKUP_URL, DEFAULT_LOOKUP_URL);
-        String terminalToken = prefs.getString(MainActivity.KEY_LOYALTY_TERMINAL_TOKEN, "");
-        String bootstrapToken = prefs.getString(MainActivity.KEY_LOYALTY_BOOTSTRAP_TOKEN, "");
+        String lookupUrl = prefs.getString(KEY_LOOKUP_URL, DEFAULT_LOOKUP_URL);
+        String terminalToken = prefs.getString(KEY_TERMINAL_TOKEN, "");
+        String bootstrapToken = prefs.getString(KEY_BOOTSTRAP_ORDER_TOKEN, "");
         HttpURLConnection connection = null;
         try {
             URL url = new URL(lookupUrl == null || lookupUrl.isEmpty() ? DEFAULT_LOOKUP_URL : lookupUrl);
@@ -64,7 +67,7 @@ final class LoyaltyApi {
                 return Result.error(json.optString("error", "Kapouch вернул HTTP " + status));
             }
             String issuedToken = json.optString("terminal_token", "");
-            if (!issuedToken.isEmpty()) prefs.edit().putString(MainActivity.KEY_LOYALTY_TERMINAL_TOKEN, issuedToken).apply();
+            if (!issuedToken.isEmpty()) prefs.edit().putString(KEY_TERMINAL_TOKEN, issuedToken).apply();
             JSONObject customer = json.optJSONObject("customer");
             JSONObject loyalty = json.optJSONObject("loyalty");
             JSONObject link = json.optJSONObject("link");
@@ -80,6 +83,16 @@ final class LoyaltyApi {
         } finally {
             if (connection != null) connection.disconnect();
         }
+    }
+
+    static String lookupUrlFromActionUrl(String actionUrl) {
+        if (actionUrl == null) return DEFAULT_LOOKUP_URL;
+        String value = actionUrl.trim();
+        if (!value.startsWith("https://")) return DEFAULT_LOOKUP_URL;
+        String marker = "/api/evotor_order_action.php";
+        int at = value.indexOf(marker);
+        if (at < 0) return DEFAULT_LOOKUP_URL;
+        return value.substring(0, at) + "/api/evotor_customer_lookup.php";
     }
 
     private static String readAll(InputStream stream) throws Exception {
