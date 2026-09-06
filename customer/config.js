@@ -20,7 +20,7 @@ window.addEventListener('DOMContentLoaded',function(){
   qr.referrerPolicy='no-referrer';
   var loadCard=function(){
     if(document.querySelector('script[data-kapouch-loyalty-card]'))return;
-    var card=document.createElement('script');card.src='assets/loyalty-card.js?v=2';card.defer=true;card.dataset.kapouchLoyaltyCard='1';document.body.appendChild(card);
+    var card=document.createElement('script');card.src='assets/loyalty-card.js?v=3';card.defer=true;card.dataset.kapouchLoyaltyCard='1';document.body.appendChild(card);
   };
   qr.onload=loadCard;qr.onerror=loadCard;document.body.appendChild(qr);
 });
