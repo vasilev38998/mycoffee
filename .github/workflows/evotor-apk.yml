@@ -61,7 +61,7 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='2' versionName='1.0.1'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='3' versionName='1.0.2'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
           "$AAPT" dump xmltree "$APK" AndroidManifest.xml > /tmp/evotor-manifest.txt
