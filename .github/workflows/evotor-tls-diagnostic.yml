@@ -1,0 +1,30 @@
+name: Evotor TLS diagnostic
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/evotor-tls-diagnostic.yml'
+      - 'evotor-app/**'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect live kapouch.store certificate chain
+        run: |
+          set -euo pipefail
+          echo | openssl s_client -connect kapouch.store:443 -servername kapouch.store -showcerts 2>&1 | tee /tmp/tls.txt
+          echo '--- parsed certificates ---'
+          awk '/BEGIN CERTIFICATE/{n++} {print > ("/tmp/cert" n ".pem")}' /tmp/tls.txt || true
+          for cert in /tmp/cert*.pem; do
+            grep -q 'BEGIN CERTIFICATE' "$cert" || continue
+            echo "### $cert"
+            openssl x509 -in "$cert" -noout -subject -issuer -dates -fingerprint -sha256
+          done
+          echo '--- curl ---'
+          curl -Iv --connect-timeout 10 https://kapouch.store/api/evotor_order_action.php || true
