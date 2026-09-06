@@ -18,7 +18,7 @@ on:
         default: 'bc17ef43-f590-49ca-a6f2-e940f57d0a72'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -87,3 +87,23 @@ jobs:
           name: kapouch-orders-evotor-compatible
           path: evotor-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Publish versioned APK to repository
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          APK=evotor-app/app/build/outputs/apk/debug/app-debug.apk
+          AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
+          VERSION=$("$AAPT" dump badging "$APK" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -n1)
+          test -n "$VERSION"
+          DEST="evotor-app/releases/kapouch-orders-evotor-compatible-v${VERSION}.apk"
+          if [ -e "$DEST" ]; then
+            cmp -s "$APK" "$DEST" && exit 0
+            echo "Refusing to overwrite existing release $DEST with different bytes" >&2
+            exit 1
+          fi
+          cp "$APK" "$DEST"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$DEST"
+          git commit -m "release: add Evotor APK v${VERSION}"
+          git push origin HEAD:main
