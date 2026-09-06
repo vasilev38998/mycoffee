@@ -26,5 +26,9 @@ jobs:
             echo "### $cert"
             openssl x509 -in "$cert" -noout -subject -issuer -dates -fingerprint -sha256
           done
-          echo '--- curl ---'
+          echo '--- official Root YR ---'
+          curl -fsSL https://letsencrypt.org/certs/gen-y/root-yr.pem -o /tmp/root-yr.pem
+          cat /tmp/root-yr.pem
+          openssl x509 -in /tmp/root-yr.pem -noout -subject -issuer -dates -fingerprint -sha256
+          echo '--- curl endpoint ---'
           curl -Iv --connect-timeout 10 https://kapouch.store/api/evotor_order_action.php || true
