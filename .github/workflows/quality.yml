@@ -27,6 +27,9 @@ jobs:
           find . -type f -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -print0 \
             | xargs -0 -r -n1 php -l
 
+      - name: YooKassa test-mode contract
+        run: php tests/yookassa_test_mode.php
+
       - name: JavaScript syntax
         run: |
           set -euo pipefail
