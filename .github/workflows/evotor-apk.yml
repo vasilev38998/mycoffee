@@ -61,7 +61,7 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='5' versionName='1.1.1'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='6' versionName='1.1.2'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
           "$AAPT" dump permissions "$APK" | tee /tmp/evotor-permissions.txt
@@ -76,8 +76,12 @@ jobs:
           if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then echo 'Unexpected multidex APK for Evotor portal' >&2; exit 1; fi
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
           grep -q 'isrg-root-x1' /tmp/evotor-dex-strings.txt
+          grep -q 'isrg-root-x2' /tmp/evotor-dex-strings.txt
+          grep -q 'isrg-root-ye' /tmp/evotor-dex-strings.txt
+          grep -q 'isrg-root-yr' /tmp/evotor-dex-strings.txt
+          grep -q 'TLS chain not trusted' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch-order-sound' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.1.1' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.1.2' /tmp/evotor-dex-strings.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
