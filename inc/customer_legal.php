@@ -35,6 +35,7 @@ function customer_legal_validate_input(array $data): array
 {
     $date=trim((string)($data['offer_date']??''));
     if($date!==''&&!preg_match('/^\d{4}-\d{2}-\d{2}$/',$date))throw new RuntimeException('Дата оферты должна быть в формате ГГГГ-ММ-ДД.');
+    if($date!==''&&strtotime($date.' 00:00:00')===false)throw new RuntimeException('Проверьте дату начала действия оферты.');
     $email=mb_strtolower(trim((string)($data['contact_email']??'')));
     if($email!==''&&!filter_var($email,FILTER_VALIDATE_EMAIL))throw new RuntimeException('Проверьте email для обращений покупателей.');
     $seller=mb_substr(trim((string)($data['seller_name']??'')),0,255);
@@ -98,7 +99,7 @@ function customer_legal_default_offer(array $s): string
     $pickup=$s['trade_address']!==''?$s['trade_address']:(string)app_setting('customer_pickup_label','точка самовывоза');
     $email=$s['contact_email']!==''?$s['contact_email']:'email, указанный в реквизитах';
     $phone=$s['contact_phone']!==''?$s['contact_phone']:'телефон, указанный в реквизитах';
-    $effective=$s['offer_date']!==''?date('d.m.Y',strtotime($s['offer_date'])):'даты публикации';
+    $ts=$s['offer_date']!==''?strtotime($s['offer_date'].' 00:00:00'):false;$effective=$ts!==false?date('d.m.Y',$ts):'даты публикации';
     $text=<<<TXT
 1. Общие положения
 Настоящий документ является публичной офертой {$seller} (далее — «Продавец») и определяет условия заказа и приобретения товаров через клиентское веб-приложение Kapouch. Оформляя заказ и подтверждая согласие с офертой, покупатель принимает её условия в полном объёме.
@@ -149,4 +150,22 @@ function customer_legal_public_data(): array
             'text'=>$s['offer_text']!==''?$s['offer_text']:customer_legal_default_offer($s),
         ],
     ];
+}
+
+function customer_legal_checkout_acceptance(array $data): ?array
+{
+    $legal=customer_legal_public_data();
+    if(!$legal['configured'])return null;
+    $accept=is_array($data['offer_acceptance']??null)?$data['offer_acceptance']:[];
+    if(empty($accept['accepted']))throw new RuntimeException('Для оформления заказа примите публичную оферту.');
+    $currentVersion=(string)($legal['offer']['version']??'');$clientVersion=trim((string)($accept['version']??''));
+    if($currentVersion!==''&&!hash_equals($currentVersion,$clientVersion))throw new RuntimeException('Публичная оферта обновилась. Обновите страницу и подтвердите новую редакцию.');
+    return ['version'=>$currentVersion!==''?$currentVersion:'1.0','hash'=>hash('sha256',(string)$legal['offer']['text']),'accepted_at'=>date('Y-m-d H:i:s')];
+}
+
+function customer_legal_record_acceptance(int $orderId,?array $acceptance): void
+{
+    if($orderId<=0||$acceptance===null)return;
+    $stmt=db()->prepare('INSERT IGNORE INTO customer_order_legal_acceptance(order_id,offer_version,offer_hash,accepted_at) VALUES(?,?,?,?)');
+    $stmt->execute([$orderId,mb_substr((string)$acceptance['version'],0,40),(string)$acceptance['hash'],(string)$acceptance['accepted_at']]);
 }
