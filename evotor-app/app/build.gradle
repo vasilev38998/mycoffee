@@ -1,18 +1,16 @@
-plugins {
-    id 'com.android.application'
-}
+apply plugin: 'com.android.application'
 
 android {
-    namespace 'ru.kapouch.evotor'
-    compileSdk 34
+    compileSdkVersion 27
+    buildToolsVersion '27.0.3'
 
     defaultConfig {
         applicationId 'ru.kapouch.evotor'
-        minSdk 21
-        targetSdk 30
-        versionCode 1
-        versionName '1.0.0'
-        manifestPlaceholders = [evotorAppUuid: project.findProperty('EVOTOR_APP_UUID') ?: '00000000-0000-0000-0000-000000000000']
+        minSdkVersion 21
+        targetSdkVersion 25
+        versionCode 2
+        versionName '1.0.1'
+        manifestPlaceholders = [evotorAppUuid: project.hasProperty('EVOTOR_APP_UUID') ? project.property('EVOTOR_APP_UUID') : 'bc17ef43-f590-49ca-a6f2-e940f57d0a72']
     }
 
     compileOptions {
