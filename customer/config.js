@@ -13,6 +13,11 @@ window.addEventListener('DOMContentLoaded',function(){
   compact.defer=true;
   document.body.appendChild(compact);
 
+  var statusOnce=document.createElement('script');
+  statusOnce.src='assets/status-once.js?v=1';
+  statusOnce.defer=true;
+  document.body.appendChild(statusOnce);
+
   var qr=document.createElement('script');
   qr.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
   qr.integrity='sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==';
