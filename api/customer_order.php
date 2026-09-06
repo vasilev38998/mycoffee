@@ -6,6 +6,7 @@ require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_legal.php';
 require_once dirname(__DIR__).'/inc/customer_operations.php';
 require_once dirname(__DIR__).'/inc/customer_phone.php';
+require_once dirname(__DIR__).'/inc/customer_urls.php';
 require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
 
 customer_api_headers();
@@ -16,6 +17,7 @@ try{
     $ipLimit=kapouch_rate_limit_hit('customer_order_ip',kapouch_client_ip(),25,600);
     if(!$ipLimit['allowed']){header('Retry-After: '.(int)$ipLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много попыток оформления. Подождите немного и повторите.']);}
     $data=customer_api_json();
+    $requestedPaymentMethod=trim((string)($data['payment_method']??''));
     $customer=customer_auth_current();
     if(!$customer)customer_api_reply(401,['ok'=>false,'error'=>'Чтобы оформить заказ, сначала войдите в профиль по номеру телефона.']);
     $profilePhone=customer_phone_canonical_ru((string)($customer['phone']??''));
@@ -57,6 +59,9 @@ try{
         $read=db()->prepare('SELECT promised_at FROM online_orders WHERE id=?');$read->execute([(int)$order['order_id']]);$saved=trim((string)($read->fetchColumn()?:''));
         if($saved!==''){$order['promised_at']=$saved;$order['promised_display']=date('H:i',strtotime($saved));}
         try{evotor_order_notify_new((int)$order['order_id']);}catch(Throwable $pushError){error_log('[Kapouch Evotor push enqueue] '.$pushError->getMessage());}
+    }
+    if($requestedPaymentMethod==='sbp'&&(string)($order['payment_method']??'')!=='sbp'&&(float)($order['total_amount']??0)<1&&empty($order['payment_url'])){
+        $order['payment_url']=customer_public_app_url('payment-return.html?gift=1');
     }
     customer_api_reply(201,['ok'=>true,'order'=>$order]);
 }catch(JsonException $e){customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);}
