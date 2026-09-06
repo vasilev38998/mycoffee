@@ -36,6 +36,9 @@ jobs:
       - name: PWA profile UX contract
         run: php tests/pwa_profile_ux_contract.php
 
+      - name: Customer subdomain contract
+        run: php tests/customer_subdomain_contract.php
+
       - name: PWA payment return contract
         run: |
           set -euo pipefail

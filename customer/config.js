@@ -1,7 +1,17 @@
 window.KAPOUCH_CUSTOMER_CONFIG = {
-  apiBase: '../api',
+  apiBase: 'https://kapouch.store/api',
+  appBase: 'https://app.kapouch.store/',
   pollIntervalMs: 3000
 };
+(function(){
+  var apiBase=String(window.KAPOUCH_CUSTOMER_CONFIG.apiBase||'').replace(/\/$/,'');
+  var nativeFetch=window.fetch.bind(window);
+  window.fetch=function(input,init){
+    if(typeof input==='string'&&input.indexOf('../api/')===0)input=apiBase+'/'+input.slice('../api/'.length);
+    else if(input instanceof URL&&input.href.indexOf(new URL('../api/',window.location.href).href)===0)input=new URL(apiBase+'/'+input.href.slice(new URL('../api/',window.location.href).href.length));
+    return nativeFetch(input,init);
+  };
+})();
 window.addEventListener('DOMContentLoaded',function(){
   var s=document.createElement('script');
   s.src='assets/push.js?v=1';
