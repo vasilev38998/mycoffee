@@ -48,6 +48,26 @@ jobs:
         with:
           gradle-version: '4.4'
 
+      - name: Verify legacy TLS fallback against live Kapouch chain
+        run: |
+          set -euo pipefail
+          rm -f /tmp/kapouch-cert-*.pem
+          echo | openssl s_client -connect kapouch.store:443 -servername kapouch.store -showcerts 2>/dev/null \
+            | awk '
+              /-----BEGIN CERTIFICATE-----/ {n++; capture=1}
+              capture {print > ("/tmp/kapouch-cert-" n ".pem")}
+              /-----END CERTIFICATE-----/ {capture=0}
+            '
+          test -s /tmp/kapouch-cert-1.pem
+          test -s /tmp/kapouch-cert-2.pem
+          test -s /tmp/kapouch-cert-3.pem
+          mkdir -p /tmp/kapouch-tls-classes
+          javac -source 1.8 -target 1.8 -d /tmp/kapouch-tls-classes \
+            evotor-app/app/src/main/java/ru/kapouch/evotor/LegacyTls.java \
+            evotor-app/tools/LegacyTlsChainCheck.java
+          java -cp /tmp/kapouch-tls-classes ru.kapouch.evotor.LegacyTlsChainCheck \
+            /tmp/kapouch-cert-1.pem /tmp/kapouch-cert-2.pem /tmp/kapouch-cert-3.pem
+
       - name: Build debug APK with Evotor-compatible toolchain
         env:
           EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
