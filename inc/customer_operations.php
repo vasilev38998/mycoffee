@@ -45,6 +45,7 @@ function customer_operations_settings(): array
         'accepting'=>(string)app_setting('customer_orders_accepting','1')==='1',
         'pause_reason'=>mb_substr(trim((string)app_setting('customer_orders_pause_reason','')),0,255),
         'schedule_enabled'=>(string)app_setting('customer_order_schedule_enabled','0')==='1',
+        'scheduled_pickup'=>(string)app_setting('customer_scheduled_pickup_enabled','1')==='1',
         'prep_minutes'=>max(5,min(180,(int)app_setting('customer_order_prep_minutes','15'))),
         'slot_interval'=>max(5,min(60,(int)app_setting('customer_order_slot_interval','15'))),
         'slot_capacity'=>max(1,min(100,(int)app_setting('customer_order_slot_capacity','6'))),
@@ -104,12 +105,30 @@ function customer_operations_window(DateTimeImmutable $slot,array $settings): ?a
     return ['open'=>$open,'close'=>$close];
 }
 
-function customer_operations_slot_load(DateTimeImmutable $slot,int $interval): int
+function customer_operations_slot_key(DateTimeImmutable $time,int $interval): string
 {
-    $end=$slot->modify('+'.$interval.' minutes');
-    $stmt=db()->prepare("SELECT COUNT(*) FROM online_orders WHERE promised_at>=? AND promised_at<? AND status IN ('awaiting_payment','new','preparing','ready')");
-    $stmt->execute([$slot->format('Y-m-d H:i:s'),$end->format('Y-m-d H:i:s')]);
-    return (int)$stmt->fetchColumn();
+    $minutes=((int)$time->format('H'))*60+(int)$time->format('i');$bucket=(int)(floor($minutes/$interval)*$interval);
+    return $time->format('Y-m-d').' '.sprintf('%02d:%02d:00',intdiv($bucket,60),$bucket%60);
+}
+
+function customer_operations_slot_loads(DateTimeImmutable $from,DateTimeImmutable $until,int $interval): array
+{
+    $stmt=db()->prepare("SELECT promised_at FROM online_orders WHERE promised_at>=? AND promised_at<? AND status IN ('awaiting_payment','new','preparing','ready')");
+    $stmt->execute([$from->modify('-'.$interval.' minutes')->format('Y-m-d H:i:s'),$until->modify('+'.$interval.' minutes')->format('Y-m-d H:i:s')]);
+    $tz=new DateTimeZone(app_timezone());$loads=[];
+    foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $raw){
+        $dt=DateTimeImmutable::createFromFormat('Y-m-d H:i:s',(string)$raw,$tz);if(!$dt)continue;$key=customer_operations_slot_key($dt,$interval);$loads[$key]=($loads[$key]??0)+1;
+    }
+    return $loads;
+}
+
+function customer_operations_slot_label(DateTimeImmutable $slot,DateTimeImmutable $now): string
+{
+    $day=$slot->format('Y-m-d');$today=$now->format('Y-m-d');$tomorrow=$now->modify('+1 day')->format('Y-m-d');
+    if($day===$today)$prefix='Сегодня ';
+    elseif($day===$tomorrow)$prefix='Завтра ';
+    else $prefix=$slot->format('d.m').' ';
+    return $prefix.$slot->format('H:i');
 }
 
 function customer_operations_slots(?DateTimeImmutable $now=null): array
@@ -117,17 +136,16 @@ function customer_operations_slots(?DateTimeImmutable $now=null): array
     $settings=customer_operations_settings();$tz=new DateTimeZone(app_timezone());$now=$now?->setTimezone($tz)??new DateTimeImmutable('now',$tz);
     if(!$settings['accepting'])return ['accepting'=>false,'message'=>$settings['pause_reason']!==''?$settings['pause_reason']:'Приём заказов временно приостановлен.','slots'=>[],'settings'=>$settings];
     $first=customer_operations_round_up($now->modify('+'.$settings['prep_minutes'].' minutes'),$settings['slot_interval']);
-    $until=$now->modify('+'.$settings['horizon_hours'].' hours');$slots=[];$cursor=$first;$guard=0;
+    $until=$now->modify('+'.$settings['horizon_hours'].' hours');$loads=customer_operations_slot_loads($first,$until,$settings['slot_interval']);$slots=[];$cursor=$first;$guard=0;
     while($cursor<=$until&&$guard++<600){
         $window=customer_operations_window($cursor,$settings);
         if($window&&$cursor>=$window['open']&&$cursor<=$window['close']){
-            $load=customer_operations_slot_load($cursor,$settings['slot_interval']);
-            if($load<$settings['slot_capacity']){
-                $slots[]=['value'=>$cursor->format('Y-m-d H:i:s'),'label'=>($cursor->format('Y-m-d')===$now->format('Y-m-d')?'Сегодня ':'Завтра ').$cursor->format('H:i'),'remaining'=>max(0,$settings['slot_capacity']-$load)];
-            }
+            $key=$cursor->format('Y-m-d H:i:s');$load=(int)($loads[$key]??0);
+            if($load<$settings['slot_capacity'])$slots[]=['value'=>$key,'label'=>customer_operations_slot_label($cursor,$now),'remaining'=>max(0,$settings['slot_capacity']-$load)];
         }
         $cursor=$cursor->modify('+'.$settings['slot_interval'].' minutes');
     }
+    if(!$settings['scheduled_pickup']&&$slots)$slots=array_slice($slots,0,1);
     if($slots)return ['accepting'=>true,'message'=>'','slots'=>$slots,'settings'=>$settings];
     $message=$settings['schedule_enabled']?'Сейчас нет доступных времён для заказа. Проверьте расписание кофейни или попробуйте позже.':'Ближайшие слоты заняты. Попробуйте немного позже.';
     return ['accepting'=>false,'message'=>$message,'slots'=>[],'settings'=>$settings];
@@ -138,7 +156,7 @@ function customer_operations_public_state(): array
     $state=customer_operations_slots();$s=$state['settings'];
     return [
         'accepting'=>$state['accepting'],'message'=>$state['message'],'slots'=>$state['slots'],
-        'prep_minutes'=>$s['prep_minutes'],'slot_interval'=>$s['slot_interval'],'slot_capacity'=>$s['slot_capacity'],'schedule_enabled'=>$s['schedule_enabled'],
+        'prep_minutes'=>$s['prep_minutes'],'slot_interval'=>$s['slot_interval'],'slot_capacity'=>$s['slot_capacity'],'schedule_enabled'=>$s['schedule_enabled'],'scheduled_pickup'=>$s['scheduled_pickup'],
     ];
 }
 
@@ -157,7 +175,7 @@ function customer_operations_validate_slot(string $value): DateTimeImmutable
 function customer_operations_legacy_slot(int $delay): string
 {
     $state=customer_operations_slots();if(!$state['accepting'])throw new RuntimeException($state['message']?:'Приём заказов сейчас недоступен.');
-    if($delay<=0)return (string)($state['slots'][0]['value']??'');
+    if($delay<=0||empty($state['settings']['scheduled_pickup']))return (string)($state['slots'][0]['value']??'');
     $target=(new DateTimeImmutable('now',new DateTimeZone(app_timezone())))->modify('+'.$delay.' minutes');$best='';$bestDiff=PHP_INT_MAX;
     foreach($state['slots'] as $slot){$ts=strtotime((string)$slot['value']);if($ts===false)continue;$diff=$ts-$target->getTimestamp();if($diff>=0&&$diff<$bestDiff){$bestDiff=$diff;$best=(string)$slot['value'];}}
     return $best!==''?$best:(string)($state['slots'][0]['value']??'');
@@ -165,7 +183,6 @@ function customer_operations_legacy_slot(int $delay): string
 
 function customer_operations_metrics(): array
 {
-    $today=date('Y-m-d');
     $active=(int)db()->query("SELECT COUNT(*) FROM online_orders WHERE status IN ('awaiting_payment','new','preparing','ready')")->fetchColumn();
     $todayCount=(int)db()->query("SELECT COUNT(*) FROM online_orders WHERE DATE(COALESCE(external_created_at,created_at))=CURDATE()")->fetchColumn();
     $overdue=(int)db()->query("SELECT COUNT(*) FROM online_orders WHERE status IN ('new','preparing') AND promised_at IS NOT NULL AND promised_at<NOW()")->fetchColumn();
