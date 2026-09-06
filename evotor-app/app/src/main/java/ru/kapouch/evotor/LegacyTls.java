@@ -112,20 +112,26 @@ final class LegacyTls {
 
         @Override
         public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+            Throwable systemError = null;
             try {
                 system.checkServerTrusted(chain, authType);
                 return;
-            } catch (CertificateException systemError) {
-                try {
-                    verifyLegacyServerChain(chain, legacyRoot);
-                    return;
-                } catch (Exception legacyError) {
-                    CertificateException error = new CertificateException(
-                            "Сертификат Kapouch не прошёл проверку цепочки доверия.", legacyError
-                    );
-                    error.addSuppressed(systemError);
-                    throw error;
-                }
+            } catch (CertificateException | RuntimeException error) {
+                // Very old Android/JVM trust managers may throw RuntimeException while trying
+                // to build a path through a modern CA hierarchy. That does not grant trust:
+                // the connection is accepted only if our strict cryptographic fallback below
+                // verifies the complete server-provided chain to the bundled public X1 root.
+                systemError = error;
+            }
+
+            try {
+                verifyLegacyServerChain(chain, legacyRoot);
+            } catch (Exception legacyError) {
+                CertificateException error = new CertificateException(
+                        "Сертификат Kapouch не прошёл проверку цепочки доверия.", legacyError
+                );
+                if (systemError != null) error.addSuppressed(systemError);
+                throw error;
             }
         }
 
