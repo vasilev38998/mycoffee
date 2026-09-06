@@ -29,7 +29,7 @@ function evotor_order_push_valid_uuid(string $value): bool
 
 function evotor_order_push_valid_device(string $value): bool
 {
-    return evotor_order_push_valid_uuid($value)||(bool)preg_match('/^[0-9]{12,20}$/',$value);
+    return evotor_order_push_valid_uuid($value)||(bool)preg_match('/^[0-9]{15}$/',$value);
 }
 
 function evotor_order_push_ready(array $connection): bool
@@ -37,7 +37,9 @@ function evotor_order_push_ready(array $connection): bool
     return !empty($connection['push_enabled'])
         && evotor_order_push_valid_uuid(trim((string)($connection['push_application_id']??'')))
         && evotor_order_push_valid_device(trim((string)($connection['push_device_uuid']??'')))
-        && !empty($connection['push_token_ciphertext']);
+        && !empty($connection['push_token_ciphertext'])
+        && !empty($connection['push_token_iv'])
+        && !empty($connection['push_token_tag']);
 }
 
 function evotor_order_push_save(int $connectionId,array $data): array
@@ -49,10 +51,10 @@ function evotor_order_push_save(int $connectionId,array $data): array
     $deviceUuid=mb_substr(trim((string)($data['device_uuid']??'')),0,100);
     $publisherToken=trim((string)($data['publisher_token']??''));
     if($applicationId!==''&&!evotor_order_push_valid_uuid($applicationId))throw new RuntimeException('Application ID должен быть UUID приложения Эвотор.');
-    if($deviceUuid!==''&&!evotor_order_push_valid_device($deviceUuid))throw new RuntimeException('Укажите UUID смарт-терминала или его IMEI.');
+    if($deviceUuid!==''&&!evotor_order_push_valid_device($deviceUuid))throw new RuntimeException('Укажите UUID смарт-терминала или его 15-значный IMEI.');
     $cipher=$connection['push_token_ciphertext']??null;$iv=$connection['push_token_iv']??null;$tag=$connection['push_token_tag']??null;
     if($publisherToken!=='')[$cipher,$iv,$tag]=evotor_encrypt_token($publisherToken);
-    if($enabled&&($applicationId===''||$deviceUuid===''||!$cipher))throw new RuntimeException('Чтобы включить уведомления, укажите Application ID, устройство и ключ издателя Эвотор.');
+    if($enabled&&($applicationId===''||$deviceUuid===''||!$cipher||!$iv||!$tag))throw new RuntimeException('Чтобы включить уведомления, укажите Application ID, устройство и ключ издателя Эвотор.');
     $stmt=db()->prepare('UPDATE evotor_connections SET push_enabled=?,push_application_id=?,push_device_uuid=?,push_token_ciphertext=?,push_token_iv=?,push_token_tag=?,push_last_error=NULL WHERE id=? AND enabled=1');
     $stmt->execute([$enabled?1:0,$applicationId!==''?$applicationId:null,$deviceUuid!==''?$deviceUuid:null,$cipher,$iv,$tag,$connectionId]);
     return evotor_order_push_connection($connectionId)??$connection;
@@ -89,6 +91,15 @@ function evotor_order_push_payload(int $orderId): array
     ];
 }
 
+function evotor_order_push_validate_response(array $response): array
+{
+    $state=strtoupper(trim((string)($response['status']??'')));
+    if(!in_array($state,['ACCEPTED','RUNNING','COMPLETED'],true)){
+        throw new RuntimeException('Облако Эвотор не приняло push-уведомление'.($state!==''?': '.$state:'.'));
+    }
+    return $response;
+}
+
 function evotor_order_push_http(array $connection,array $payload): array
 {
     $applicationId=trim((string)$connection['push_application_id']);$deviceUuid=trim((string)$connection['push_device_uuid']);
@@ -99,11 +110,11 @@ function evotor_order_push_http(array $connection,array $payload): array
     if(isset($GLOBALS['kapouch_evotor_push_transport'])&&is_callable($GLOBALS['kapouch_evotor_push_transport'])){
         $result=($GLOBALS['kapouch_evotor_push_transport'])($url,evotor_order_push_publisher_token($connection),$request);
         if(!is_array($result))throw new RuntimeException('Тестовый transport Эвотор вернул некорректный ответ.');
-        return $result;
+        return evotor_order_push_validate_response($result);
     }
     $ch=curl_init($url);
     curl_setopt_array($ch,[
-        CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_CONNECTTIMEOUT=>4,CURLOPT_TIMEOUT=>8,
+        CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_CONNECTTIMEOUT=>2,CURLOPT_TIMEOUT=>4,
         CURLOPT_HTTPHEADER=>['Accept: application/vnd.evotor.v2+json','Content-Type: application/json','Authorization: Bearer '.evotor_order_push_publisher_token($connection)],
         CURLOPT_POSTFIELDS=>$encoded,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
     ]);
@@ -112,14 +123,14 @@ function evotor_order_push_http(array $connection,array $payload): array
     $json=json_decode((string)$body,true);
     if($status<200||$status>=300||!is_array($json)){
         $detail=is_array($json)?json_encode($json,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES):mb_substr((string)$body,0,500);
-        throw new RuntimeException('Push API Эвотор вернул HTTP '.$status.($detail!==''?': '.$detail:''));
+        throw new RuntimeException('Push API Эвотор вернул HTTP '.$status.($detail!==''?': '.mb_substr((string)$detail,0,500):''));
     }
-    return $json;
+    return evotor_order_push_validate_response($json);
 }
 
 function evotor_order_push_dispatch_log(int $logId): bool
 {
-    $stmt=db()->prepare('SELECT l.*,c.* FROM evotor_order_push_log l JOIN evotor_connections c ON c.id=l.connection_id WHERE l.id=? LIMIT 1');
+    $stmt=db()->prepare('SELECT l.payload_json,l.connection_id,c.* FROM evotor_order_push_log l JOIN evotor_connections c ON c.id=l.connection_id WHERE l.id=? LIMIT 1');
     $stmt->execute([$logId]);$row=$stmt->fetch();if(!$row)return false;
     if(empty($row['enabled'])||empty($row['push_enabled']))return false;
     $payload=json_decode((string)$row['payload_json'],true);if(!is_array($payload))throw new RuntimeException('В очереди Эвотор сохранён некорректный payload.');
