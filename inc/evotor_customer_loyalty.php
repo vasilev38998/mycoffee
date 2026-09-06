@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__.'/customer_auth.php';
 require_once __DIR__.'/customer_loyalty.php';
 require_once __DIR__.'/customer_loyalty_card.php';
+require_once __DIR__.'/customer_drink_loyalty.php';
 
 function evotor_loyalty_terminal_token(int $connectionId,?int $expiresAt=null): string
 {
@@ -64,25 +65,26 @@ function evotor_customer_loyalty_attach_sale(PDO $pdo,array $connection,array $d
         $pdo->prepare("INSERT INTO customer_loyalty_ledger(customer_id,order_id,amount,operation_type,note) VALUES(?,NULL,?,'earn',?)")->execute([$customerId,$earned,mb_substr($note,0,255)]);
         $pdo->prepare('UPDATE customer_accounts SET loyalty_balance=loyalty_balance+? WHERE id=?')->execute([$earned,$customerId]);
     }
+    $drinkStamps=customer_drink_loyalty_credit_sale($pdo,$customerId,$saleId,$documentId);
     $pdo->prepare("UPDATE evotor_customer_scans SET status='consumed',consumed_at=NOW(),consumed_document_id=? WHERE id=?")->execute([$documentId,(int)$row['id']]);
-    return ['customer_id'=>$customerId,'scan_id'=>(int)$row['id'],'gross_amount'=>$gross,'loyalty_earned'=>$earned];
+    return ['customer_id'=>$customerId,'scan_id'=>(int)$row['id'],'gross_amount'=>$gross,'loyalty_earned'=>$earned,'drink_stamps'=>$drinkStamps];
 }
 
 function evotor_customer_loyalty_attach_synced_sales(array $connection,int $limit=100): array
 {
-    $connectionId=(int)($connection['id']??0);if($connectionId<=0)return ['processed'=>0,'linked'=>0,'earned'=>0.0];
+    $connectionId=(int)($connection['id']??0);if($connectionId<=0)return ['processed'=>0,'linked'=>0,'earned'=>0.0,'drink_stamps'=>0];
     $limit=max(1,min(500,$limit));$pdo=db();
     $stmt=$pdo->prepare("SELECT d.evotor_document_id,d.imported_sale_id,d.raw_json FROM evotor_documents d LEFT JOIN evotor_customer_sales cs ON cs.connection_id=d.connection_id AND cs.evotor_document_id=d.evotor_document_id WHERE d.connection_id=? AND d.document_type='SELL' AND d.imported_sale_id IS NOT NULL AND d.close_date>=DATE_SUB(NOW(),INTERVAL 2 DAY) AND cs.id IS NULL ORDER BY d.close_date DESC,d.id DESC LIMIT {$limit}");
-    $stmt->execute([$connectionId]);$rows=$stmt->fetchAll();$linked=0;$earned=0.0;
+    $stmt->execute([$connectionId]);$rows=$stmt->fetchAll();$linked=0;$earned=0.0;$drinkStamps=0;
     foreach($rows as $row){
         $document=json_decode((string)$row['raw_json'],true);if(!is_array($document)||empty($document['id']))continue;
         $pdo->beginTransaction();
         try{
             $result=evotor_customer_loyalty_attach_sale($pdo,$connection,$document,(int)$row['imported_sale_id']);
             $pdo->commit();
-            if($result!==null){$linked++;$earned+=(float)$result['loyalty_earned'];}
+            if($result!==null){$linked++;$earned+=(float)$result['loyalty_earned'];$drinkStamps+=(int)($result['drink_stamps']??0);}
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
     }
     $pdo->prepare("UPDATE evotor_customer_scans SET status='expired' WHERE connection_id=? AND status='pending' AND expires_at_unix<?")->execute([$connectionId,time()]);
-    return ['processed'=>count($rows),'linked'=>$linked,'earned'=>round($earned,2)];
+    return ['processed'=>count($rows),'linked'=>$linked,'earned'=>round($earned,2),'drink_stamps'=>$drinkStamps];
 }
