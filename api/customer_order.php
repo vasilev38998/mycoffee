@@ -5,6 +5,7 @@ require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_legal.php';
 require_once dirname(__DIR__).'/inc/customer_operations.php';
+require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
 
 customer_api_headers();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))==='OPTIONS'){http_response_code(204);exit;}
@@ -49,6 +50,7 @@ try{
     if(!empty($order['order_id'])){
         $read=db()->prepare('SELECT promised_at FROM online_orders WHERE id=?');$read->execute([(int)$order['order_id']]);$saved=trim((string)($read->fetchColumn()?:''));
         if($saved!==''){$order['promised_at']=$saved;$order['promised_display']=date('H:i',strtotime($saved));}
+        try{evotor_order_notify_new((int)$order['order_id']);}catch(Throwable $pushError){error_log('[Kapouch Evotor push enqueue] '.$pushError->getMessage());}
     }
     customer_api_reply(201,['ok'=>true,'order'=>$order]);
 }catch(JsonException $e){customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);}

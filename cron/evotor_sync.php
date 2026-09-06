@@ -8,6 +8,7 @@ if(!$lock||!flock($lock,LOCK_EX|LOCK_NB)){echo '['.date('c')."] Evotor sync alre
 
 require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/evotor.php';
+require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
 require_once dirname(__DIR__).'/inc/cash_register.php';
 require_once dirname(__DIR__).'/inc/cash_flow.php';
 require_once dirname(__DIR__).'/inc/automatic_expenses.php';
@@ -31,5 +32,6 @@ try{
         if($critical&&$telegram&&(int)$telegram['enabled']){$lines=[(string)app_setting('coffee_name','Kapouch').' · критичные сигналы'];foreach($critical as $a){$lines[]='';$lines[]='⚠ '.$a['title'];$lines[]=$a['message'];if($a['recommendation'])$lines[]='Что сделать: '.$a['recommendation'];}send_telegram_message(implode("\n",$lines));$ids=array_map('intval',array_column($critical,'id'));if($ids)db()->exec('UPDATE control_alerts SET last_notified_at=NOW() WHERE id IN ('.implode(',',$ids).')');echo sprintf("[%s] critical control alert sent to Telegram\n",date('c'));}
     }
 }catch(Throwable $e){$failed=true;fwrite(STDERR,sprintf("[%s] business control: %s\n",date('c'),$e->getMessage()));}
+try{$push=evotor_order_push_retry_pending(20);echo sprintf("[%s] Evotor order push retries: %d processed, %d sent\n",date('c'),$push['processed'],$push['sent']);}catch(Throwable $e){fwrite(STDERR,sprintf("[%s] Evotor order push retry: %s\n",date('c'),$e->getMessage()));}
 if(!$connections)echo "No enabled Evotor connections. Warehouse, expenses, cash flow and business control still refreshed.\n";
 flock($lock,LOCK_UN);fclose($lock);exit($failed?1:0);

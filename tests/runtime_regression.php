@@ -9,6 +9,7 @@ require_once dirname(__DIR__).'/inc/cash_flow.php';
 require_once dirname(__DIR__).'/inc/customer_push.php';
 require_once dirname(__DIR__).'/inc/customer_legal.php';
 require_once dirname(__DIR__).'/inc/customer_operations.php';
+require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
 require_once dirname(__DIR__).'/inc/audit.php';
 
 function ok(bool $condition,string $message): void{
@@ -22,11 +23,11 @@ function throws(callable $fn,string $message): void{
 
 $pdo=db();
 $status=kapouch_migration_status($pdo);
-ok((int)$status['available_version']>=31,'all migrations are visible');
+ok((int)$status['available_version']>=33,'all migrations are visible');
 ok(!$status['pending'],'no pending migrations after bootstrap');
 ok(!$status['changed'],'no applied migration checksum drift');
 
-$pdo->exec("DELETE FROM customer_push_queue; DELETE FROM customer_push_subscriptions; DELETE FROM customer_push_campaigns; DELETE FROM customer_loyalty_ledger; DELETE FROM customer_order_legal_acceptance; DELETE FROM customer_order_access; DELETE FROM customer_payments; DELETE FROM online_order_items; DELETE FROM online_orders; DELETE FROM customer_sessions; DELETE FROM customer_auth_codes; DELETE FROM customer_accounts; DELETE FROM customer_product_group_variants; DELETE FROM customer_product_groups; DELETE FROM customer_product_settings; DELETE FROM recipe_items; DELETE FROM inventory_movements; DELETE FROM products; DELETE FROM ingredients;");
+$pdo->exec("DELETE FROM customer_push_queue; DELETE FROM customer_push_subscriptions; DELETE FROM customer_push_campaigns; DELETE FROM customer_loyalty_ledger; DELETE FROM evotor_order_push_log; DELETE FROM customer_order_legal_acceptance; DELETE FROM customer_order_access; DELETE FROM customer_payments; DELETE FROM online_order_items; DELETE FROM online_orders; DELETE FROM evotor_documents; DELETE FROM evotor_products; DELETE FROM evotor_sync_log; DELETE FROM evotor_connections; DELETE FROM customer_sessions; DELETE FROM customer_auth_codes; DELETE FROM customer_accounts; DELETE FROM customer_product_group_variants; DELETE FROM customer_product_groups; DELETE FROM customer_product_settings; DELETE FROM recipe_items; DELETE FROM inventory_movements; DELETE FROM products; DELETE FROM ingredients;");
 
 $pdo->prepare("INSERT INTO products(name,category,sale_price,active) VALUES('Капучино тест','Кофе',250,1)")->execute();
 $productId=(int)$pdo->lastInsertId();
@@ -114,6 +115,36 @@ $pdo->prepare('UPDATE products SET sale_price=250 WHERE id=?')->execute([$produc
 $secondClient='runtime-second-'.bin2hex(random_bytes(6));
 $order2=customer_order_create(['client_order_id'=>$secondClient,'name'=>'Другой','phone'=>'+7 900 987-65-43','fulfillment_type'=>'pickup','payment_method'=>'cash','items'=>[['product_id'=>$productId,'quantity'=>2,'modifiers'=>[]]]],null);
 ok(abs((float)$order2['total_amount']-500.0)<0.001,'second independent checkout works');
+
+[$userCipher,$userIv,$userTag]=evotor_encrypt_token('runtime-user-token');
+$pdo->prepare('INSERT INTO evotor_connections(store_id,store_name,token_ciphertext,token_iv,token_tag,enabled) VALUES(?,?,?,?,?,1)')->execute(['runtime-store-'.bin2hex(random_bytes(4)),'Runtime Evotor',$userCipher,$userIv,$userTag]);
+$evotorConnectionId=(int)$pdo->lastInsertId();
+evotor_order_push_save($evotorConnectionId,[
+    'enabled'=>true,
+    'application_id'=>'11111111-1111-4111-8111-111111111111',
+    'device_uuid'=>'22222222-2222-4222-8222-222222222222',
+    'publisher_token'=>'runtime-publisher-token',
+]);
+$transportCalls=0;
+$GLOBALS['kapouch_evotor_push_transport']=static function(string $url,string $token,array $request) use (&$transportCalls): array{
+    $transportCalls++;
+    if(!str_contains($url,'https://api.evotor.ru/api/apps/11111111-1111-4111-8111-111111111111/devices/22222222-2222-4222-8222-222222222222/push-notifications'))throw new RuntimeException('Unexpected Evotor push URL');
+    if($token!=='runtime-publisher-token')throw new RuntimeException('Unexpected Evotor publisher token');
+    if(($request['payload']['type']??'')!=='new_order'||empty($request['active_until']))throw new RuntimeException('Unexpected Evotor push payload');
+    return ['id'=>'33333333-3333-4333-8333-333333333333','status'=>'ACCEPTED'];
+};
+$push1=evotor_order_notify_new((int)$order2['order_id']);
+$push2=evotor_order_notify_new((int)$order2['order_id']);
+ok($push1['sent']===1&&$push2['sent']===0&&$transportCalls===1,'Evotor new-order push is delivered once per order');
+$pushLogCount=(int)$pdo->query('SELECT COUNT(*) FROM evotor_order_push_log WHERE order_id='.(int)$order2['order_id'])->fetchColumn();
+ok($pushLogCount===1,'Evotor push delivery log is idempotent');
+$pdo->prepare('UPDATE evotor_connections SET push_enabled=0 WHERE id=?')->execute([$evotorConnectionId]);
+$thirdClient='runtime-third-'.bin2hex(random_bytes(6));
+$order3=customer_order_create(['client_order_id'=>$thirdClient,'name'=>'Без push','phone'=>'+7 900 111-22-33','fulfillment_type'=>'pickup','payment_method'=>'cash','items'=>[['product_id'=>$productId,'quantity'=>1,'modifiers'=>[]]]],null);
+$pushOff=evotor_order_notify_new((int)$order3['order_id']);
+ok($pushOff['queued']===0&&$transportCalls===1,'server Evotor notification toggle stops delivery');
+unset($GLOBALS['kapouch_evotor_push_transport']);
+$pdo->prepare('DELETE FROM evotor_connections WHERE id=?')->execute([$evotorConnectionId]);
 
 throws(fn()=>customer_order_create(['client_order_id'=>'bad','name'=>'X','phone'=>'+79001234567','payment_method'=>'cash','items'=>[['product_id'=>$productId,'quantity'=>1]]],null),'checkout rejects weak client order id');
 $large=customer_order_create(['client_order_id'=>'valid-id-123456','name'=>'X','phone'=>'+79001234567','payment_method'=>'cash','items'=>[['product_id'=>$productId,'quantity'=>51]]],null);

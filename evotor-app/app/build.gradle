@@ -1,0 +1,26 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ru.kapouch.evotor'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'ru.kapouch.evotor'
+        minSdk 21
+        targetSdk 30
+        versionCode 1
+        versionName '1.0.0'
+        manifestPlaceholders = [evotorAppUuid: project.findProperty('EVOTOR_APP_UUID') ?: '00000000-0000-0000-0000-000000000000']
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation 'com.github.evotor:push-notifications:v0.2.1'
+}
