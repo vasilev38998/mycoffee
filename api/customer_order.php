@@ -16,7 +16,12 @@ try{
     $ipLimit=kapouch_rate_limit_hit('customer_order_ip',kapouch_client_ip(),25,600);
     if(!$ipLimit['allowed']){header('Retry-After: '.(int)$ipLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много попыток оформления. Подождите немного и повторите.']);}
     $data=customer_api_json();
-    if(array_key_exists('phone',$data))$data['phone']=customer_phone_canonical_ru((string)$data['phone']);
+    $customer=customer_auth_current();
+    if(!$customer)customer_api_reply(401,['ok'=>false,'error'=>'Чтобы оформить заказ, сначала войдите в профиль по номеру телефона.']);
+    $profilePhone=customer_phone_canonical_ru((string)($customer['phone']??''));
+    if(!hash_equals($profilePhone,(string)($customer['phone']??'')))customer_api_reply(401,['ok'=>false,'error'=>'Номер профиля требует обновления. Выйдите из аккаунта и войдите снова.']);
+    $data['phone']=$profilePhone;
+    if(trim((string)($data['name']??''))===''&&trim((string)($customer['name']??''))!=='')$data['name']=(string)$customer['name'];
     $clientOrderId=trim((string)($data['client_order_id']??''));
     $externalId=$clientOrderId!==''?'customer-web-'.$clientOrderId:'';
     $existingId=0;
@@ -28,7 +33,6 @@ try{
     if(!array_key_exists('pickup_delay_minutes',$data)&&preg_match('/\[\[pickup:(\d{1,3})\]\]/',$comment,$m))$delay=(int)$m[1];
     if(preg_match('/\[\[pickup:\d{1,3}\]\]/',$comment))$data['comment']=trim(preg_replace('/\s*\[\[pickup:\d{1,3}\]\]\s*/',' ',$comment)??$comment);
     if($delay<0||$delay>720)throw new RuntimeException('Выберите доступное время получения.');
-    $customer=customer_auth_current();
 
     if($existingId>0){
         $order=customer_order_create($data,$customer);
