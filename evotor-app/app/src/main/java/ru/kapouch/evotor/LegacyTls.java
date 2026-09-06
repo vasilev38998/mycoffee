@@ -32,12 +32,12 @@ final class LegacyTls {
     private static final int MAX_CHAIN_LENGTH = 8;
     private static final int MAX_ISSUER_BYTES = 64 * 1024;
 
-    // Official self-signed ISRG Root X1 remains the only additional trust anchor.
-    // Old Evotor Android builds sometimes fail when a server omits one of the Let's
-    // Encrypt intermediates. In that case we complete only the missing Let's Encrypt
-    // chain from its signed AIA issuer URLs, verify every signature, and then hand the
-    // completed chain back to the normal PKIX validator. Hostname verification is never
-    // disabled and the order request itself always remains HTTPS.
+    // Old Evotor Android builds predate the current Let's Encrypt hierarchy. The platform
+    // trust manager is always tried first. The compatibility fallback trusts only official
+    // ISRG/Let's Encrypt roots and, when needed, completes missing issuers from restricted
+    // *.i.lencr.org AIA URLs. Every downloaded issuer is signature-checked before the
+    // completed chain is handed to the normal PKIX validator. Hostname verification stays
+    // the HttpsURLConnection platform default and the order request itself remains HTTPS.
     private static final String ISRG_ROOT_X1 =
             "-----BEGIN CERTIFICATE-----\n" +
             "MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw\n" +
@@ -71,6 +71,68 @@ final class LegacyTls {
             "emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=\n" +
             "-----END CERTIFICATE-----\n";
 
+    private static final String ISRG_ROOT_X2 =
+            "-----BEGIN CERTIFICATE-----\n" +
+            "MIICGzCCAaGgAwIBAgIQQdKd0XLq7qeAwSxs6S+HUjAKBggqhkjOPQQDAzBPMQsw\n" +
+            "CQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJuZXQgU2VjdXJpdHkgUmVzZWFyY2gg\n" +
+            "R3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBYMjAeFw0yMDA5MDQwMDAwMDBaFw00\n" +
+            "MDA5MTcxNjAwMDBaME8xCzAJBgNVBAYTAlVTMSkwJwYDVQQKEyBJbnRlcm5ldCBT\n" +
+            "ZWN1cml0eSBSZXNlYXJjaCBHcm91cDEVMBMGA1UEAxMMSVNSRyBSb290IFgyMHYw\n" +
+            "EAYHKoZIzj0CAQYFK4EEACIDYgAEzZvVn4CDCuwJSvMWSj5cz3es3mcFDR0HttwW\n" +
+            "+1qLFNvicWDEukWVEYmO6gbf9yoWHKS5xcUy4APgHoIYOIvXRdgKam7mAHf7AlF9\n" +
+            "ItgKbppbd9/w+kHsOdx1ymgHDB/qo0IwQDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0T\n" +
+            "AQH/BAUwAwEB/zAdBgNVHQ4EFgQUfEKWrt5LSDv6kviejM9ti6lyN5UwCgYIKoZI\n" +
+            "zj0EAwMDaAAwZQIwe3lORlCEwkSHRhtFcP9Ymd70/aTSVaYgLXTWNLxBo1BfASdW\n" +
+            "tL4ndQavEi51mI38AjEAi/V3bNTIZargCyzuFJ0nN6T5U6VR5CmD1/iQMVtCnwr1\n" +
+            "/q4AaOeMSQ+2b1tbFfLn\n" +
+            "-----END CERTIFICATE-----\n";
+
+    private static final String ROOT_YE =
+            "-----BEGIN CERTIFICATE-----\n" +
+            "MIIB2TCCAWCgAwIBAgIRAKQCa6LvbHwg1AR+XmWmk4AwCgYIKoZIzj0EAwMwLjEL\n" +
+            "MAkGA1UEBhMCVVMxDTALBgNVBAoTBElTUkcxEDAOBgNVBAMTB1Jvb3QgWUUwHhcN\n" +
+            "MjUwOTAzMDAwMDAwWhcNNDUwOTAyMjM1OTU5WjAuMQswCQYDVQQGEwJVUzENMAsG\n" +
+            "A1UEChMESVNSRzEQMA4GA1UEAxMHUm9vdCBZRTB2MBAGByqGSM49AgEGBSuBBAAi\n" +
+            "A2IABDwS/6vhrcVqcbBo+wgdI3fwn9x7DNJJOY/lTOti0vkwuRN87RhEhTH17E7X\n" +
+            "yFjWsPYhIPt/wzOqxTd2b+4ZJNy9ID04YywF9U5zasDVyGSNErVNtz8uSGh5izW8\n" +
+            "7j77GaNCMEAwDgYDVR0PAQH/BAQDAgEGMA8GA1UdEwEB/wQFMAMBAf8wHQYDVR0O\n" +
+            "BBYEFKPIJlqOoUzQNWP8myPIOq5W809WMAoGCCqGSM49BAMDA2cAMGQCMHhMr8N9\n" +
+            "LdL1VQKs9BdV81r76eXRB6mtjuNjzk6/lBsPNToWLTDzGYgtQKO1jl63uAIwGV7m\n" +
+            "onyF377c+MM1oqVNs17sgu7F9YKZwgLmVbeOMDbKAXHtKMDLbiGllCcs8f47\n" +
+            "-----END CERTIFICATE-----\n";
+
+    private static final String ROOT_YR =
+            "-----BEGIN CERTIFICATE-----\n" +
+            "MIIFKTCCAxGgAwIBAgIRAOxGNJNgz0sP+KmC2Tqpyj0wDQYJKoZIhvcNAQELBQAw\n" +
+            "LjELMAkGA1UEBhMCVVMxDTALBgNVBAoTBElTUkcxEDAOBgNVBAMTB1Jvb3QgWVIw\n" +
+            "HhcNMjUwOTAzMDAwMDAwWhcNNDUwOTAyMjM1OTU5WjAuMQswCQYDVQQGEwJVUzEN\n" +
+            "MAsGA1UEChMESVNSRzEQMA4GA1UEAxMHUm9vdCBZUjCCAiIwDQYJKoZIhvcNAQEB\n" +
+            "BQADggIPADCCAgoCggIBANvGJnN78CTJdWL3+eGfsLN5TrNBJs+VH9hRXqRbwxu9\n" +
+            "sGNiB0BD1fcOxbSUQCJIM1xE13Db+5Cw1w0s0EBYsvuIP/6joF0w8cuImbgR1OGg\n" +
+            "YbSQ4OpzI+DG8SGuTlcE873OCS+kh3srlo6vl43M5OJg4Aeo1sfHp6kTJDoIiFBN\n" +
+            "JAY+OKfX/FUvYKuhjT+no49lmqmupSBI5PkBQiqrEGtWU5uxU/cQWHGu8jSjFBzn\n" +
+            "ZqvbNPLMXMLFxCb3WTfrJBXXjqvWG+v4bjzxjjeAtOlU7qarRDvNOyAuQYLln904\n" +
+            "M+faKx8hnLCpJ15ZqaEgcNlY+9MMWcC5yvL2A2j3l9+2buggZX+dOE91zYmIdawT\n" +
+            "vSZuVvlbRrAlLxIB6pwMBjneXCjYQ8+3BCCjssbSNpZU3hTcBDdhfAlEDlYr6pEa\n" +
+            "tnMdmDT5BqnKC92bd0EhM1fbLHioLccLCuievT8ZkPhZrq7Mii7gNXAcUEAR8+lz\n" +
+            "Yal+9zTg7C5DALyVOeG/CqfRAMn1KSHCR0NSA6P8tn/mGRlnCct5rtVCLnVySVpU\n" +
+            "6H1qGg3DgTOuskf8eahTMiYbI5ezPJmO5ertalskQ1utp74+eDy92PI4ftHKTbq9\n" +
+            "IWhH4YZKh3WnJEIt+oQvlYZbY8tpEroKrFB6PFGzrJIDRyts4HqvuH52RFj2zv/B\n" +
+            "AgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNVHRMBAf8EBTADAQH/MB0GA1Ud\n" +
+            "DgQWBBTe51tg0CJtQCh9Pw0B/qS1UrRRlDANBgkqhkiG9w0BAQsFAAOCAgEAWHnf\n" +
+            "713Bdkq7t5yN2dNIgQakUb94X9WuyhMEHHkgx4oDpSUlnG0w4g94MoqaEUE31ZjR\n" +
+            "LU7L5LD1g9ujFHTQu8AD215AHMVQFbm6j8hQxdXHAzDajFNQnOlDJrLjzIx176oy\n" +
+            "AjvUtejZx2NNmdb5fd0WGVGsCdoAJ3N8ozo7ajE8t6vfxStZb4BQ9WYJGHUDrv2N\n" +
+            "i5tJF6CNiPnlzs3BUfECRbE4JSk+jvy8+VoGiFE8qsH/j78x2fjgQhAQFV7P7Zxy\n" +
+            "dBTZ1wEkNpZNW2qnaK1SKBLa+xf6E06YRIq5uaI+HWH8SY1y5VbRgzq40EKg3yxP\n" +
+            "06fz+uYAUIFJoLNfhwRCc3Q6pQVuMX3yAjHAes4gk4moGcLQ5p7HAh39yeylZc1J\n" +
+            "41sx/jKwLIkPE6Rr1Nf4pxdsxf9SA4yOEiAkDgq04DVxn8hgYFdUtBCuiuVC2heA\n" +
+            "EiqVEa+8QZjuw8Gj0EbHXcRd1nInvGqRS1o9Is7YBdQN57X1AYveGBNNqjICSb7c\n" +
+            "awuw1EawTDrs13VUlJVEsbQ0/O/1aaV73mCdOQ8azqL2KTv1Ewu1xbquE2S+kdQU\n" +
+            "To9TUwat3wUA6cwXh1EfpS/3fJ0aGah5hdpRyoCLDlsSn8tkrjMfFFX0viC+GxHc\n" +
+            "sI1ANRYvqSFC2X1VRZfDg+wD6E21BccmifG4yWc=\n" +
+            "-----END CERTIFICATE-----\n";
+
     private LegacyTls() {}
 
     static SSLSocketFactory socketFactory() throws Exception {
@@ -80,14 +142,12 @@ final class LegacyTls {
             if (cachedFactory != null) return cachedFactory;
 
             X509TrustManager system = trustManager(null);
-
-            CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-            X509Certificate root = (X509Certificate) certificateFactory.generateCertificate(
-                    new ByteArrayInputStream(ISRG_ROOT_X1.getBytes(StandardCharsets.US_ASCII))
-            );
             KeyStore extraStore = KeyStore.getInstance(KeyStore.getDefaultType());
             extraStore.load(null, null);
-            extraStore.setCertificateEntry("isrg-root-x1", root);
+            addCertificate(extraStore, "isrg-root-x1", ISRG_ROOT_X1);
+            addCertificate(extraStore, "isrg-root-x2", ISRG_ROOT_X2);
+            addCertificate(extraStore, "isrg-root-ye", ROOT_YE);
+            addCertificate(extraStore, "isrg-root-yr", ROOT_YR);
             X509TrustManager extra = trustManager(extraStore);
 
             X509TrustManager combined = new CombinedTrustManager(system, extra);
@@ -96,6 +156,15 @@ final class LegacyTls {
             cachedFactory = context.getSocketFactory();
             return cachedFactory;
         }
+    }
+
+    private static void addCertificate(KeyStore store, String alias, String pem) throws Exception {
+        CertificateFactory factory = CertificateFactory.getInstance("X.509");
+        X509Certificate certificate = (X509Certificate) factory.generateCertificate(
+                new ByteArrayInputStream(pem.getBytes(StandardCharsets.US_ASCII))
+        );
+        certificate.checkValidity();
+        store.setCertificateEntry(alias, certificate);
     }
 
     private static X509TrustManager trustManager(KeyStore store) throws Exception {
@@ -165,7 +234,7 @@ final class LegacyTls {
             connection.setReadTimeout(2500);
             connection.setInstanceFollowRedirects(false);
             connection.setUseCaches(true);
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.1.2 certificate-chain-helper");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.1 certificate-chain-helper");
             int status = connection.getResponseCode();
             if (status != HttpURLConnection.HTTP_OK) return null;
 
@@ -259,6 +328,17 @@ final class LegacyTls {
         return certificate.getSubjectX500Principal().getName() + "#" + certificate.getSerialNumber().toString(16);
     }
 
+    private static String chainSummary(X509Certificate[] chain) {
+        if (chain == null || chain.length == 0) return "empty";
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < chain.length; i++) {
+            if (i > 0) result.append(" -> ");
+            X509Certificate certificate = chain[i];
+            result.append(certificate.getSubjectX500Principal().getName());
+        }
+        return result.toString();
+    }
+
     private static final class CombinedTrustManager implements X509TrustManager {
         private final X509TrustManager system;
         private final X509TrustManager extra;
@@ -275,11 +355,25 @@ final class LegacyTls {
 
         @Override
         public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+            Throwable systemError = null;
             try {
                 system.checkServerTrusted(chain, authType);
-            } catch (CertificateException systemError) {
-                X509Certificate[] completed = completeLetsEncryptChain(chain);
+                return;
+            } catch (CertificateException | RuntimeException error) {
+                systemError = error;
+            }
+
+            X509Certificate[] completed = chain;
+            try {
+                completed = completeLetsEncryptChain(chain);
                 extra.checkServerTrusted(completed, authType);
+            } catch (CertificateException | RuntimeException fallbackError) {
+                CertificateException error = new CertificateException(
+                        "TLS chain not trusted. received=" + chainSummary(chain) + "; completed=" + chainSummary(completed),
+                        fallbackError
+                );
+                if (systemError != null) error.addSuppressed(systemError);
+                throw error;
             }
         }
 
