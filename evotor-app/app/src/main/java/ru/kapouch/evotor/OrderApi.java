@@ -10,6 +10,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
+import javax.net.ssl.HttpsURLConnection;
+
 final class OrderApi {
     private OrderApi() {}
 
@@ -24,6 +26,11 @@ final class OrderApi {
             URL url = new URL(order.actionUrl);
             if (!"https".equalsIgnoreCase(url.getProtocol())) return Result.error("Разрешены только HTTPS-запросы к Kapouch.");
             connection = (HttpURLConnection) url.openConnection();
+            if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен только по HTTPS.");
+            HttpsURLConnection secure = (HttpsURLConnection) connection;
+            secure.setSSLSocketFactory(LegacyTls.socketFactory());
+            // HostnameVerifier deliberately stays the platform default: we add one trusted CA,
+            // but never disable hostname or certificate verification.
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(7000);
             connection.setReadTimeout(10000);
@@ -33,7 +40,7 @@ final class OrderApi {
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Authorization", "Bearer " + order.actionToken);
             connection.setRequestProperty("X-Kapouch-Order-Token", order.actionToken);
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.1");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.1.1");
 
             JSONObject body = new JSONObject();
             body.put("action", action);
