@@ -134,9 +134,15 @@ jobs:
           curl -fsS "http://127.0.0.1:8080/api_online_orders.php?external_id=$external" -H "X-Kapouch-Token: $api_token" >/tmp/ext-get.json
           php -r '$d=json_decode(file_get_contents("/tmp/ext-get.json"),true); if(empty($d["ok"])||empty($d["order"]["id"])&&empty($d["order"]["external_id"])) exit(1);'
 
+          curl -fsS http://127.0.0.1:8080/api/customer_legal.php >/tmp/legal.json
+          php -r '$d=json_decode(file_get_contents("/tmp/legal.json"),true); if(empty($d["ok"])||!isset($d["legal"]["offer"]["text"])||!isset($d["legal"]["seller"]["inn"])) exit(1);'
+          curl -fsS http://127.0.0.1:8080/customer/legal.html >/tmp/legal.html
+          grep -q 'Публичная оферта' /tmp/legal.html
+
           curl -fsS http://127.0.0.1:8080/customer/ >/tmp/pwa.html
           grep -q 'checkoutForm' /tmp/pwa.html
-          curl -fsS http://127.0.0.1:8080/customer/sw.js | grep -q 'kapouch-pwa-v22'
+          grep -q 'legalConsent' /tmp/pwa.html
+          curl -fsS http://127.0.0.1:8080/customer/sw.js | grep -q 'kapouch-pwa-v23'
 
       - name: Owner admin routes smoke
         run: |
