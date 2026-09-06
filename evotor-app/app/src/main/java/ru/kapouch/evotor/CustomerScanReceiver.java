@@ -14,6 +14,9 @@ public class CustomerScanReceiver extends BroadcastReceiver {
     static final String ACTION_SCANNED = "ru.evotor.devices.ScannedCode";
     static final String EXTRA_SCANNED_CODE = "ScannedCode";
     static final String KAPOUCH_PREFIX = "KAPOUCH:LOYALTY:";
+    private static final String KEY_ACTIVE_CUSTOMER_NAME = "active_customer_name";
+    private static final String KEY_ACTIVE_CUSTOMER_BALANCE = "active_customer_balance";
+    private static final String KEY_ACTIVE_CUSTOMER_AT = "active_customer_at";
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -31,9 +34,9 @@ public class CustomerScanReceiver extends BroadcastReceiver {
                     String balance = new DecimalFormat("0.##").format(result.balance);
                     message = result.name + " · " + balance + " ★" + (result.linked ? " · клиент определён" : "");
                     prefs.edit()
-                            .putString(MainActivity.KEY_ACTIVE_CUSTOMER_NAME, result.name)
-                            .putString(MainActivity.KEY_ACTIVE_CUSTOMER_BALANCE, balance)
-                            .putLong(MainActivity.KEY_ACTIVE_CUSTOMER_AT, System.currentTimeMillis())
+                            .putString(KEY_ACTIVE_CUSTOMER_NAME, result.name)
+                            .putString(KEY_ACTIVE_CUSTOMER_BALANCE, balance)
+                            .putLong(KEY_ACTIVE_CUSTOMER_AT, System.currentTimeMillis())
                             .putString(MainActivity.KEY_LAST_TITLE, "Клиент Kapouch определён")
                             .putString(MainActivity.KEY_LAST_DESCRIPTION, message)
                             .putLong(MainActivity.KEY_LAST_AT, System.currentTimeMillis())
