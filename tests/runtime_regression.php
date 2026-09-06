@@ -8,6 +8,7 @@ require_once dirname(__DIR__).'/inc/inventory.php';
 require_once dirname(__DIR__).'/inc/cash_flow.php';
 require_once dirname(__DIR__).'/inc/customer_push.php';
 require_once dirname(__DIR__).'/inc/customer_legal.php';
+require_once dirname(__DIR__).'/inc/customer_operations.php';
 require_once dirname(__DIR__).'/inc/audit.php';
 
 function ok(bool $condition,string $message): void{
@@ -25,7 +26,7 @@ ok((int)$status['available_version']>=31,'all migrations are visible');
 ok(!$status['pending'],'no pending migrations after bootstrap');
 ok(!$status['changed'],'no applied migration checksum drift');
 
-$pdo->exec("DELETE FROM customer_push_queue; DELETE FROM customer_push_subscriptions; DELETE FROM customer_push_campaigns; DELETE FROM customer_loyalty_ledger; DELETE FROM customer_order_access; DELETE FROM customer_payments; DELETE FROM online_order_items; DELETE FROM online_orders; DELETE FROM customer_sessions; DELETE FROM customer_auth_codes; DELETE FROM customer_accounts; DELETE FROM customer_product_group_variants; DELETE FROM customer_product_groups; DELETE FROM customer_product_settings; DELETE FROM recipe_items; DELETE FROM inventory_movements; DELETE FROM products; DELETE FROM ingredients;");
+$pdo->exec("DELETE FROM customer_push_queue; DELETE FROM customer_push_subscriptions; DELETE FROM customer_push_campaigns; DELETE FROM customer_loyalty_ledger; DELETE FROM customer_order_legal_acceptance; DELETE FROM customer_order_access; DELETE FROM customer_payments; DELETE FROM online_order_items; DELETE FROM online_orders; DELETE FROM customer_sessions; DELETE FROM customer_auth_codes; DELETE FROM customer_accounts; DELETE FROM customer_product_group_variants; DELETE FROM customer_product_groups; DELETE FROM customer_product_settings; DELETE FROM recipe_items; DELETE FROM inventory_movements; DELETE FROM products; DELETE FROM ingredients;");
 
 $pdo->prepare("INSERT INTO products(name,category,sale_price,active) VALUES('Капучино тест','Кофе',250,1)")->execute();
 $productId=(int)$pdo->lastInsertId();
@@ -88,6 +89,26 @@ $legal=customer_legal_public_data();
 ok($legal['configured']===true,'legal page becomes configured after all IP requisites are saved');
 ok(str_contains((string)$legal['offer']['text'],'Индивидуальный предприниматель Тестов'),'default public offer contains seller identity');
 ok(str_contains((string)$legal['offer']['text'],'Тестовое дополнительное условие'),'default public offer includes configured extra terms');
+
+customer_operations_save([
+    'accepting'=>1,'schedule_enabled'=>1,'prep_minutes'=>15,'slot_interval'=>15,'slot_capacity'=>1,'last_order_minutes'=>15,'horizon_hours'=>4,
+    'day_1_enabled'=>1,'day_1_open'=>'08:00','day_1_close'=>'10:00',
+    'day_2_enabled'=>1,'day_2_open'=>'08:00','day_2_close'=>'10:00',
+    'day_3_enabled'=>1,'day_3_open'=>'08:00','day_3_close'=>'10:00',
+    'day_4_enabled'=>1,'day_4_open'=>'08:00','day_4_close'=>'10:00',
+    'day_5_enabled'=>1,'day_5_open'=>'08:00','day_5_close'=>'10:00',
+    'day_6_enabled'=>1,'day_6_open'=>'08:00','day_6_close'=>'10:00',
+    'day_7_enabled'=>1,'day_7_open'=>'08:00','day_7_close'=>'10:00',
+]);
+$monday=new DateTimeImmutable('2026-09-07 07:00:00',new DateTimeZone(app_timezone()));$state=customer_operations_slots($monday);
+ok($state['accepting']===true&&($state['slots'][0]['label']??'')==='Сегодня 08:00','working hours open first real slot at opening time');
+$late=customer_operations_slots(new DateTimeImmutable('2026-09-07 09:50:00',new DateTimeZone(app_timezone())));
+ok($late['accepting']===false,'last-order cutoff closes same-day slots before closing');
+set_app_setting('customer_order_schedule_enabled','0');set_app_setting('customer_order_prep_minutes','15');set_app_setting('customer_order_slot_interval','15');set_app_setting('customer_order_slot_capacity','1');set_app_setting('customer_order_horizon_hours','2');set_app_setting('customer_orders_accepting','1');
+$live=customer_operations_slots();ok($live['accepting']===true&&!empty($live['slots']),'unscheduled mode exposes rolling pickup slots');$firstSlot=(string)$live['slots'][0]['value'];
+$pdo->prepare("INSERT INTO online_orders(external_id,order_number,source,status,fulfillment_type,total_amount,promised_at) VALUES(?,?,?,'new','pickup',100,?)")->execute(['capacity-test-'.bin2hex(random_bytes(5)),'CAP-1','runtime',$firstSlot]);
+$afterCapacity=customer_operations_slots();ok(!in_array($firstSlot,array_column($afterCapacity['slots'],'value'),true),'full pickup slot is removed when capacity is reached');
+set_app_setting('customer_orders_accepting','0');set_app_setting('customer_orders_pause_reason','Высокая загрузка');$paused=customer_operations_slots();ok($paused['accepting']===false&&$paused['message']==='Высокая загрузка','manual pause blocks new slots with customer message');set_app_setting('customer_orders_accepting','1');set_app_setting('customer_orders_pause_reason','');
 
 $pdo->prepare('UPDATE products SET sale_price=250 WHERE id=?')->execute([$productId]);
 $secondClient='runtime-second-'.bin2hex(random_bytes(6));
