@@ -24,6 +24,7 @@ try{
     }
     $customerId=(int)$customer['id'];
     customer_loyalty_refresh_customer($customerId);
+    customer_drink_loyalty_refresh_customer($customerId);
     $profile=customer_auth_profile($customer);
     $stmt=db()->prepare('SELECT email,name FROM customer_accounts WHERE id=? LIMIT 1');$stmt->execute([$customerId]);$account=$stmt->fetch()?:[];
     $profile['customer']['email']=trim((string)($account['email']??''));
