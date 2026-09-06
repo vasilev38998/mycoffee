@@ -13,6 +13,11 @@ window.addEventListener('DOMContentLoaded',function(){
   compact.defer=true;
   document.body.appendChild(compact);
 
+  var statusOnce=document.createElement('script');
+  statusOnce.src='assets/status-once.js?v=1';
+  statusOnce.defer=true;
+  document.body.appendChild(statusOnce);
+
   var qr=document.createElement('script');
   qr.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
   qr.integrity='sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==';
@@ -20,7 +25,7 @@ window.addEventListener('DOMContentLoaded',function(){
   qr.referrerPolicy='no-referrer';
   var loadCard=function(){
     if(document.querySelector('script[data-kapouch-loyalty-card]'))return;
-    var card=document.createElement('script');card.src='assets/loyalty-card.js?v=3';card.defer=true;card.dataset.kapouchLoyaltyCard='1';document.body.appendChild(card);
+    var card=document.createElement('script');card.src='assets/loyalty-card.js?v=4';card.defer=true;card.dataset.kapouchLoyaltyCard='1';document.body.appendChild(card);
   };
   qr.onload=loadCard;qr.onerror=loadCard;document.body.appendChild(qr);
 });

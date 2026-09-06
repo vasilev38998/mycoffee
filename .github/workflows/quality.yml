@@ -33,6 +33,9 @@ jobs:
       - name: Public legal footer contract
         run: php tests/legal_public_contract.php
 
+      - name: PWA profile UX contract
+        run: php tests/pwa_profile_ux_contract.php
+
       - name: PWA payment return contract
         run: |
           set -euo pipefail
