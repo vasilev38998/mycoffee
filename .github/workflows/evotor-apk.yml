@@ -18,7 +18,7 @@ on:
         default: 'bc17ef43-f590-49ca-a6f2-e940f57d0a72'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -26,8 +26,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
 
       - uses: actions/setup-java@v4
         with:
@@ -80,21 +78,6 @@ jobs:
           grep -q 'isrg-root-x1' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch-order-sound' /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch-Orders-Evotor/1.1.1' /tmp/evotor-dex-strings.txt
-
-      - name: Commit APK 1.1.1 to PR branch
-        if: github.event_name == 'pull_request' && github.head_ref == 'fix/evotor-legacy-tls-sound'
-        run: |
-          mkdir -p evotor-app/releases
-          cp evotor-app/app/build/outputs/apk/debug/app-debug.apk evotor-app/releases/kapouch-orders-evotor-compatible-v1.1.1.apk
-          git add evotor-app/releases/kapouch-orders-evotor-compatible-v1.1.1.apk
-          if git diff --cached --quiet; then
-            echo 'APK already committed'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'build: add Kapouch Orders Evotor APK 1.1.1'
-          git push origin HEAD:${GITHUB_HEAD_REF}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
