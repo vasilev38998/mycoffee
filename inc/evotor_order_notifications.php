@@ -34,8 +34,7 @@ function evotor_order_push_valid_device(string $value): bool
 
 function evotor_order_push_ready(array $connection): bool
 {
-    return !empty($connection['push_enabled'])
-        && evotor_order_push_valid_uuid(trim((string)($connection['push_application_id']??'')))
+    return evotor_order_push_valid_uuid(trim((string)($connection['push_application_id']??'')))
         && evotor_order_push_valid_device(trim((string)($connection['push_device_uuid']??'')))
         && !empty($connection['push_token_ciphertext'])
         && !empty($connection['push_token_iv'])
@@ -169,7 +168,7 @@ function evotor_order_notify_new(int $orderId): array
 function evotor_order_push_test(int $connectionId): array
 {
     $connection=evotor_order_push_connection($connectionId);if(!$connection)throw new RuntimeException('Подключение Эвотор не найдено.');
-    if(!evotor_order_push_ready(array_merge($connection,['push_enabled'=>1])))throw new RuntimeException('Сначала сохраните Application ID, устройство и ключ издателя.');
+    if(!evotor_order_push_ready($connection))throw new RuntimeException('Сначала сохраните Application ID, устройство и ключ издателя.');
     return evotor_order_push_http($connection,[
         'type'=>'test','order_id'=>'0','order_number'=>'TEST','title'=>'Kapouch · тест уведомления',
         'description'=>'Если вы видите это сообщение на Эвоторе, push-уведомления настроены правильно.','amount'=>'0.00','pickup_time'=>date('H:i'),'items_count'=>'0',
