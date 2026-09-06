@@ -3,6 +3,7 @@
     package="ru.kapouch.evotor">
 
     <uses-permission android:name="ru.evotor.pushnotifications.PUSH_RECEIVE" />
+    <uses-permission android:name="ru.evotor.devices.SCANNER_RECEIVER" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" />
 
@@ -36,6 +37,16 @@
             android:permission="ru.evotor.pushnotifications.PUSH_SENDER">
             <intent-filter>
                 <action android:name="ru.evotor.pushnotifications.PUSH_RECEIVED_EVENT" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".CustomerScanReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="ru.evotor.devices.SCANNER_SENDER">
+            <intent-filter>
+                <action android:name="ru.evotor.devices.ScannedCode" />
             </intent-filter>
         </receiver>
 
