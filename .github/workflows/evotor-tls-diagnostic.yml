@@ -41,7 +41,7 @@ jobs:
       - name: Exercise LegacyTls fallback with an empty JVM trust store
         run: |
           set -euo pipefail
-          mkdir -p /tmp/legacy-test/ru/kapouch/evotor
+          mkdir -p /tmp/legacy-test/ru/kapouch/evotor /tmp/legacy-classes
           cp evotor-app/app/src/main/java/ru/kapouch/evotor/LegacyTls.java /tmp/legacy-test/ru/kapouch/evotor/
           cat > /tmp/legacy-test/ru/kapouch/evotor/LegacyTlsProbe.java <<'JAVA'
           package ru.kapouch.evotor;
