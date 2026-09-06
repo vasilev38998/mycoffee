@@ -30,7 +30,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
             else{$stmt=db()->prepare('INSERT INTO customer_categories(name,slug,icon,sort_order,active) VALUES(?,?,?,?,?)');$stmt->execute([$name,$slug,$icon,$sort,$active]);}
             audit_write('customer_category_saved','Категория клиентского меню: '.$name);flash('success','Категория сохранена.');
         }elseif($action==='products'){
-            $products=db()->query('SELECT id FROM products')->fetchAll();$stmt=db()->prepare('INSERT INTO customer_product_settings(product_id,category_id,description,badge,featured,visible,sort_order) VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE category_id=VALUES(category_id),description=VALUES(description),badge=VALUES(badge),featured=VALUES(visible),visible=VALUES(visible),sort_order=VALUES(sort_order)');
+            $products=db()->query('SELECT id FROM products')->fetchAll();$stmt=db()->prepare('INSERT INTO customer_product_settings(product_id,category_id,description,badge,featured,visible,sort_order) VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE category_id=VALUES(category_id),description=VALUES(description),badge=VALUES(badge),featured=VALUES(featured),visible=VALUES(visible),sort_order=VALUES(sort_order)');
             foreach($products as $p){$id=(int)$p['id'];$cat=(int)($_POST['category'][$id]??0);$stmt->execute([$id,$cat>0?$cat:null,mb_substr(trim((string)($_POST['description'][$id]??'')),0,600)?:null,mb_substr(trim((string)($_POST['badge'][$id]??'')),0,80)?:null,isset($_POST['featured'][$id])?1:0,isset($_POST['visible'][$id])?1:0,(int)($_POST['sort'][$id]??100)]);}
             audit_write('customer_products_updated','Обновлено клиентское меню PWA');flash('success','Настройки товаров клиентского меню сохранены.');
         }
@@ -60,7 +60,7 @@ page_header('Клиентское PWA');
 
 <div class="card section" id="design"><div class="chart-head"><div><h2>Бренд и внешний вид</h2><p>Тексты, цвета, адрес самовывоза и внешние ссылки.</p></div></div><form method="post" class="form-grid"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="design">
 <label>Название приложения<input name="customer_app_name" value="<?=e($s['app_name'])?>"></label><label>Слоган<input name="customer_app_tagline" value="<?=e($s['tagline'])?>"></label>
-<label>Заголовок главного экрана<input name="customer_hero_title" value="<?=e($s['hero_title'])?>"></label><label>Текст главного экрана<input name="customer_hero_text" value="<?=e($s['hero_text'])?></textarea></label>
+<label>Заголовок главного экрана<input name="customer_hero_title" value="<?=e($s['hero_title'])?>"></label><label>Текст главного экрана<input name="customer_hero_text" value="<?=e($s['hero_text'])?>"></label>
 <label>Заголовок «О нас»<input name="customer_about_title" value="<?=e($s['about_title'])?>"></label><label>Текст «О нас»<textarea name="customer_about_text"><?=e($s['about_text'])?></textarea></label>
 <label>Точка самовывоза<input name="customer_pickup_label" value="<?=e($s['pickup_label'])?>"></label><label>Телефон поддержки<input name="customer_support_phone" value="<?=e($s['support_phone'])?>"></label>
 <label>Сайт<input type="url" name="customer_website_url" value="<?=e($s['website_url'])?>" placeholder="https://..."></label><label>Telegram<input type="url" name="customer_telegram_url" value="<?=e($s['telegram_url'])?>" placeholder="https://t.me/..."></label><label>VK<input type="url" name="customer_vk_url" value="<?=e($s['vk_url'])?>" placeholder="https://vk.com/..."></label>
