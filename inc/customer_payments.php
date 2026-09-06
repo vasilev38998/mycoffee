@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require_once __DIR__.'/evotor.php';
+require_once __DIR__.'/customer_urls.php';
+require_once __DIR__.'/customer_drink_loyalty.php';
 
 function customer_payment_methods(): array
 {
@@ -95,7 +97,7 @@ function customer_payment_yookassa_receipt(int $orderId,string $email,float $tot
 {
     if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new RuntimeException('Для оплаты по СБП укажите корректную электронную почту в профиле Kapouch.');
     $stmt=db()->prepare('SELECT product_name,variant_name,quantity,unit_price FROM online_order_items WHERE order_id=? ORDER BY sort_order,id');
-    $stmt->execute([$orderId]);$rows=$stmt->fetchAll();if(!$rows)throw new RuntimeException('Заказ пуст — не удалось сформировать чек.');
+    $stmt->execute([$orderId]);$rows=array_values(array_filter($stmt->fetchAll(),static fn(array $row): bool=>(float)$row['unit_price']>0));if(!$rows)throw new RuntimeException('В заказе нет позиций к оплате.');
     $items=[];$sum=0.0;$last=count($rows)-1;
     foreach($rows as $index=>$row){
         $qty=(float)$row['quantity'];if($qty<=0)throw new RuntimeException('Некорректное количество позиции в чеке.');
@@ -118,7 +120,7 @@ function customer_payment_create_sbp(int $orderId,string $orderNumber,float $amo
     $connection=customer_payment_connection('yookassa_sbp');if(!$connection||empty($connection['enabled']))throw new RuntimeException('Оплата по СБП сейчас недоступна.');
     if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new RuntimeException('Для оплаты по СБП укажите электронную почту в профиле Kapouch.');
     $amount=round($amount,2);if($amount<1)throw new RuntimeException('Минимальная сумма оплаты по СБП — 1 ₽.');
-    $returnUrl=customer_payment_public_url('customer/payment-return.html');
+    $returnUrl=customer_public_app_url('payment-return.html');
     $checkoutMethod=customer_payment_yookassa_checkout_method($connection);
     $payload=[
         'amount'=>['value'=>number_format($amount,2,'.',''),'currency'=>'RUB'],
@@ -157,6 +159,7 @@ function customer_payment_yookassa_sync_by_provider_id(string $providerOrderId):
     }elseif($state==='canceled'){
         db()->prepare("UPDATE customer_payments SET status='failed',failed_at=COALESCE(failed_at,NOW()),provider_response=? WHERE id=?")->execute([json_encode($status,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),(int)$payment['id']]);
         db()->prepare("UPDATE online_orders SET status=CASE WHEN status='awaiting_payment' THEN 'cancelled' ELSE status END,payment_status='failed' WHERE id=?")->execute([(int)$payment['order_id']]);
+        try{customer_drink_loyalty_restore_online_order_reward((int)$payment['order_id'],'Платёж отменён, подарок восстановлен');}catch(Throwable $e){error_log('[Kapouch sixth drink restore] '.$e->getMessage());}
     }else{
         db()->prepare('UPDATE customer_payments SET provider_response=? WHERE id=?')->execute([json_encode($status,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),(int)$payment['id']]);
     }
@@ -220,6 +223,11 @@ function customer_payment_apply_refund_state(string $refundId,array $response): 
     if($state==='succeeded'){
         db()->prepare("UPDATE customer_payments SET status='refunded',provider_refund_id=?,refund_status='succeeded',refunded_amount=?,refund_response=?,refunded_at=COALESCE(refunded_at,NOW()) WHERE id=?")->execute([$refundId,$amount,$json,(int)$payment['id']]);
         db()->prepare("UPDATE online_orders SET payment_status='refunded',status=CASE WHEN status IN ('new','preparing','ready') THEN 'cancelled' ELSE status END,cancelled_at=CASE WHEN status IN ('new','preparing','ready') THEN COALESCE(cancelled_at,NOW()) ELSE cancelled_at END WHERE id=?")->execute([(int)$payment['order_id']]);
+        try{
+            $access=db()->prepare('SELECT customer_id FROM customer_order_access WHERE order_id=? LIMIT 1');$access->execute([(int)$payment['order_id']]);$customerId=(int)($access->fetchColumn()?:0);
+            if($customerId>0)customer_drink_loyalty_reverse_source($customerId,'online_order',(string)$payment['order_id'],'Полный возврат заказа');
+            customer_drink_loyalty_restore_online_order_reward((int)$payment['order_id'],'Оплата возвращена, подарок восстановлен');
+        }catch(Throwable $e){error_log('[Kapouch sixth drink refund] '.$e->getMessage());}
         audit_write('customer_payment_refund','ЮKassa: полный возврат '.number_format($amount,2,'.','').' ₽ завершён','online_order',(string)$payment['order_id']);
     }elseif($state==='pending'){
         db()->prepare("UPDATE customer_payments SET status='refund_pending',provider_refund_id=?,refund_status='pending',refunded_amount=?,refund_response=? WHERE id=?")->execute([$refundId,$amount,$json,(int)$payment['id']]);
