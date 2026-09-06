@@ -4,6 +4,7 @@ require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_orders.php';
 require_once dirname(__DIR__).'/inc/customer_pwa.php';
+require_once dirname(__DIR__).'/inc/customer_operations.php';
 
 customer_api_headers();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))==='OPTIONS'){http_response_code(204);exit;}
@@ -29,5 +30,9 @@ try{
         'personal_offer_enabled'=>(string)app_setting('customer_personal_offer_enabled','1')==='1',
         'loyalty_levels_enabled'=>(string)app_setting('customer_loyalty_levels_enabled','1')==='1',
     ];
-    customer_api_reply(200,['ok'=>true,'shop'=>array_merge($catalog['settings'],['currency'=>app_currency(),'loyalty_percent'=>customer_loyalty_rate(),'growth'=>$growth]),'categories'=>$catalog['categories'],'products'=>$catalog['products']]);
-}catch(Throwable $e){customer_api_reply(500,['ok'=>false,'error'=>'Не удалось загрузить каталог.']);}
+    $operations=customer_operations_public_state();
+    customer_api_reply(200,['ok'=>true,'shop'=>array_merge($catalog['settings'],['currency'=>app_currency(),'loyalty_percent'=>customer_loyalty_rate(),'growth'=>$growth,'operations'=>$operations]),'categories'=>$catalog['categories'],'products'=>$catalog['products']]);
+}catch(Throwable $e){
+    error_log('[Kapouch customer catalog] '.$e->getMessage());
+    customer_api_reply(500,['ok'=>false,'error'=>'Не удалось загрузить каталог.']);
+}
