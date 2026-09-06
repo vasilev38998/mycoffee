@@ -1,0 +1,52 @@
+name: Evotor APK
+
+on:
+  pull_request:
+    paths:
+      - 'evotor-app/**'
+      - '.github/workflows/evotor-apk.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'evotor-app/**'
+      - '.github/workflows/evotor-apk.yml'
+  workflow_dispatch:
+    inputs:
+      evotor_app_uuid:
+        description: 'Application ID из кабинета разработчика Эвотор'
+        required: false
+        default: '00000000-0000-0000-0000-000000000000'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Install Android SDK platform
+        run: yes | sdkmanager 'platforms;android-34' 'build-tools;34.0.0' >/dev/null
+
+      - name: Build debug APK
+        env:
+          EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || '00000000-0000-0000-0000-000000000000' }}
+        run: gradle -p evotor-app :app:assembleDebug -PEVOTOR_APP_UUID="$EVOTOR_APP_UUID" --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kapouch-orders-evotor-debug
+          path: evotor-app/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
