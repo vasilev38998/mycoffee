@@ -7,6 +7,7 @@ require_once dirname(__DIR__).'/inc/customer_loyalty.php';
 require_once dirname(__DIR__).'/inc/inventory.php';
 require_once dirname(__DIR__).'/inc/cash_flow.php';
 require_once dirname(__DIR__).'/inc/customer_push.php';
+require_once dirname(__DIR__).'/inc/customer_legal.php';
 require_once dirname(__DIR__).'/inc/audit.php';
 
 function ok(bool $condition,string $message): void{
@@ -74,6 +75,19 @@ ok(customer_push_target_url('./#profile')==='./#profile','push target accepts lo
 $sanitized=audit_sanitize(['secret_key'=>'abc','smsru_api_id'=>'xyz','normal'=>'ok','nested'=>['authorization'=>'Bearer x']]);
 ok(($sanitized['secret_key']??'')==='[скрыто]'&&($sanitized['smsru_api_id']??'')==='[скрыто]'&&($sanitized['normal']??'')==='ok','audit sanitizer removes secret fields');
 ok(($sanitized['nested']['authorization']??'')==='[скрыто]','audit sanitizer removes nested authorization');
+
+throws(fn()=>customer_legal_validate_input(['inn'=>'123']),'legal settings reject malformed IP tax id');
+customer_legal_save([
+    'enabled'=>true,
+    'seller_name'=>'Индивидуальный предприниматель Тестов Тест Тестович',
+    'inn'=>'123456789012','ogrnip'=>'123456789012345','legal_address'=>'г. Иркутск, ул. Тестовая, 1','trade_address'=>'г. Иркутск, ул. Кофейная, 2',
+    'bank_name'=>'Тест Банк','bik'=>'123456789','settlement_account'=>'12345678901234567890','correspondent_account'=>'09876543210987654321',
+    'contact_email'=>'legal@example.test','contact_phone'=>'+7 900 000-00-00','offer_title'=>'Публичная оферта Kapouch','offer_version'=>'1.0','offer_date'=>'2026-09-06','offer_text'=>'','extra_terms'=>'Тестовое дополнительное условие.',
+]);
+$legal=customer_legal_public_data();
+ok($legal['configured']===true,'legal page becomes configured after all IP requisites are saved');
+ok(str_contains((string)$legal['offer']['text'],'Индивидуальный предприниматель Тестов'),'default public offer contains seller identity');
+ok(str_contains((string)$legal['offer']['text'],'Тестовое дополнительное условие'),'default public offer includes configured extra terms');
 
 $pdo->prepare('UPDATE products SET sale_price=250 WHERE id=?')->execute([$productId]);
 $secondClient='runtime-second-'.bin2hex(random_bytes(6));
