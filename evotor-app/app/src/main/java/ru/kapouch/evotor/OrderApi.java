@@ -40,7 +40,7 @@ final class OrderApi {
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Authorization", "Bearer " + order.actionToken);
             connection.setRequestProperty("X-Kapouch-Order-Token", order.actionToken);
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.1.2");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.0");
 
             JSONObject body = new JSONObject();
             body.put("action", action);
