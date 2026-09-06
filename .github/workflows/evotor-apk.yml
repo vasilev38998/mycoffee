@@ -61,16 +61,19 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='6' versionName='1.1.2'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='7' versionName='1.2.0'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
           "$AAPT" dump permissions "$APK" | tee /tmp/evotor-permissions.txt
           grep -q 'android.permission.INTERNET' /tmp/evotor-permissions.txt
+          grep -q 'ru.evotor.devices.SCANNER_RECEIVER' /tmp/evotor-permissions.txt
           "$AAPT" dump xmltree "$APK" AndroidManifest.xml > /tmp/evotor-manifest.txt
           grep -q 'app_uuid' /tmp/evotor-manifest.txt
           grep -q "$EVOTOR_APP_UUID" /tmp/evotor-manifest.txt
           grep -q 'OrderActionReceiver' /tmp/evotor-manifest.txt
           grep -q 'OrderReminderReceiver' /tmp/evotor-manifest.txt
+          grep -q 'CustomerScanReceiver' /tmp/evotor-manifest.txt
+          grep -q 'ru.evotor.devices.ScannedCode' /tmp/evotor-manifest.txt
           unzip -l "$APK" | tee /tmp/evotor-apk-files.txt
           grep -q 'classes.dex' /tmp/evotor-apk-files.txt
           if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then echo 'Unexpected multidex APK for Evotor portal' >&2; exit 1; fi
@@ -79,7 +82,9 @@ jobs:
           grep -q 'certificate-chain-helper' /tmp/evotor-dex-strings.txt
           grep -q '.i.lencr.org' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch-order-sound' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.1.2' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.0' /tmp/evotor-dex-strings.txt
+          grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt
+          grep -q 'ScannedCode' /tmp/evotor-dex-strings.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

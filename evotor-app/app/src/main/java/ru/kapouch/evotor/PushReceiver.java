@@ -17,11 +17,18 @@ public class PushReceiver extends PushNotificationReceiver {
         String orderId = value(data, "order_id", "");
 
         SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE);
-        prefs.edit()
+        SharedPreferences.Editor editor = prefs.edit()
                 .putString(MainActivity.KEY_LAST_TITLE, title)
                 .putString(MainActivity.KEY_LAST_DESCRIPTION, description)
-                .putLong(MainActivity.KEY_LAST_AT, System.currentTimeMillis())
-                .apply();
+                .putLong(MainActivity.KEY_LAST_AT, System.currentTimeMillis());
+
+        String actionUrl = value(data, "action_url", "");
+        String actionToken = value(data, "action_token", "");
+        if ("new_order".equals(type) && !actionToken.isEmpty()) {
+            editor.putString(LoyaltyApi.KEY_BOOTSTRAP_ORDER_TOKEN, actionToken);
+            editor.putString(LoyaltyApi.KEY_LOOKUP_URL, LoyaltyApi.lookupUrlFromActionUrl(actionUrl));
+        }
+        editor.apply();
 
         if ("new_order".equals(type) && !orderId.isEmpty()) {
             OrderRecord order = OrderStore.upsertNew(
@@ -30,8 +37,8 @@ public class PushReceiver extends PushNotificationReceiver {
                     value(data, "order_number", orderId),
                     title,
                     description,
-                    value(data, "action_url", ""),
-                    value(data, "action_token", ""),
+                    actionUrl,
+                    actionToken,
                     System.currentTimeMillis()
             );
             if (prefs.getBoolean(MainActivity.KEY_ENABLED, true)) {

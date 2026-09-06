@@ -9,6 +9,7 @@ if(!$lock||!flock($lock,LOCK_EX|LOCK_NB)){echo '['.date('c')."] Evotor sync alre
 require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/evotor.php';
 require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
+require_once dirname(__DIR__).'/inc/evotor_customer_loyalty.php';
 require_once dirname(__DIR__).'/inc/cash_register.php';
 require_once dirname(__DIR__).'/inc/cash_flow.php';
 require_once dirname(__DIR__).'/inc/automatic_expenses.php';
@@ -19,8 +20,13 @@ ensure_automatic_expense_tables();ensure_inventory_tables();ensure_cash_register
 
 $connections=db()->query('SELECT * FROM evotor_connections WHERE enabled=1 ORDER BY id')->fetchAll();$failed=false;
 foreach($connections as $connection){
-    try{$result=evotor_run_sync($connection,'full');$cash=sync_evotor_cash_register(evotor_connection((int)$connection['id'])??$connection);echo sprintf("[%s] %s: processed %d, cash documents %d\n",date('c'),$connection['store_id'],$result['processed'],$cash);}
-    catch(Throwable $e){$failed=true;fwrite(STDERR,sprintf("[%s] %s: %s\n",date('c'),$connection['store_id'],$e->getMessage()));}
+    try{
+        $result=evotor_run_sync($connection,'full');
+        $fresh=evotor_connection((int)$connection['id'])??$connection;
+        $loyalty=evotor_customer_loyalty_attach_synced_sales($fresh,200);
+        $cash=sync_evotor_cash_register($fresh);
+        echo sprintf("[%s] %s: processed %d, cash documents %d, loyalty links %d, bonuses +%.2f\n",date('c'),$connection['store_id'],$result['processed'],$cash,$loyalty['linked'],$loyalty['earned']);
+    }catch(Throwable $e){$failed=true;fwrite(STDERR,sprintf("[%s] %s: %s\n",date('c'),$connection['store_id'],$e->getMessage()));}
 }
 try{$cashflow=cashflow_sync_evotor_payments();echo sprintf("[%s] cash flow payments created: %d, electron net %.2f, cash net %.2f\n",date('c'),$cashflow['processed'],$cashflow['electron'],$cashflow['cash']);}catch(Throwable $e){$failed=true;fwrite(STDERR,sprintf("[%s] cash flow: %s\n",date('c'),$e->getMessage()));}
 try{$inventoryMovements=sync_inventory_from_sales(date('Y-m-01'));echo sprintf("[%s] inventory movements created: %d\n",date('c'),$inventoryMovements);}catch(Throwable $e){$failed=true;fwrite(STDERR,sprintf("[%s] inventory: %s\n",date('c'),$e->getMessage()));}
