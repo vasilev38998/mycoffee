@@ -5,6 +5,7 @@ require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_legal.php';
 require_once dirname(__DIR__).'/inc/customer_operations.php';
+require_once dirname(__DIR__).'/inc/customer_phone.php';
 require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
 
 customer_api_headers();
@@ -15,6 +16,7 @@ try{
     $ipLimit=kapouch_rate_limit_hit('customer_order_ip',kapouch_client_ip(),25,600);
     if(!$ipLimit['allowed']){header('Retry-After: '.(int)$ipLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много попыток оформления. Подождите немного и повторите.']);}
     $data=customer_api_json();
+    if(array_key_exists('phone',$data))$data['phone']=customer_phone_canonical_ru((string)$data['phone']);
     $clientOrderId=trim((string)($data['client_order_id']??''));
     $externalId=$clientOrderId!==''?'customer-web-'.$clientOrderId:'';
     $existingId=0;
