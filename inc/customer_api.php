@@ -1,9 +1,24 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__.'/customer_urls.php';
+
+function customer_api_origins(): array
+{
+    $origins=[];
+    $raw=trim((string)app_setting('customer_api_allowed_origin',''));
+    foreach(preg_split('/[\s,;]+/',$raw,-1,PREG_SPLIT_NO_EMPTY)?:[] as $value){
+        $origin=rtrim(trim((string)$value),'/');
+        if($origin!==''&&filter_var($origin,FILTER_VALIDATE_URL))$origins[mb_strtolower($origin)]=$origin;
+    }
+    $app=customer_public_app_origin();
+    if($app!=='')$origins[mb_strtolower($app)]=$app;
+    return array_values($origins);
+}
+
 function customer_api_origin(): string
 {
-    return rtrim(trim((string)app_setting('customer_api_allowed_origin','')),'/');
+    $origins=customer_api_origins();return $origins[0]??'';
 }
 
 function customer_api_request_origin(): string
@@ -20,13 +35,20 @@ function customer_api_server_origin(): string
     return $scheme.'://'.$host;
 }
 
+function customer_api_is_allowed_origin(string $origin): bool
+{
+    $origin=rtrim(trim($origin),'/');if($origin==='')return false;
+    foreach(customer_api_origins() as $allowed)if(hash_equals(mb_strtolower($allowed),mb_strtolower($origin)))return true;
+    return false;
+}
+
 function customer_api_headers(): void
 {
     header('Content-Type: application/json; charset=UTF-8');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('X-Content-Type-Options: nosniff');
-    $allowed=customer_api_origin();$origin=customer_api_request_origin();
-    if($allowed!==''&&$origin!==''&&hash_equals($allowed,$origin)){
+    $origin=customer_api_request_origin();
+    if($origin!==''&&customer_api_is_allowed_origin($origin)){
         header('Access-Control-Allow-Origin: '.$origin);
         header('Vary: Origin');
         header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -38,8 +60,8 @@ function customer_api_headers(): void
 function customer_api_guard_origin(): void
 {
     $origin=customer_api_request_origin();if($origin==='')return;
-    $same=customer_api_server_origin();$allowed=customer_api_origin();
-    if(($same===''||!hash_equals(mb_strtolower($same),mb_strtolower($origin)))&&($allowed===''||!hash_equals($allowed,$origin)))customer_api_reply(403,['ok'=>false,'error'=>'Origin not allowed']);
+    $same=customer_api_server_origin();
+    if(($same===''||!hash_equals(mb_strtolower($same),mb_strtolower($origin)))&&!customer_api_is_allowed_origin($origin))customer_api_reply(403,['ok'=>false,'error'=>'Origin not allowed']);
 }
 
 function customer_api_reply(int $status,array $payload): never
