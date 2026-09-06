@@ -51,9 +51,7 @@ final class LoyaltyApi {
 
             JSONObject body = new JSONObject();
             body.put("code", code);
-            if ((terminalToken == null || terminalToken.isEmpty()) && bootstrapToken != null && !bootstrapToken.isEmpty()) {
-                body.put("bootstrap_order_token", bootstrapToken);
-            }
+            if (bootstrapToken != null && !bootstrapToken.isEmpty()) body.put("bootstrap_order_token", bootstrapToken);
             byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
             connection.setFixedLengthStreamingMode(payload.length);
             OutputStream output = connection.getOutputStream();
