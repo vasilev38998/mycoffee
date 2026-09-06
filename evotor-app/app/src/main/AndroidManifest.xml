@@ -4,6 +4,7 @@
 
     <uses-permission android:name="ru.evotor.pushnotifications.PUSH_RECEIVE" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="false"
@@ -37,5 +38,15 @@
                 <action android:name="ru.evotor.pushnotifications.PUSH_RECEIVED_EVENT" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".OrderActionReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver
+            android:name=".OrderReminderReceiver"
+            android:enabled="true"
+            android:exported="false" />
     </application>
 </manifest>
