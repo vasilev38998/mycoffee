@@ -38,7 +38,8 @@ if(loyalty&&!loyalty.closest('.profile-fold')){
 
 const links=document.getElementById('externalLinks');
 const logout=document.getElementById('logoutButton');
-const legal=view.querySelector(':scope > .pwa-legal-links');
+let legal=null;
+for(const child of Array.from(view.children)){if(child.classList&&child.classList.contains('pwa-legal-links')){legal=child;break}}
 if((links||logout||legal)&&!(links&&links.closest('.profile-fold-settings'))){
   const anchor=links||logout||legal;
   const fold=makeFold(anchor,'Ещё','Ссылки, документы и выход','profile-fold-settings');
