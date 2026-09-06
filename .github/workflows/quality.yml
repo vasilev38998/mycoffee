@@ -45,6 +45,9 @@ jobs:
       - name: Customer phone contract
         run: php tests/customer_phone_contract.php
 
+      - name: Customer order authentication contract
+        run: php tests/customer_order_auth_contract.php
+
       - name: PWA subdomain image and phone contract
         run: php tests/customer_pwa_subdomain_fix_contract.php
 
