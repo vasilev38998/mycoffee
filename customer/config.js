@@ -18,10 +18,20 @@ window.addEventListener('DOMContentLoaded',function(){
   authStyle.href='assets/auth-required.css?v=1';
   document.head.appendChild(authStyle);
 
+  var giftStyle=document.createElement('link');
+  giftStyle.rel='stylesheet';
+  giftStyle.href='assets/sixth-drink-checkout.css?v=1';
+  document.head.appendChild(giftStyle);
+
   var authRequired=document.createElement('script');
   authRequired.src='assets/auth-required.js?v=1';
   authRequired.defer=true;
   document.body.appendChild(authRequired);
+
+  var giftCheckout=document.createElement('script');
+  giftCheckout.src='assets/sixth-drink-checkout.js?v=1';
+  giftCheckout.defer=true;
+  document.body.appendChild(giftCheckout);
 
   var phoneMask=document.createElement('script');
   phoneMask.src='assets/phone-mask.js?v=1';
@@ -50,7 +60,7 @@ window.addEventListener('DOMContentLoaded',function(){
   qr.referrerPolicy='no-referrer';
   var loadCard=function(){
     if(document.querySelector('script[data-kapouch-loyalty-card]'))return;
-    var card=document.createElement('script');card.src='assets/loyalty-card.js?v=4';card.defer=true;card.dataset.kapouchLoyaltyCard='1';document.body.appendChild(card);
+    var card=document.createElement('script');card.src='assets/loyalty-card.js?v=5';card.defer=true;card.dataset.kapouchLoyaltyCard='1';document.body.appendChild(card);
   };
   qr.onload=loadCard;qr.onerror=loadCard;document.body.appendChild(qr);
 });

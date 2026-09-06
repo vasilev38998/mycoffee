@@ -18,6 +18,7 @@ try{
     $customer=customer_auth_require();
     $customerId=(int)$customer['id'];
     customer_loyalty_refresh_customer($customerId);
+    customer_drink_loyalty_refresh_customer($customerId);
     $card=customer_loyalty_card_payload($customerId);
     $card['customer']['loyalty_balance']=customer_loyalty_balance($customerId);
     $card['loyalty_rate']=customer_loyalty_rate();

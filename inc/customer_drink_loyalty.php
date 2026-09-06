@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__.'/customer_modifiers.php';
+
 function customer_drink_loyalty_settings(): array
 {
     $required=max(1,min(20,(int)app_setting('customer_sixth_drink_paid_count','5')));
@@ -78,6 +80,62 @@ function customer_drink_loyalty_summary(int $customerId,?PDO $pdo=null): array
     return $base;
 }
 
+function customer_drink_loyalty_quote_cart(int $customerId,array $rawItems): array
+{
+    $summary=customer_drink_loyalty_summary($customerId);$subtotal=0.0;$candidate=null;
+    if(!$rawItems)return ['subtotal'=>0.0,'discount'=>0.0,'total'=>0.0,'reward'=>$summary,'gift'=>null];
+    $eligible=customer_drink_loyalty_product_map();$ids=[];$lines=[];
+    foreach($rawItems as $row){
+        if(!is_array($row))continue;$id=(int)($row['product_id']??$row['id']??0);$qty=max(0,min(20,(int)($row['quantity']??0)));if($id<=0||$qty<=0)continue;
+        $modifierIds=[];foreach((array)($row['modifiers']??[]) as $m){$optionId=is_array($m)?(int)($m['option_id']??$m['id']??0):(int)$m;if($optionId>0)$modifierIds[$optionId]=true;}
+        $ids[$id]=true;$lines[]=['id'=>$id,'qty'=>$qty,'modifiers'=>array_keys($modifierIds)];
+    }
+    if(!$lines)return ['subtotal'=>0.0,'discount'=>0.0,'total'=>0.0,'reward'=>$summary,'gift'=>null];
+    $productIds=array_keys($ids);$ph=implode(',',array_fill(0,count($productIds),'?'));$stmt=db()->prepare("SELECT id,name,sale_price FROM products WHERE active=1 AND sale_price>0 AND id IN ({$ph})");$stmt->execute($productIds);$products=[];foreach($stmt->fetchAll() as $p)$products[(int)$p['id']]=$p;
+    foreach($lines as $line){
+        if(!isset($products[$line['id']]))continue;$product=$products[$line['id']];$base=round((float)$product['sale_price'],2);$mods=customer_modifier_validate_selection($line['id'],$line['modifiers']);$modifierTotal=0.0;foreach($mods as $m)$modifierTotal+=round((float)$m['price'],2);
+        $subtotal+=($base+$modifierTotal)*$line['qty'];
+        if($summary['enabled']&&$summary['available_rewards']>0&&$summary['gift_cap']>0&&!empty($eligible[$line['id']])){
+            $discount=round(min($base,(float)$summary['gift_cap']),2);
+            if($discount>0&&($candidate===null||$discount>(float)$candidate['discount']))$candidate=['product_id'=>$line['id'],'product_name'=>(string)$product['name'],'product_price'=>$base,'discount'=>$discount,'customer_due'=>round(max(0,$base-$discount),2),'gift_cap'=>(float)$summary['gift_cap']];
+        }
+    }
+    $subtotal=round($subtotal,2);$discount=round((float)($candidate['discount']??0),2);return ['subtotal'=>$subtotal,'discount'=>$discount,'total'=>round(max(0,$subtotal-$discount),2),'reward'=>$summary,'gift'=>$candidate];
+}
+
+function customer_drink_loyalty_online_reward(int $orderId,?PDO $pdo=null): ?array
+{
+    if($orderId<=0)return null;$pdo=$pdo??db();$stmt=$pdo->prepare("SELECT id,customer_id,source_line_id,product_id,reward_value,note FROM customer_drink_loyalty_ledger WHERE operation_key=? AND reward_delta=-1 LIMIT 1");$stmt->execute(['redeem:online_order:'.$orderId]);$row=$stmt->fetch();return $row?:null;
+}
+
+function customer_drink_loyalty_apply_online_order_reward(int $orderId,int $customerId): array
+{
+    if($orderId<=0||$customerId<=0)return ['applied'=>false,'discount'=>0.0];$pdo=db();$pdo->beginTransaction();
+    try{
+        $lock=$pdo->prepare('SELECT id FROM customer_accounts WHERE id=? FOR UPDATE');$lock->execute([$customerId]);if(!$lock->fetchColumn())throw new RuntimeException('Клиент не найден.');
+        $existing=customer_drink_loyalty_online_reward($orderId,$pdo);if($existing){$pdo->commit();return ['applied'=>true,'discount'=>(float)$existing['reward_value'],'product_id'=>(int)$existing['product_id'],'line_id'=>(int)$existing['source_line_id'],'restored'=>false];}
+        $summary=customer_drink_loyalty_summary($customerId,$pdo);if(!$summary['enabled']||$summary['available_rewards']<=0||$summary['gift_cap']<=0){$pdo->commit();return ['applied'=>false,'discount'=>0.0];}
+        $eligible=customer_drink_loyalty_product_map();$items=$pdo->prepare("SELECT id,local_product_id,product_name,quantity,unit_price,line_total,item_comment FROM online_order_items WHERE order_id=? AND (variant_name IS NULL OR variant_name='') ORDER BY id");$items->execute([$orderId]);$best=null;
+        foreach($items->fetchAll() as $item){$productId=(int)($item['local_product_id']??0);$qty=(float)$item['quantity'];$unit=round((float)$item['unit_price'],2);if($productId<=0||$qty<=0||$unit<=0||empty($eligible[$productId]))continue;$wanted=round(min($unit,(float)$summary['gift_cap']),2);if($wanted<=0)continue;if($best===null||$wanted>(float)$best['wanted'])$best=['item'=>$item,'product_id'=>$productId,'wanted'=>$wanted];}
+        if($best===null){$pdo->commit();return ['applied'=>false,'discount'=>0.0];}
+        $item=$best['item'];$qty=(float)$item['quantity'];$oldLine=round((float)$item['line_total'],2);$wanted=(float)$best['wanted'];$due=max(0,$oldLine-$wanted);$newUnit=$qty>0?ceil(($due/$qty)*100-0.000001)/100:0.0;$newLine=round($newUnit*$qty,2);$discount=round(max(0,$oldLine-$newLine),2);if($discount<=0){$pdo->commit();return ['applied'=>false,'discount'=>0.0];}
+        $note='Подарок «6-й напиток»: скидка '.number_format($discount,2,'.','').' ₽';$existingComment=trim((string)($item['item_comment']??''));$comment=mb_substr($existingComment!==''?$existingComment.' · '.$note:$note,0,500);
+        $upd=$pdo->prepare('UPDATE online_order_items SET unit_price=?,line_total=?,item_comment=? WHERE id=? AND order_id=?');$upd->execute([$newUnit,$newLine,$comment,(int)$item['id'],$orderId]);if($upd->rowCount()!==1)throw new RuntimeException('Не удалось применить подарочный напиток к заказу.');
+        $upd=$pdo->prepare('UPDATE online_orders SET total_amount=GREATEST(0,ROUND(total_amount-?,2)) WHERE id=?');$upd->execute([$discount,$orderId]);
+        $key='redeem:online_order:'.$orderId;$stmt=$pdo->prepare('INSERT INTO customer_drink_loyalty_ledger(customer_id,operation_key,source_type,source_id,source_line_id,product_id,stamp_delta,reward_delta,reward_value,note) VALUES(?,?,?,?,?,?,0,-1,?,?)');$stmt->execute([$customerId,$key,'online_order',(string)$orderId,(string)$item['id'],$best['product_id'],$discount,'Автоматически применён подарок «6-й напиток»']);
+        $pdo->commit();return ['applied'=>true,'discount'=>$discount,'product_id'=>(int)$best['product_id'],'product_name'=>(string)$item['product_name'],'line_id'=>(int)$item['id'],'gift_cap'=>(float)$summary['gift_cap'],'restored'=>false];
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+}
+
+function customer_drink_loyalty_restore_online_order_reward(int $orderId,string $reason='Заказ отменён'): int
+{
+    if($orderId<=0)return 0;$pdo=db();$pdo->beginTransaction();
+    try{
+        $reward=customer_drink_loyalty_online_reward($orderId,$pdo);if(!$reward){$pdo->commit();return 0;}$customerId=(int)$reward['customer_id'];$lock=$pdo->prepare('SELECT id FROM customer_accounts WHERE id=? FOR UPDATE');$lock->execute([$customerId]);if(!$lock->fetchColumn()){$pdo->commit();return 0;}
+        $key='restore:online_order:'.$orderId;$stmt=$pdo->prepare('INSERT IGNORE INTO customer_drink_loyalty_ledger(customer_id,operation_key,source_type,source_id,source_line_id,product_id,stamp_delta,reward_delta,reward_value,note) VALUES(?,?,?,?,?,?,0,1,0,?)');$stmt->execute([$customerId,$key,'online_order',(string)$orderId,'restore',(int)$reward['product_id'],mb_substr($reason,0,255)]);$changed=$stmt->rowCount();$pdo->commit();return $changed>0?1:0;
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+}
+
 function customer_drink_loyalty_insert_stamp(PDO $pdo,int $customerId,string $operationKey,string $sourceType,string $sourceId,string $lineId,int $productId,int $units,string $note): int
 {
     if($units<=0)return 0;$stmt=$pdo->prepare('INSERT IGNORE INTO customer_drink_loyalty_ledger(customer_id,operation_key,source_type,source_id,source_line_id,product_id,stamp_delta,reward_delta,reward_value,note) VALUES(?,?,?,?,?,?,?,0,0,?)');
@@ -89,9 +147,9 @@ function customer_drink_loyalty_credit_online_order(int $orderId,int $customerId
     $settings=customer_drink_loyalty_settings();if(!$settings['enabled']||$orderId<=0)return 0;$pdo=db();
     $stmt=$pdo->prepare("SELECT o.id,o.status,o.payment_status,o.completed_at,a.customer_id FROM online_orders o JOIN customer_order_access a ON a.order_id=o.id WHERE o.id=? LIMIT 1");$stmt->execute([$orderId]);$order=$stmt->fetch();
     if(!$order||(string)$order['status']!=='completed'||(string)($order['payment_status']??'')==='refunded'||empty($order['completed_at'])||strtotime((string)$order['completed_at'])<strtotime($settings['started_at']))return 0;
-    $customerId=$customerId>0?$customerId:(int)$order['customer_id'];if($customerId<=0)return 0;$eligible=customer_drink_loyalty_product_map();
+    $customerId=$customerId>0?$customerId:(int)$order['customer_id'];if($customerId<=0)return 0;$eligible=customer_drink_loyalty_product_map();$reward=customer_drink_loyalty_online_reward($orderId,$pdo);$giftLineId=(int)($reward['source_line_id']??0);
     $items=$pdo->prepare('SELECT id,local_product_id,quantity,product_name FROM online_order_items WHERE order_id=? ORDER BY id');$items->execute([$orderId]);$added=0;
-    foreach($items->fetchAll() as $item){$productId=(int)($item['local_product_id']??0);if($productId<=0||empty($eligible[$productId]))continue;$units=max(0,(int)floor((float)$item['quantity']+0.00001));if($units<=0)continue;$added+=customer_drink_loyalty_insert_stamp($pdo,$customerId,'stamp:online:'.$orderId.':'.(int)$item['id'],'online_order',(string)$orderId,(string)$item['id'],$productId,$units,'Напиток по онлайн-заказу #'.$orderId);}
+    foreach($items->fetchAll() as $item){$productId=(int)($item['local_product_id']??0);if($productId<=0||empty($eligible[$productId]))continue;$units=max(0,(int)floor((float)$item['quantity']+0.00001));if((int)$item['id']===$giftLineId&&$units>0)$units--;if($units<=0)continue;$added+=customer_drink_loyalty_insert_stamp($pdo,$customerId,'stamp:online:'.$orderId.':'.(int)$item['id'],'online_order',(string)$orderId,(string)$item['id'],$productId,$units,'Напиток по онлайн-заказу #'.$orderId);}
     return $added;
 }
 

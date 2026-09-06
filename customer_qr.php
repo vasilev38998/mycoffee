@@ -3,16 +3,18 @@ declare(strict_types=1);
 
 require __DIR__.'/inc/bootstrap.php';
 require __DIR__.'/inc/layout.php';
+require_once __DIR__.'/inc/customer_urls.php';
 require_auth();
 
 function customer_qr_default_url(): string
 {
-    $host=preg_replace('/[^A-Za-z0-9.:-]/','',(string)($_SERVER['HTTP_HOST']??''));
-    if($host==='')return 'https://kapouch.store/customer/';
-    $forwarded=trim(explode(',',(string)($_SERVER['HTTP_X_FORWARDED_PROTO']??''))[0]??'');
-    $scheme=in_array(strtolower($forwarded),['http','https'],true)?strtolower($forwarded):(kapouch_is_https_request()?'https':'http');
-    if($scheme!=='https')$scheme='https';
-    return 'https://'.$host.'/customer/';
+    return customer_public_app_url();
+}
+
+function customer_qr_is_legacy_target(string $value): bool
+{
+    $value=mb_strtolower(rtrim(trim($value),'/'));
+    return in_array($value,['https://kapouch.store/customer','http://kapouch.store/customer','https://www.kapouch.store/customer','http://www.kapouch.store/customer'],true);
 }
 
 function customer_qr_validate_target(string $value): string
@@ -43,7 +45,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
 }
 
 $configuredUrl=trim((string)app_setting('customer_qr_target_url',''));
-$targetUrl=$configuredUrl!==''?$configuredUrl:customer_qr_default_url();
+$targetUrl=$configuredUrl!==''&&!customer_qr_is_legacy_target($configuredUrl)?$configuredUrl:customer_qr_default_url();
 $title=(string)app_setting('customer_qr_title','Закажи кофе заранее');
 $text=(string)app_setting('customer_qr_text','Сканируй QR-код, выбери напитки и забери заказ без очереди.');
 $coffeeName=(string)app_setting('coffee_name','Kapouch');
@@ -57,23 +59,23 @@ page_header('QR для клиентов');
 @media print{body *{visibility:hidden!important}.customer-qr-poster,.customer-qr-poster *{visibility:visible!important}.customer-qr-poster{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:148mm;min-height:190mm;box-sizing:border-box;border-radius:0;box-shadow:none;padding:18mm 14mm;display:flex;flex-direction:column;align-items:center;justify-content:center}.customer-qr-poster h2{font-size:30pt}.customer-qr-poster p{font-size:15pt}.customer-qr-code{width:82mm;height:82mm;padding:4mm}.customer-qr-poster .poster-hint{font-size:12pt}.customer-qr-poster .poster-url{font-size:8pt}}
 </style>
 
-<div class="card"><div class="chart-head"><div><h2>QR-код клиентского меню</h2><p>Постоянный QR ведёт прямо в PWA. Его можно поставить на стойке, столах, витрине или напечатать на наклейках.</p></div><a class="btn ghost" href="customer/" target="_blank" rel="noopener">Открыть PWA ↗</a></div></div>
+<div class="card"><div class="chart-head"><div><h2>QR-код клиентского меню</h2><p>Постоянный QR ведёт прямо в PWA на app.kapouch.store. Его можно поставить на стойке, столах, витрине или напечатать на наклейках.</p></div><a class="btn ghost" href="<?=e(customer_public_app_url())?>" target="_blank" rel="noopener">Открыть PWA ↗</a></div></div>
 
 <div class="customer-qr-grid section">
   <div class="card">
-    <div class="chart-head"><div><h2>Настройка</h2><p>Если PWA работает на этом же домене, поле ссылки можно оставить пустым — Kapouch подставит адрес автоматически.</p></div></div>
+    <div class="chart-head"><div><h2>Настройка</h2><p>Основной адрес клиентского приложения — app.kapouch.store. Поле можно оставить пустым, чтобы всегда использовать канонический адрес PWA.</p></div></div>
     <form method="post" class="form-grid">
       <input type="hidden" name="csrf" value="<?=csrf_token()?>">
       <input type="hidden" name="action" value="save">
       <label style="grid-column:1/-1">Ссылка, зашитая в QR-код
-        <input type="url" name="customer_qr_target_url" value="<?=e($configuredUrl)?>" placeholder="<?=e(customer_qr_default_url())?>">
-        <small class="muted">Только HTTPS. Пустое поле = текущий домен + /customer/.</small>
+        <input type="url" name="customer_qr_target_url" value="<?=e(customer_qr_is_legacy_target($configuredUrl)?'':$configuredUrl)?>" placeholder="<?=e(customer_qr_default_url())?>">
+        <small class="muted">Только HTTPS. Пустое поле = <?=e(customer_qr_default_url())?>.</small>
       </label>
       <label>Заголовок плаката<input name="customer_qr_title" maxlength="100" value="<?=e($title)?>"></label>
       <label>Текст под заголовком<textarea name="customer_qr_text" maxlength="240" rows="3"><?=e($text)?></textarea></label>
       <div style="grid-column:1/-1"><button class="btn primary">Сохранить QR-код</button></div>
     </form>
-    <div class="customer-qr-note"><strong>Важно:</strong> это отдельная публичная ссылка только для QR. Она не меняет адрес API и не влияет на кнопки принятия заказа на Эвоторе.</div>
+    <div class="customer-qr-note"><strong>Важно:</strong> это отдельная публичная ссылка только для QR. API и интеграция Эвотор продолжают работать через kapouch.store.</div>
   </div>
 
   <div class="card">
