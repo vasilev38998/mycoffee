@@ -8,7 +8,7 @@ $sw=file_get_contents($root.'/customer/sw.js');
 
 $checks=[
   'API requires current customer'=>str_contains($api,'$customer=customer_auth_current();')&&str_contains($api,"customer_api_reply(401,['ok'=>false,'error'=>'Чтобы оформить заказ"),
-  'API binds order phone to profile'=>str_contains($api,"$data['phone']=$profilePhone"),
+  'API binds order phone to profile'=>str_contains($api,'$data[\'phone\']=$profilePhone'),
   'stale malformed profile is rejected'=>str_contains($api,'Номер профиля требует обновления'),
   'PWA blocks guest submit'=>str_contains($gate,"form.addEventListener('submit'")&&str_contains($gate,'event.stopImmediatePropagation()'),
   'PWA sends guest to profile'=>str_contains($gate,"location.hash='#profile'"),
