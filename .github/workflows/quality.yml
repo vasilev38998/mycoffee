@@ -30,6 +30,13 @@ jobs:
       - name: YooKassa test-mode contract
         run: php tests/yookassa_test_mode.php
 
+      - name: PWA payment return contract
+        run: |
+          set -euo pipefail
+          grep -Eq '^DirectoryIndex[[:space:]].*index\.html' .htaccess
+          grep -q './index.html#home' customer/payment-return.html
+          grep -q './index.html#cart' customer/payment-return.html
+
       - name: JavaScript syntax
         run: |
           set -euo pipefail
