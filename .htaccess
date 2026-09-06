@@ -3,6 +3,14 @@ DirectoryIndex index.php index.html
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
+
+  # app.kapouch.store is attached to this same Beget site, but is allowed to
+  # serve only the public customer PWA. This is an internal rewrite: the
+  # browser keeps the clean https://app.kapouch.store/ URL.
+  RewriteCond %{HTTP_HOST} ^app\.kapouch\.store(?::[0-9]+)?$ [NC]
+  RewriteCond %{REQUEST_URI} !^/customer(?:/|$) [NC]
+  RewriteRule ^(.*)$ customer/$1 [L]
+
   RewriteRule ^(?:inc|database|docs|cron)(?:/|$) - [F,L,NC]
 </IfModule>
 
