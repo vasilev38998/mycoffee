@@ -6,6 +6,7 @@ require_auth();
 $migration = file_get_contents(__DIR__ . '/database/migrations/002_evotor.sql');
 if ($migration !== false) db()->exec($migration);
 require_once __DIR__ . '/inc/evotor.php';
+require_once __DIR__ . '/inc/evotor_order_notifications.php';
 require_once __DIR__ . '/inc/cash_register.php';
 ensure_cash_register_tables();
 
@@ -84,6 +85,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if(!empty($result['cleaned'])) $message.=' · удалено дублей: '.$result['cleaned'];
             flash('success',$message);
         }
+        if ($action === 'save_order_push') {
+            $id=(int)($_POST['connection_id']??0);
+            $saved=evotor_order_push_save($id,[
+                'enabled'=>isset($_POST['push_enabled']),
+                'application_id'=>(string)($_POST['push_application_id']??''),
+                'device_uuid'=>(string)($_POST['push_device_uuid']??''),
+                'publisher_token'=>(string)($_POST['push_publisher_token']??''),
+            ]);
+            audit_write('evotor_order_push_settings',!empty($saved['push_enabled'])?'Включены уведомления о PWA-заказах на Эвотор':'Выключены уведомления о PWA-заказах на Эвотор','evotor_connection',(string)$id);
+            flash('success',!empty($saved['push_enabled'])?'Уведомления новых заказов на экран Эвотор включены.':'Уведомления новых заказов на экран Эвотор выключены. Настройки сохранены.');
+        }
+        if ($action === 'test_order_push') {
+            $id=(int)($_POST['connection_id']??0);
+            evotor_order_push_test($id);
+            audit_write('evotor_order_push_test','Отправлено тестовое уведомление на Эвотор','evotor_connection',(string)$id);
+            flash('success','Тестовое уведомление принято Облаком Эвотор. Проверьте экран терминала.');
+        }
+        if ($action === 'retry_order_push') {
+            $result=evotor_order_push_retry_pending(20);
+            flash('success','Повторная отправка: обработано '.$result['processed'].', успешно отправлено '.$result['sent'].'.');
+        }
     } catch(Throwable $e){flash('danger',$e->getMessage());}
     redirect('integrations.php');
 }
@@ -98,7 +120,7 @@ page_header('Интеграции');
 <div class="card"><div class="chart-head"><div><h2>Подключить Эвотор</h2><p>Настройка выполняется один раз. После успешного подключения токен будет сохранён в зашифрованном виде.</p></div><span class="pill">Не подключено</span></div><form method="post" class="form-grid"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="connect"><label>Токен пользователя Эвотор<input type="password" name="token" autocomplete="new-password" required placeholder="Вставьте токен"></label><label>ID магазина <span class="muted">можно оставить пустым, если магазин один</span><input name="store_id" placeholder="UUID магазина"></label><div><button class="btn primary">Подключить Эвотор</button></div></form></div>
 <?php endif; ?>
 
-<?php foreach($connections as $c): ?>
+<?php foreach($connections as $c): $pushReady=evotor_order_push_ready($c);$pushLogs=evotor_order_push_recent((int)$c['id'],10); ?>
 <div class="card">
     <div class="integration-hero"><div><div class="eyebrow">Автоматическая интеграция</div><h2 style="font-size:24px;margin:5px 0 4px"><?=e($c['store_name'] ?: 'Мой магазин')?></h2><div class="muted"><?=e($c['store_id'])?></div></div><span class="pill connected">● Подключено</span></div>
     <div class="section">
@@ -120,6 +142,27 @@ page_header('Интеграции');
     </div>
     <div class="sync-status"><div><small>Номенклатура</small><strong><?=$c['last_products_sync_ms']?e(date('d.m.Y H:i',(int)($c['last_products_sync_ms']/1000))):'ещё не синхронизировалась'?></strong></div><div><small>Чеки и возвраты</small><strong><?=$c['last_documents_sync_ms']?e(date('d.m.Y H:i',(int)($c['last_documents_sync_ms']/1000))):'ещё не синхронизировались'?></strong></div><div><small>Касса</small><strong><?=$c['last_cash_sync_ms']?e(date('d.m.Y H:i',(int)($c['last_cash_sync_ms']/1000))):'ещё не синхронизировалась'?></strong></div></div>
     <div class="actions"><form method="post"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="sync"><input type="hidden" name="connection_id" value="<?=$c['id']?>"><input type="hidden" name="sync_type" value="full"><button class="btn primary">↻ Синхронизировать всё</button></form><form method="post"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="sync"><input type="hidden" name="connection_id" value="<?=$c['id']?>"><input type="hidden" name="sync_type" value="documents"><button class="btn ghost">Новые чеки + касса</button></form><a class="btn ghost" href="cash.php">Открыть кассу</a></div>
+
+    <div class="section" style="border-top:1px solid rgba(255,255,255,.08);padding-top:22px">
+        <div class="chart-head"><div><h2>Новые PWA-заказы на экране Эвотор</h2><p>Kapouch отправляет адресный push в приложение Kapouch Orders на выбранном смарт-терминале. Наличный заказ — сразу после оформления; СБП — только после подтверждённой оплаты.</p></div><span class="pill <?=!empty($c['push_enabled'])&&$pushReady?'connected':''?>"><?=!empty($c['push_enabled'])&&$pushReady?'● Включено':($pushReady?'Настроено · выключено':'Нужно настроить')?></span></div>
+        <form method="post" class="stack"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="save_order_push"><input type="hidden" name="connection_id" value="<?=$c['id']?>">
+            <label style="display:flex;gap:9px;align-items:center"><input type="checkbox" name="push_enabled" value="1" style="width:auto" <?=!empty($c['push_enabled'])?'checked':''?>> Отправлять уведомления о новых заказах на экран Эвотор</label>
+            <div class="form-grid">
+                <label>Application ID приложения Kapouch Orders<input name="push_application_id" maxlength="64" value="<?=e((string)($c['push_application_id']??''))?>" placeholder="xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx"></label>
+                <label>UUID терминала или IMEI<input name="push_device_uuid" maxlength="100" value="<?=e((string)($c['push_device_uuid']??''))?>" placeholder="UUID устройства или 15-значный IMEI"></label>
+                <label>Ключ издателя Эвотор <span class="muted"><?=!empty($c['push_token_ciphertext'])?'уже сохранён — оставьте пустым, чтобы не менять':''?></span><input type="password" name="push_publisher_token" autocomplete="new-password" placeholder="Ключ с правом push-notification:write"></label>
+            </div>
+            <div class="alert info"><strong>Нужен отдельный ключ издателя.</strong> Обычный пользовательский токен синхронизации выше не заменяет его. Для ключа издателя требуется право <code>push-notification:write</code>. Сам ключ хранится зашифрованным и после сохранения не показывается.</div>
+            <?php if(!empty($c['push_last_error'])):?><div class="alert danger"><strong>Последняя ошибка отправки:</strong> <?=e((string)$c['push_last_error'])?></div><?php elseif(!empty($c['push_last_sent_at'])):?><div class="alert success"><strong>Последняя успешная отправка:</strong> <?=e(date('d.m.Y H:i:s',strtotime((string)$c['push_last_sent_at'])))?></div><?php endif;?>
+            <div class="actions"><button class="btn primary">Сохранить уведомления Эвотор</button></div>
+        </form>
+        <div class="actions" style="margin-top:10px">
+            <form method="post"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="test_order_push"><input type="hidden" name="connection_id" value="<?=$c['id']?>"><button class="btn ghost" <?=$pushReady?'':'disabled'?>>Отправить тест на экран</button></form>
+            <form method="post"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="retry_order_push"><button class="btn ghost">Повторить недоставленные</button></form>
+        </div>
+        <p class="muted" style="font-size:11px;margin-top:10px">В самом приложении Kapouch Orders на терминале будет второй независимый переключатель. Даже если серверная отправка включена, бариста сможет временно скрыть уведомления на конкретном Эвоторе.</p>
+        <?php if($pushLogs):?><div class="table-wrap" style="margin-top:16px"><table><thead><tr><th>Время</th><th>Заказ</th><th>Статус</th><th>Попыток</th><th>Ошибка</th></tr></thead><tbody><?php foreach($pushLogs as $pushLog):?><tr><td><?=e(date('d.m.Y H:i:s',strtotime((string)$pushLog['created_at'])))?></td><td><?=e((string)$pushLog['order_number'])?></td><td><span class="pill <?=$pushLog['status']==='sent'?'connected':''?>"><?=e((string)$pushLog['status'])?></span></td><td><?=(int)$pushLog['attempts']?></td><td><?=e((string)($pushLog['last_error']??''))?></td></tr><?php endforeach;?></tbody></table></div><?php endif;?>
+    </div>
 </div>
 <?php endforeach; ?>
 
