@@ -3,6 +3,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
+require_once dirname(__DIR__).'/inc/customer_phone.php';
 
 customer_api_headers();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))==='OPTIONS'){http_response_code(204);exit;}
@@ -11,7 +12,7 @@ if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))!=='POST')customer_api
 try{
     $ipLimit=kapouch_rate_limit_hit('customer_auth_request_ip',kapouch_client_ip(),30,3600);
     if(!$ipLimit['allowed']){header('Retry-After: '.(int)$ipLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много запросов кода. Попробуйте позже.']);}
-    $data=customer_api_json();$rawPhone=(string)($data['phone']??'');$phone=customer_order_normalize_phone($rawPhone);
+    $data=customer_api_json();$rawPhone=(string)($data['phone']??'');$phone=customer_phone_canonical_ru($rawPhone);
     $phoneLimit=kapouch_rate_limit_hit('customer_auth_request_phone',$phone,10,3600);
     if(!$phoneLimit['allowed']){header('Retry-After: '.(int)$phoneLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много запросов кода для этого номера. Попробуйте позже.']);}
     $lockPurpose='customer_sms_code:'.$phone;

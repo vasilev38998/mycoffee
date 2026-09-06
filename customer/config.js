@@ -13,6 +13,11 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
   };
 })();
 window.addEventListener('DOMContentLoaded',function(){
+  var phoneMask=document.createElement('script');
+  phoneMask.src='assets/phone-mask.js?v=1';
+  phoneMask.defer=true;
+  document.body.appendChild(phoneMask);
+
   var s=document.createElement('script');
   s.src='assets/push.js?v=1';
   s.defer=true;

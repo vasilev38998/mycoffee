@@ -42,6 +42,12 @@ jobs:
       - name: Beget app rewrite contract
         run: php tests/beget_app_rewrite_contract.php
 
+      - name: Customer phone contract
+        run: php tests/customer_phone_contract.php
+
+      - name: PWA subdomain image and phone contract
+        run: php tests/customer_pwa_subdomain_fix_contract.php
+
       - name: PWA payment return contract
         run: |
           set -euo pipefail
