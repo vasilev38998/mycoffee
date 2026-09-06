@@ -45,6 +45,11 @@ function customer_payment_yookassa_secret(array $connection): string
     return evotor_decrypt_token(['token_ciphertext'=>$connection['secret_ciphertext'],'token_iv'=>$connection['secret_iv'],'token_tag'=>$connection['secret_tag']]);
 }
 
+function customer_payment_yookassa_checkout_method(array $connection): string
+{
+    return (int)($connection['test_mode']??0)===1?'bank_card':'sbp';
+}
+
 function customer_payment_public_url(string $path): string
 {
     $host=preg_replace('/[^A-Za-z0-9.:-]/','',(string)($_SERVER['HTTP_HOST']??''));if($host==='')throw new RuntimeException('Не удалось определить адрес Kapouch.');
@@ -114,14 +119,15 @@ function customer_payment_create_sbp(int $orderId,string $orderNumber,float $amo
     if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new RuntimeException('Для оплаты по СБП укажите электронную почту в профиле Kapouch.');
     $amount=round($amount,2);if($amount<1)throw new RuntimeException('Минимальная сумма оплаты по СБП — 1 ₽.');
     $returnUrl=customer_payment_public_url('customer/payment-return.html');
+    $checkoutMethod=customer_payment_yookassa_checkout_method($connection);
     $payload=[
         'amount'=>['value'=>number_format($amount,2,'.',''),'currency'=>'RUB'],
         'capture'=>true,
-        'payment_method_data'=>['type'=>'sbp'],
+        'payment_method_data'=>['type'=>$checkoutMethod],
         'confirmation'=>['type'=>'redirect','return_url'=>$returnUrl],
         'description'=>mb_substr('Kapouch заказ '.$orderNumber,0,128),
         'receipt'=>customer_payment_yookassa_receipt($orderId,$email,$amount),
-        'metadata'=>['kapouch_order_id'=>(string)$orderId,'kapouch_order_number'=>$orderNumber],
+        'metadata'=>['kapouch_order_id'=>(string)$orderId,'kapouch_order_number'=>$orderNumber,'kapouch_checkout_method'=>$checkoutMethod],
     ];
     db()->prepare("UPDATE online_orders SET status='awaiting_payment',payment_status='pending',payment_method='sbp',payment_provider='yookassa_sbp' WHERE id=? AND status='new'")->execute([$orderId]);
     $key=substr(hash('sha256','kapouch|yookassa|'.$orderId.'|'.$orderNumber),0,64);
