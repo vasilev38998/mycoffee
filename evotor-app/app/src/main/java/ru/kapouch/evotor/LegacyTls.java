@@ -60,6 +60,10 @@ final class LegacyTls {
 
     private LegacyTls() {}
 
+    static String rootPemForTest() {
+        return ISRG_ROOT_X1;
+    }
+
     static SSLSocketFactory socketFactory() throws Exception {
         SSLSocketFactory value = cachedFactory;
         if (value != null) return value;
