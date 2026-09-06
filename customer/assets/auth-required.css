@@ -1,0 +1,1 @@
+.checkout-auth-required{display:grid;gap:6px;padding:14px 16px;margin:0 0 12px;border:1px solid rgba(245,185,63,.32);border-radius:18px;background:rgba(245,185,63,.09);color:var(--text,#fff7e8)}.checkout-auth-required[hidden]{display:none}.checkout-auth-required strong{font-size:15px}.checkout-auth-required span{font-size:13px;line-height:1.4;opacity:.76}
