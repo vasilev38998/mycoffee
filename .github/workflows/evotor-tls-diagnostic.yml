@@ -12,9 +12,10 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@v4
+
       - name: Inspect live kapouch.store certificate chain
         run: |
           set -euo pipefail
@@ -28,7 +29,46 @@ jobs:
           done
           echo '--- official Root YR ---'
           curl -fsSL https://letsencrypt.org/certs/gen-y/root-yr.pem -o /tmp/root-yr.pem
-          cat /tmp/root-yr.pem
           openssl x509 -in /tmp/root-yr.pem -noout -subject -issuer -dates -fingerprint -sha256
           echo '--- curl endpoint ---'
           curl -Iv --connect-timeout 10 https://kapouch.store/api/evotor_order_action.php || true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - name: Exercise LegacyTls fallback with an empty JVM trust store
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/legacy-test/ru/kapouch/evotor
+          cp evotor-app/app/src/main/java/ru/kapouch/evotor/LegacyTls.java /tmp/legacy-test/ru/kapouch/evotor/
+          cat > /tmp/legacy-test/ru/kapouch/evotor/LegacyTlsProbe.java <<'JAVA'
+          package ru.kapouch.evotor;
+
+          import java.net.URL;
+          import javax.net.ssl.HttpsURLConnection;
+
+          public final class LegacyTlsProbe {
+              public static void main(String[] args) throws Exception {
+                  URL url = new URL("https://kapouch.store/api/evotor_order_action.php");
+                  HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+                  connection.setSSLSocketFactory(LegacyTls.socketFactory());
+                  connection.setConnectTimeout(10000);
+                  connection.setReadTimeout(10000);
+                  connection.setRequestMethod("GET");
+                  connection.connect();
+                  int status = connection.getResponseCode();
+                  if (status != 405 && status != 401) {
+                      throw new IllegalStateException("Unexpected HTTP status: " + status);
+                  }
+                  System.out.println("LEGACY TLS FALLBACK LIVE OK: HTTP " + status);
+                  connection.disconnect();
+              }
+          }
+          JAVA
+          rm -f /tmp/empty.jks
+          keytool -genkeypair -alias temporary -keyalg RSA -keystore /tmp/empty.jks -storepass changeit -keypass changeit -dname 'CN=temp' -validity 1 >/dev/null 2>&1
+          keytool -delete -alias temporary -keystore /tmp/empty.jks -storepass changeit >/dev/null 2>&1
+          javac -d /tmp/legacy-classes /tmp/legacy-test/ru/kapouch/evotor/LegacyTls.java /tmp/legacy-test/ru/kapouch/evotor/LegacyTlsProbe.java
+          java -Djavax.net.ssl.trustStore=/tmp/empty.jks -Djavax.net.ssl.trustStorePassword=changeit -cp /tmp/legacy-classes ru.kapouch.evotor.LegacyTlsProbe
