@@ -1,4 +1,4 @@
-const CACHE='kapouch-pwa-v26';
+const CACHE='kapouch-pwa-v25';
 const SHELL=['./','./index.html','./legal.html','./payment-return.html','./config.js?v=10','./assets/app.css?v=5','./assets/variants.css?v=1','./assets/pwa-v2.css?v=1','./assets/modifiers.css?v=3','./assets/payments.css?v=1','./assets/legal.css?v=1','./assets/app.js?v=10','./assets/profile-plus.js?v=1','./assets/loyalty-card.js?v=1','./assets/modifier-price-ui.js?v=1','./assets/payments.js?v=6','./assets/personalization.js?v=2','./assets/current-order.js?v=2','./assets/growth-suite.js?v=2','./assets/push.js?v=1','./assets/legal.js?v=2','./assets/icon.svg'];
 const navShell=url=>url.pathname.endsWith('/legal.html')?'./legal.html':url.pathname.endsWith('/payment-return.html')?'./payment-return.html':'./index.html';
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()))});
