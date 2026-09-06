@@ -59,6 +59,91 @@ function evotor_order_push_save(int $connectionId,array $data): array
     return evotor_order_push_connection($connectionId)??$connection;
 }
 
+function evotor_order_action_b64_encode(string $value): string
+{
+    return rtrim(strtr(base64_encode($value),'+/','-_'),'=');
+}
+
+function evotor_order_action_b64_decode(string $value): string|false
+{
+    $value=strtr($value,'-_','+/');
+    $padding=strlen($value)%4;
+    if($padding)$value.=str_repeat('=',4-$padding);
+    return base64_decode($value,true);
+}
+
+function evotor_order_action_token(int $connectionId,int $orderId,?int $expiresAt=null): string
+{
+    if($connectionId<=0||$orderId<=0)throw new RuntimeException('Некорректные параметры действия заказа.');
+    $expiresAt=$expiresAt??(time()+8*3600);
+    $payload=evotor_order_action_b64_encode(json_encode(['v'=>1,'c'=>$connectionId,'o'=>$orderId,'e'=>$expiresAt],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
+    $signature=hash_hmac('sha256',$payload,evotor_crypto_key(),true);
+    return $payload.'.'.evotor_order_action_b64_encode($signature);
+}
+
+function evotor_order_action_claims(string $token): ?array
+{
+    $token=trim($token);
+    if($token===''||strlen($token)>600||substr_count($token,'.')!==1)return null;
+    [$payload,$signature]=explode('.',$token,2);
+    $signatureRaw=evotor_order_action_b64_decode($signature);
+    if($signatureRaw===false||strlen($signatureRaw)!==32)return null;
+    $expected=hash_hmac('sha256',$payload,evotor_crypto_key(),true);
+    if(!hash_equals($expected,$signatureRaw))return null;
+    $decoded=evotor_order_action_b64_decode($payload);
+    if($decoded===false)return null;
+    $claims=json_decode($decoded,true);
+    if(!is_array($claims)||(int)($claims['v']??0)!==1)return null;
+    $connectionId=(int)($claims['c']??0);$orderId=(int)($claims['o']??0);$expiresAt=(int)($claims['e']??0);
+    if($connectionId<=0||$orderId<=0||$expiresAt<time()-30||$expiresAt>time()+86400)return null;
+    return ['connection_id'=>$connectionId,'order_id'=>$orderId,'expires_at'=>$expiresAt];
+}
+
+function evotor_order_action_public_url(): string
+{
+    $configured=trim((string)app_setting('customer_app_url',''));
+    if($configured!==''&&filter_var($configured,FILTER_VALIDATE_URL)){
+        $parts=parse_url($configured);
+        if(is_array($parts)&&strtolower((string)($parts['scheme']??''))==='https'&&!empty($parts['host'])){
+            $port=isset($parts['port'])?':'.(int)$parts['port']:'';
+            return 'https://'.$parts['host'].$port.'/api/evotor_order_action.php';
+        }
+    }
+    $host=preg_replace('/[^A-Za-z0-9.:-]/','',(string)($_SERVER['HTTP_HOST']??''));
+    if($host!=='')return 'https://'.$host.'/api/evotor_order_action.php';
+    return 'https://kapouch.store/api/evotor_order_action.php';
+}
+
+function evotor_order_action_apply(int $orderId,string $action): array
+{
+    require_once __DIR__.'/online_orders.php';
+    $action=trim($action);
+    if(!in_array($action,['accept','ready'],true))throw new RuntimeException('Неизвестное действие заказа.');
+    $stmt=db()->prepare('SELECT id,order_number,source,status,payment_status FROM online_orders WHERE id=? LIMIT 1');
+    $stmt->execute([$orderId]);$order=$stmt->fetch();
+    if(!$order||(string)$order['source']!=='customer-web')throw new RuntimeException('PWA-заказ не найден.');
+    $status=(string)$order['status'];
+    if($status==='cancelled')throw new RuntimeException('Заказ уже отменён.');
+    if($action==='accept'){
+        if($status==='new')online_orders_transition($orderId,'preparing');
+        elseif(!in_array($status,['preparing','ready','completed'],true))throw new RuntimeException('Заказ нельзя принять в текущем статусе.');
+    }else{
+        if($status==='new')throw new RuntimeException('Сначала примите заказ.');
+        if($status==='preparing')online_orders_transition($orderId,'ready');
+        elseif(!in_array($status,['ready','completed'],true))throw new RuntimeException('Заказ нельзя отметить готовым в текущем статусе.');
+    }
+    $stmt=db()->prepare('SELECT id,order_number,status,payment_status FROM online_orders WHERE id=? LIMIT 1');
+    $stmt->execute([$orderId]);$current=$stmt->fetch();
+    if(!$current)throw new RuntimeException('Заказ не найден после изменения статуса.');
+    return [
+        'order_id'=>(int)$current['id'],
+        'order_number'=>(string)$current['order_number'],
+        'status'=>(string)$current['status'],
+        'status_label'=>online_orders_status_label((string)$current['status']),
+        'payment_status'=>(string)($current['payment_status']??''),
+    ];
+}
+
 function evotor_order_push_payload(int $orderId): array
 {
     $stmt=db()->prepare("SELECT id,order_number,source,status,payment_status,payment_method,total_amount,promised_at,customer_name,customer_phone FROM online_orders WHERE id=? LIMIT 1");
@@ -82,6 +167,7 @@ function evotor_order_push_payload(int $orderId): array
         'type'=>'new_order',
         'order_id'=>(string)$orderId,
         'order_number'=>(string)$order['order_number'],
+        'status'=>'new',
         'title'=>$title,
         'description'=>$description,
         'amount'=>number_format((float)$order['total_amount'],2,'.',''),
@@ -153,10 +239,16 @@ function evotor_order_notify_new(int $orderId): array
     if($orderId<=0)return ['queued'=>0,'sent'=>0];
     $order=db()->prepare('SELECT source,status FROM online_orders WHERE id=? LIMIT 1');$order->execute([$orderId]);$state=$order->fetch();
     if(!$state||(string)$state['source']!=='customer-web'||(string)$state['status']!=='new')return ['queued'=>0,'sent'=>0];
-    $payload=evotor_order_push_payload($orderId);$json=json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+    $basePayload=evotor_order_push_payload($orderId);
     $connections=db()->query('SELECT * FROM evotor_connections WHERE enabled=1 AND push_enabled=1 ORDER BY id')->fetchAll();$queued=0;$sent=0;
     foreach($connections as $connection){
         if(!evotor_order_push_ready($connection))continue;
+        $expiresAt=time()+8*3600;
+        $payload=$basePayload;
+        $payload['action_url']=evotor_order_action_public_url();
+        $payload['action_token']=evotor_order_action_token((int)$connection['id'],$orderId,$expiresAt);
+        $payload['action_expires_at']=(string)$expiresAt;
+        $json=json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
         $insert=db()->prepare("INSERT IGNORE INTO evotor_order_push_log(connection_id,order_id,event_type,status,payload_json) VALUES(?,?,'new_order','pending',?)");
         $insert->execute([(int)$connection['id'],$orderId,$json]);
         if($insert->rowCount()!==1)continue;
