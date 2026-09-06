@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__.'/customer_drink_loyalty.php';
+
 function customer_loyalty_rate(): float
 {
     $rate=(float)app_setting('customer_loyalty_percent','5');
@@ -23,39 +25,53 @@ function customer_loyalty_preview(float $orderTotal): float
 function customer_loyalty_on_order_completed(int $orderId): float
 {
     if($orderId<=0)return 0.0;
-    $pdo=db();$pdo->beginTransaction();
+    $pdo=db();$pdo->beginTransaction();$customerId=0;
     try{
         $stmt=$pdo->prepare("SELECT a.customer_id,a.loyalty_earned_at,o.total_amount,o.status,o.payment_status FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.order_id=? FOR UPDATE");
         $stmt->execute([$orderId]);$row=$stmt->fetch();
-        if(!$row||(string)$row['status']!=='completed'||!$row['customer_id']||$row['loyalty_earned_at']){$pdo->commit();return 0.0;}
+        if(!$row||(string)$row['status']!=='completed'||!$row['customer_id']){$pdo->commit();return 0.0;}
+        $customerId=(int)$row['customer_id'];
         if((string)($row['payment_status']??'')==='refunded'){
             $pdo->prepare('UPDATE customer_order_access SET loyalty_earned_at=NOW() WHERE order_id=? AND loyalty_earned_at IS NULL')->execute([$orderId]);
-            $pdo->commit();return 0.0;
+            $pdo->commit();
+            try{customer_drink_loyalty_reverse_source($customerId,'online_order',(string)$orderId,'Отмена отметок: возврат онлайн-заказа');}catch(Throwable $e){error_log('[Kapouch drink loyalty refund] '.$e->getMessage());}
+            return 0.0;
         }
-        $customerId=(int)$row['customer_id'];$amount=customer_loyalty_preview((float)$row['total_amount']);
+        if($row['loyalty_earned_at']){
+            $pdo->commit();
+            try{customer_drink_loyalty_credit_online_order($orderId,$customerId);}catch(Throwable $e){error_log('[Kapouch drink loyalty online] '.$e->getMessage());}
+            return 0.0;
+        }
+        $amount=customer_loyalty_preview((float)$row['total_amount']);
         if($amount>0){
             $pdo->prepare("INSERT INTO customer_loyalty_ledger(customer_id,order_id,amount,operation_type,note) VALUES(?,?,?,'earn',?)")->execute([$customerId,$orderId,$amount,'Начисление за завершённый онлайн-заказ']);
             $pdo->prepare('UPDATE customer_accounts SET loyalty_balance=loyalty_balance+? WHERE id=?')->execute([$amount,$customerId]);
         }
         $pdo->prepare('UPDATE customer_order_access SET loyalty_earned_at=NOW() WHERE order_id=?')->execute([$orderId]);
-        $pdo->commit();return $amount;
+        $pdo->commit();
+        try{customer_drink_loyalty_credit_online_order($orderId,$customerId);}catch(Throwable $e){error_log('[Kapouch drink loyalty online] '.$e->getMessage());}
+        return $amount;
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 
 function customer_loyalty_reverse_order(int $orderId): float
 {
     if($orderId<=0)return 0.0;
-    $pdo=db();$pdo->beginTransaction();
+    $pdo=db();$pdo->beginTransaction();$customerId=0;$earned=0.0;
     try{
         $stmt=$pdo->prepare('SELECT customer_id FROM customer_order_access WHERE order_id=? FOR UPDATE');$stmt->execute([$orderId]);$customerId=(int)($stmt->fetchColumn()?:0);
         if($customerId<=0){$pdo->commit();return 0.0;}
         $check=$pdo->prepare("SELECT COUNT(*) FROM customer_loyalty_ledger WHERE order_id=? AND operation_type='adjust' AND note='Отмена бонусов: полный возврат заказа'");$check->execute([$orderId]);
-        if((int)$check->fetchColumn()>0){$pdo->commit();return 0.0;}
-        $earnedStmt=$pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM customer_loyalty_ledger WHERE order_id=? AND operation_type='earn' AND amount>0");$earnedStmt->execute([$orderId]);$earned=round((float)$earnedStmt->fetchColumn(),2);
-        if($earned<=0){$pdo->commit();return 0.0;}
-        $pdo->prepare("INSERT INTO customer_loyalty_ledger(customer_id,order_id,amount,operation_type,note) VALUES(?,?,?,'adjust',?)")->execute([$customerId,$orderId,-$earned,'Отмена бонусов: полный возврат заказа']);
-        $pdo->prepare('UPDATE customer_accounts SET loyalty_balance=loyalty_balance-? WHERE id=?')->execute([$earned,$customerId]);
-        $pdo->commit();return $earned;
+        if((int)$check->fetchColumn()===0){
+            $earnedStmt=$pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM customer_loyalty_ledger WHERE order_id=? AND operation_type='earn' AND amount>0");$earnedStmt->execute([$orderId]);$earned=round((float)$earnedStmt->fetchColumn(),2);
+            if($earned>0){
+                $pdo->prepare("INSERT INTO customer_loyalty_ledger(customer_id,order_id,amount,operation_type,note) VALUES(?,?,?,'adjust',?)")->execute([$customerId,$orderId,-$earned,'Отмена бонусов: полный возврат заказа']);
+                $pdo->prepare('UPDATE customer_accounts SET loyalty_balance=loyalty_balance-? WHERE id=?')->execute([$earned,$customerId]);
+            }
+        }
+        $pdo->commit();
+        try{customer_drink_loyalty_reverse_source($customerId,'online_order',(string)$orderId,'Отмена отметок: полный возврат заказа');}catch(Throwable $e){error_log('[Kapouch drink loyalty refund] '.$e->getMessage());}
+        return $earned;
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 
@@ -70,11 +86,12 @@ function customer_loyalty_refresh_completed(int $limit=100): array
 
 function customer_loyalty_refresh_customer(int $customerId,int $limit=30): array
 {
-    if($customerId<=0)return ['orders'=>0,'amount'=>0.0];
+    if($customerId<=0)return ['orders'=>0,'amount'=>0.0,'drink_stamps'=>0];
     $limit=max(1,min(100,$limit));
     $stmt=db()->prepare("SELECT a.order_id FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.customer_id=? AND o.status='completed' AND a.loyalty_earned_at IS NULL ORDER BY o.completed_at,a.order_id LIMIT {$limit}");
     $stmt->execute([$customerId]);
     $orders=0;$amount=0.0;
     foreach($stmt->fetchAll() as $row){$amount+=customer_loyalty_on_order_completed((int)$row['order_id']);$orders++;}
-    return ['orders'=>$orders,'amount'=>round($amount,2)];
+    $drink=['stamps'=>0];try{$drink=customer_drink_loyalty_refresh_customer($customerId,$limit);}catch(Throwable $e){error_log('[Kapouch drink loyalty refresh] '.$e->getMessage());}
+    return ['orders'=>$orders,'amount'=>round($amount,2),'drink_stamps'=>(int)($drink['stamps']??0)];
 }
