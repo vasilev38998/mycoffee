@@ -20,7 +20,7 @@ $checks=[
     'one-time notice auto hide'=>str_contains($status,'DISPLAY_MS=8000'),
     'status-once asset loaded'=>str_contains($config,'assets/status-once.js?v=1'),
     'fresh QR asset loaded'=>str_contains($config,'assets/loyalty-card.js?v=5'),
-    'service worker cache bumped'=>str_contains($sw,"kapouch-pwa-v27")&&str_contains($sw,'./assets/status-once.js?v=1'),
+    'service worker cache bumped'=>str_contains($sw,"kapouch-pwa-v32")&&str_contains($sw,'./assets/status-once.js?v=1'),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"PWA profile UX contract failed: {$label}\n");exit(1);}}
 echo "PWA profile UX contract passed\n";
