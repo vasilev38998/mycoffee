@@ -105,7 +105,7 @@ jobs:
           grep -q 'classes.dex' /tmp/evotor-apk-files.txt
           if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then echo 'Unexpected multidex APK for Evotor portal' >&2; exit 1; fi
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'Let.s Encrypt Generation Y' /tmp/evotor-dex-strings.txt
+          grep -q 'letsencrypt-gen-y-' /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch TLS not trusted' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch-order-sound' /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch-Orders-Evotor/1.2.4' /tmp/evotor-dex-strings.txt
