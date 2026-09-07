@@ -1,0 +1,40 @@
+name: Evotor TLS diagnostic
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/evotor-tls-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: DNS and certificate variants
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo '=== DNS ==='
+          getent ahostsv4 kapouch.store || true
+
+          probe() {
+            name="$1"; shift
+            out="/tmp/${name}.txt"
+            echo "=== ${name} ==="
+            if timeout 15 openssl s_client -connect kapouch.store:443 -showcerts "$@" </dev/null >"$out" 2>&1; then
+              echo "CERT_COUNT=$(grep -c 'BEGIN CERTIFICATE' "$out" || true)"
+              awk 'BEGIN{p=0} /-----BEGIN CERTIFICATE-----/{p=1} p{print} /-----END CERTIFICATE-----/{if(p)exit}' "$out" >"/tmp/${name}.pem"
+              openssl x509 -in "/tmp/${name}.pem" -noout -subject -issuer -serial -fingerprint -sha256 -pubkey 2>/dev/null || true
+            else
+              echo 'HANDSHAKE_FAILED'
+              tail -n 30 "$out" || true
+            fi
+          }
+
+          probe sni_default -servername kapouch.store
+          probe no_sni
+          probe sni_tls12 -servername kapouch.store -tls1_2
+          probe no_sni_tls12 -tls1_2
