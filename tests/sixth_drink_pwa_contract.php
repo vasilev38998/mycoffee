@@ -2,6 +2,7 @@
 declare(strict_types=1);
 $root=dirname(__DIR__);
 $drink=file_get_contents($root.'/inc/customer_drink_loyalty.php');
+$loyalty=file_get_contents($root.'/inc/customer_loyalty.php');
 $orders=file_get_contents($root.'/inc/customer_orders.php');
 $status=file_get_contents($root.'/api/customer_order_status.php');
 $profile=file_get_contents($root.'/api/customer_profile.php');
@@ -25,10 +26,13 @@ $checks=[
   'profile refreshes sixth drink'=>str_contains($profile,'customer_drink_loyalty_refresh_customer($customerId)'),
   'QR card refreshes sixth drink'=>str_contains($cardApi,'customer_drink_loyalty_refresh_customer($customerId)'),
   'quote API requires auth and quotes cart'=>str_contains($quote,'customer_auth_current()')&&str_contains($quote,'customer_drink_loyalty_quote_cart'),
+  'quote cashback uses discounted amount due'=>str_contains($quote,"customer_loyalty_preview((float)(\$quote['total']??0))")&&str_contains($quote,"\$quote['loyalty_expected']"),
+  'actual cashback uses final order total'=>str_contains($loyalty,"customer_loyalty_preview((float)\$row['total_amount'])"),
   'PWA renders live gift quote'=>str_contains($checkoutJs,'customer_order_quote.php')&&str_contains($checkoutJs,'Подарок «6-й напиток»'),
+  'PWA cashback copy uses amount due'=>str_contains($checkoutJs,'loyalty_expected')&&str_contains($checkoutJs,'% от суммы к оплате'),
   'QR card listens for completed order'=>str_contains($cardJs,'kapouch-order-status')&&str_contains($cardJs,"status==='completed'"),
-  'PWA loads sixth drink checkout'=>str_contains($config,'assets/sixth-drink-checkout.js?v=1'),
-  'service worker v31 includes gift assets'=>str_contains($sw,'kapouch-pwa-v31')&&str_contains($sw,'./assets/sixth-drink-checkout.js?v=1'),
+  'PWA loads refreshed sixth drink checkout'=>str_contains($config,'assets/sixth-drink-checkout.js?v=2'),
+  'service worker v32 includes refreshed gift asset'=>str_contains($sw,'kapouch-pwa-v32')&&str_contains($sw,'./assets/sixth-drink-checkout.js?v=2'),
   'YooKassa returns to canonical app domain'=>str_contains($payments,"customer_public_app_url('payment-return.html')"),
   'public QR uses canonical app URL'=>str_contains($qr,'return customer_public_app_url();'),
   'final migration pins app and API origins'=>str_contains($migration,"https://app.kapouch.store/")&&str_contains($migration,"https://kapouch.store/api/"),
