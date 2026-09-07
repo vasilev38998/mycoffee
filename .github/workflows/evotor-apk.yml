@@ -48,30 +48,32 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate legacy TLS source contract
+      - name: Validate TLS compatibility source contract
         run: |
           set -euo pipefail
-          SRC=evotor-app/app/src/main/java/ru/kapouch/evotor/LegacyTls.java
-          grep -q 'isrg-root-x1' "$SRC"
-          grep -q 'isrg-root-x2' "$SRC"
-          grep -q 'isrg-root-ye' "$SRC"
-          grep -q 'isrg-root-yr' "$SRC"
-          grep -q 'completeLetsEncryptChain' "$SRC"
-          grep -q '.i.lencr.org' "$SRC"
-          grep -q 'TLS chain not trusted' "$SRC"
-          grep -q 'certificate-chain-helper' "$SRC"
+          LEGACY=evotor-app/app/src/main/java/ru/kapouch/evotor/LegacyTls.java
+          CURRENT=evotor-app/app/src/main/java/ru/kapouch/evotor/KapouchTls.java
+          grep -q 'isrg-root-x1' "$LEGACY"
+          grep -q 'completeLetsEncryptChain' "$LEGACY"
+          grep -q '.i.lencr.org' "$LEGACY"
+          grep -q 'certificate-chain-helper' "$LEGACY"
+          grep -q 'Let.s Encrypt Generation Y' "$CURRENT"
+          grep -q 'CN=YE1' "$CURRENT" || grep -q 'YE1' "$CURRENT"
+          grep -q 'CN=YR1' "$CURRENT" || grep -q 'YR1' "$CURRENT"
+          grep -q 'Kapouch TLS not trusted' "$CURRENT"
+          grep -q 'leaf.verify(issuer.getPublicKey())' "$CURRENT"
           mkdir -p /tmp/kapouch-tls-smoke
-          cat > /tmp/LegacyTlsSmoke.java <<'JAVA'
+          cat > /tmp/KapouchTlsSmoke.java <<'JAVA'
           package ru.kapouch.evotor;
-          public final class LegacyTlsSmoke {
+          public final class KapouchTlsSmoke {
               public static void main(String[] args) throws Exception {
-                  if (LegacyTls.socketFactory() == null) throw new IllegalStateException("SSL factory unavailable");
-                  System.out.println("LEGACY TLS ROOTS PARSED");
+                  if (KapouchTls.socketFactory() == null) throw new IllegalStateException("SSL factory unavailable");
+                  System.out.println("KAPOUCH TLS ISSUERS PARSED");
               }
           }
           JAVA
-          javac -source 1.8 -target 1.8 -d /tmp/kapouch-tls-smoke "$SRC" /tmp/LegacyTlsSmoke.java
-          java -cp /tmp/kapouch-tls-smoke ru.kapouch.evotor.LegacyTlsSmoke
+          javac -source 1.8 -target 1.8 -d /tmp/kapouch-tls-smoke "$CURRENT" /tmp/KapouchTlsSmoke.java
+          java -cp /tmp/kapouch-tls-smoke ru.kapouch.evotor.KapouchTlsSmoke
 
       - name: Build debug APK with Evotor-compatible toolchain
         env:
@@ -86,7 +88,7 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='10' versionName='1.2.3'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='11' versionName='1.2.4'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
           "$AAPT" dump permissions "$APK" | tee /tmp/evotor-permissions.txt
@@ -103,15 +105,10 @@ jobs:
           grep -q 'classes.dex' /tmp/evotor-apk-files.txt
           if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then echo 'Unexpected multidex APK for Evotor portal' >&2; exit 1; fi
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'isrg-root-x1' /tmp/evotor-dex-strings.txt
-          grep -q 'isrg-root-x2' /tmp/evotor-dex-strings.txt
-          grep -q 'isrg-root-ye' /tmp/evotor-dex-strings.txt
-          grep -q 'isrg-root-yr' /tmp/evotor-dex-strings.txt
-          grep -q 'TLS chain not trusted' /tmp/evotor-dex-strings.txt
-          grep -q 'certificate-chain-helper' /tmp/evotor-dex-strings.txt
-          grep -q '.i.lencr.org' /tmp/evotor-dex-strings.txt
+          grep -q 'Let.s Encrypt Generation Y' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch TLS not trusted' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch-order-sound' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.3' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.4' /tmp/evotor-dex-strings.txt
           grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt
           grep -q 'drink_loyalty' /tmp/evotor-dex-strings.txt
           grep -q 'ScannedCode' /tmp/evotor-dex-strings.txt
