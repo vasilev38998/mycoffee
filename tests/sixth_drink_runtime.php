@@ -54,4 +54,6 @@ $summary=customer_drink_loyalty_summary($customer2);sixth_ok($summary['available
 $restored=customer_drink_loyalty_restore_online_order_reward($orderId,'runtime cancellation');sixth_ok($restored===1,'cancelled/refunded online order restores consumed gift');sixth_ok(customer_drink_loyalty_restore_online_order_reward($orderId,'runtime cancellation')===0,'online gift restoration is idempotent');
 $summary=customer_drink_loyalty_summary($customer2);sixth_ok($summary['available_rewards']===1,'restored online gift becomes available again');
 
+require __DIR__.'/evotor_customer_loyalty_runtime.php';
+
 echo "SIXTH DRINK RUNTIME PASSED\n";
