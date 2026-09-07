@@ -31,10 +31,9 @@ final class OrderApi {
             connection = (HttpURLConnection) url.openConnection();
             if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен только по HTTPS.");
             HttpsURLConnection secure = (HttpsURLConnection) connection;
-            secure.setSSLSocketFactory(KapouchTls.socketFactory());
-            // HostnameVerifier deliberately stays the platform default. The compatibility
-            // layer only adds official Let's Encrypt CA intermediates; it never disables
-            // hostname or certificate verification.
+            secure.setSSLSocketFactory(SniTlsSocketFactory.forHost(KapouchTls.socketFactory(), KAPOUCH_HOST));
+            // The compatibility layer preserves normal certificate and hostname
+            // verification and additionally forces SNI for old Evotor Android.
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(7000);
             connection.setReadTimeout(10000);
@@ -44,7 +43,7 @@ final class OrderApi {
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Authorization", "Bearer " + order.actionToken);
             connection.setRequestProperty("X-Kapouch-Order-Token", order.actionToken);
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.5");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.6");
 
             JSONObject body = new JSONObject();
             body.put("action", action);
