@@ -67,6 +67,7 @@ jobs:
           set -euo pipefail
           LEGACY=evotor-app/app/src/main/java/ru/kapouch/evotor/LegacyTls.java
           CURRENT=evotor-app/app/src/main/java/ru/kapouch/evotor/KapouchTls.java
+          SNI=evotor-app/app/src/main/java/ru/kapouch/evotor/SniTlsSocketFactory.java
           ORDER=evotor-app/app/src/main/java/ru/kapouch/evotor/OrderApi.java
           LOYALTY=evotor-app/app/src/main/java/ru/kapouch/evotor/LoyaltyApi.java
           grep -q 'isrg-root-x1' "$LEGACY"
@@ -78,6 +79,10 @@ jobs:
           grep -q 'YR1' "$CURRENT"
           grep -q 'Kapouch TLS not trusted' "$CURRENT"
           grep -q 'leaf.verify(issuer.getPublicKey())' "$CURRENT"
+          grep -q 'setHostname' "$SNI"
+          grep -q 'javax.net.ssl.SNIHostName' "$SNI"
+          grep -q 'SniTlsSocketFactory.forHost' "$ORDER"
+          grep -q 'SniTlsSocketFactory.forHost' "$LOYALTY"
           grep -q 'KAPOUCH_HOST = "kapouch.store"' "$ORDER"
           grep -q 'ACTION_PATH = "/api/evotor_order_action.php"' "$ORDER"
           grep -q 'KAPOUCH_HOST = "kapouch.store"' "$LOYALTY"
@@ -88,11 +93,12 @@ jobs:
           public final class KapouchTlsSmoke {
               public static void main(String[] args) throws Exception {
                   if (KapouchTls.socketFactory() == null) throw new IllegalStateException("SSL factory unavailable");
-                  System.out.println("KAPOUCH TLS ISSUERS PARSED");
+                  if (SniTlsSocketFactory.forHost(KapouchTls.socketFactory(), "kapouch.store") == null) throw new IllegalStateException("SNI factory unavailable");
+                  System.out.println("KAPOUCH TLS + SNI FACTORIES READY");
               }
           }
           JAVA
-          javac -source 1.8 -target 1.8 -d /tmp/kapouch-tls-smoke "$CURRENT" /tmp/KapouchTlsSmoke.java
+          javac -source 1.8 -target 1.8 -d /tmp/kapouch-tls-smoke "$CURRENT" "$SNI" /tmp/KapouchTlsSmoke.java
           java -cp /tmp/kapouch-tls-smoke ru.kapouch.evotor.KapouchTlsSmoke
 
       - name: Build debug APK with Evotor-compatible toolchain
@@ -108,7 +114,7 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='12' versionName='1.2.5'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='13' versionName='1.2.6'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
           "$AAPT" dump permissions "$APK" | tee /tmp/evotor-permissions.txt
@@ -127,8 +133,10 @@ jobs:
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
           grep -q 'letsencrypt-gen-y-' /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch TLS not trusted' /tmp/evotor-dex-strings.txt
+          grep -q 'setHostname' /tmp/evotor-dex-strings.txt
+          grep -q 'SNIHostName' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch-order-sound' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.5' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.6' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch.store' /tmp/evotor-dex-strings.txt
           grep -q '/api/evotor_order_action.php' /tmp/evotor-dex-strings.txt
           grep -q '/api/evotor_customer_lookup.php' /tmp/evotor-dex-strings.txt
