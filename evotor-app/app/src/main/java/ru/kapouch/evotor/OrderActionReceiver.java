@@ -28,7 +28,7 @@ public class OrderActionReceiver extends BroadcastReceiver {
         new Thread(() -> {
             try {
                 OrderRecord order = OrderStore.find(appContext, orderId == null ? "" : orderId);
-                OrderApi.Result result = OrderApi.perform(order, action == null ? "" : action);
+                OrderApi.Result result = OrderApi.perform(appContext, order, action == null ? "" : action);
                 if (result.ok && order != null) {
                     OrderRecord updated = OrderStore.updateStatus(appContext, order.orderId, result.status);
                     if (updated != null) {
