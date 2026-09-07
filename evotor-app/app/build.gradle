@@ -8,8 +8,8 @@ android {
         applicationId 'ru.kapouch.evotor'
         minSdkVersion 21
         targetSdkVersion 25
-        versionCode 10
-        versionName '1.2.3'
+        versionCode 11
+        versionName '1.2.4'
         manifestPlaceholders = [evotorAppUuid: project.hasProperty('EVOTOR_APP_UUID') ? project.property('EVOTOR_APP_UUID') : 'bc17ef43-f590-49ca-a6f2-e940f57d0a72']
     }
 
