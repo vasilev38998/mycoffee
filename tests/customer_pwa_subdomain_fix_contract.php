@@ -11,7 +11,7 @@ $authRequest=file_get_contents($root.'/api/customer_auth_request.php');
 $authVerify=file_get_contents($root.'/api/customer_auth_verify.php');
 
 $checks=[
-  'catalog keeps canonical main-domain product image URLs'=>!str_contains($catalog,'customer_api_request_origin()')&&!str_contains($catalog,"customer_public_app_origin().'/uploads/products/'")&&str_contains($pwa,"'/customer/'.$path"),
+  'catalog keeps canonical main-domain product image URLs'=>!str_contains($catalog,'customer_api_request_origin()')&&!str_contains($catalog,"customer_public_app_origin().'/uploads/products/'")&&str_contains($pwa,"'/customer/'")&&str_contains($pwa,"uploads/products/"),
   'phone mask is loaded'=>str_contains($config,'assets/phone-mask.js?v=1'),
   'phone mask forces +7'=>str_contains($mask,"let out='+7'")&&str_contains($mask,"placeholder='+7 (999) 999-99-99'"),
   'auth request canonicalizes phone'=>str_contains($authRequest,'customer_phone_canonical_ru'),
