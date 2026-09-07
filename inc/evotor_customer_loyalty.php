@@ -31,13 +31,16 @@ function evotor_loyalty_terminal_connection_id(string $token): ?int
 function evotor_customer_loyalty_register_scan(int $connectionId,int $customerId,?string $deviceUuid=null): array
 {
     if($connectionId<=0||$customerId<=0)throw new RuntimeException('Не удалось определить терминал или клиента.');
-    $pdo=db();$now=time();$expires=$now+3600;
+    $pdo=db();$now=time();$expires=$now+1800;
     $pdo->beginTransaction();
     try{
         $customer=$pdo->prepare('SELECT id,name,loyalty_balance FROM customer_accounts WHERE id=? FOR UPDATE');$customer->execute([$customerId]);$row=$customer->fetch();
         if(!$row)throw new RuntimeException('Клиент не найден.');
-        $pdo->prepare("UPDATE evotor_customer_scans SET status='expired' WHERE connection_id=? AND status='pending' AND expires_at_unix<?")->execute([$connectionId,$now]);
-        $stmt=$pdo->prepare("INSERT INTO evotor_customer_scans(connection_id,customer_id,card_version,device_uuid,status,scanned_at,scanned_at_unix,expires_at,expires_at_unix) VALUES(?,?,1,?,'pending',NOW(),?,DATE_ADD(NOW(),INTERVAL 1 HOUR),?)");
+        // A terminal can have only one customer waiting for the next receipt. Without
+        // this supersession, customer A could remain pending after customer B scanned
+        // and be attached to a later unrelated sale after B's scan was consumed.
+        $pdo->prepare("UPDATE evotor_customer_scans SET status=CASE WHEN expires_at_unix<? THEN 'expired' ELSE 'cancelled' END WHERE connection_id=? AND status='pending'")->execute([$now,$connectionId]);
+        $stmt=$pdo->prepare("INSERT INTO evotor_customer_scans(connection_id,customer_id,card_version,device_uuid,status,scanned_at,scanned_at_unix,expires_at,expires_at_unix) VALUES(?,?,1,?,'pending',NOW(),?,DATE_ADD(NOW(),INTERVAL 30 MINUTE),?)");
         $stmt->execute([$connectionId,$customerId,$deviceUuid!==null&&trim($deviceUuid)!==''?mb_substr(trim($deviceUuid),0,200):null,$now,$expires]);
         $scanId=(int)$pdo->lastInsertId();$pdo->commit();
         return ['scan_id'=>$scanId,'customer'=>['id'=>$customerId,'name'=>trim((string)($row['name']??'')),'loyalty_balance'=>round((float)$row['loyalty_balance'],2)],'expires_at'=>$expires];
@@ -52,7 +55,7 @@ function evotor_customer_loyalty_attach_sale(PDO $pdo,array $connection,array $d
     $check=$pdo->prepare('SELECT id FROM evotor_customer_sales WHERE connection_id=? AND evotor_document_id=? LIMIT 1');$check->execute([$connectionId,$documentId]);if($check->fetchColumn())return null;
 
     try{$closeTs=(new DateTime((string)($document['close_date']??'now')))->getTimestamp();}catch(Throwable $e){$closeTs=time();}
-    $minTs=$closeTs-5400;$maxTs=$closeTs+180;
+    $minTs=$closeTs-1800;$maxTs=$closeTs+180;
     $scan=$pdo->prepare("SELECT * FROM evotor_customer_scans WHERE connection_id=? AND status='pending' AND scanned_at_unix BETWEEN ? AND ? AND expires_at_unix>=? ORDER BY scanned_at_unix DESC,id DESC LIMIT 1 FOR UPDATE");
     $scan->execute([$connectionId,$minTs,$maxTs,$closeTs]);$row=$scan->fetch();if(!$row)return null;
 
