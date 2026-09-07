@@ -49,7 +49,7 @@ jobs:
             echo "LIVE_TLS_CERT_COUNT=$(grep -c 'BEGIN CERTIFICATE' /tmp/live-tls.pem || true)"
             openssl x509 -in /tmp/live-leaf.pem -noout -subject -issuer -dates -ext subjectAltName
           else
-            echo 'Live TLS diagnostic unavailable; APK will use Android system HTTPS.'
+            echo 'Live TLS diagnostic unavailable.'
             cat /tmp/live-tls.err || true
           fi
 
@@ -62,31 +62,37 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate system HTTPS source contract
+      - name: Validate Evotor TLS trust bridge source contract
         run: |
           set -euo pipefail
+          TLS=evotor-app/app/src/main/java/ru/kapouch/evotor/EvotorTls.java
           ORDER=evotor-app/app/src/main/java/ru/kapouch/evotor/OrderApi.java
           LOYALTY=evotor-app/app/src/main/java/ru/kapouch/evotor/LoyaltyApi.java
-          JAVA_DIR=evotor-app/app/src/main/java/ru/kapouch/evotor
+          RAW=evotor-app/app/src/main/res/raw
 
+          test -s "$TLS"
+          grep -q 'SSLCertificateSocketFactory' "$TLS"
+          grep -q 'setTrustManagers' "$TLS"
+          grep -q 'CombinedTrustManager' "$TLS"
+          grep -q 'EvotorTls.socketFactory' "$ORDER"
+          grep -q 'EvotorTls.socketFactory' "$LOYALTY"
+          grep -q 'setSSLSocketFactory' "$ORDER"
+          grep -q 'setSSLSocketFactory' "$LOYALTY"
           grep -q 'KAPOUCH_HOST = "kapouch.store"' "$ORDER"
           grep -q 'ACTION_PATH = "/api/evotor_order_action.php"' "$ORDER"
-          grep -q 'KAPOUCH_HOST = "kapouch.store"' "$LOYALTY"
           grep -q 'LOOKUP_PATH = "/api/evotor_customer_lookup.php"' "$LOYALTY"
-          grep -q 'System HTTPS' "$ORDER"
-          grep -q 'System HTTPS' "$LOYALTY"
+          grep -q 'Evotor HTTPS' "$ORDER"
+          grep -q 'Evotor HTTPS' "$LOYALTY"
 
-          if grep -q 'setSSLSocketFactory' "$ORDER" "$LOYALTY"; then
-            echo 'Custom SSLSocketFactory must not be used on Evotor requests' >&2
-            exit 1
-          fi
-          if grep -q 'KapouchTls\|SniTlsSocketFactory\|LegacyTls' "$ORDER" "$LOYALTY"; then
-            echo 'Legacy custom TLS code is still referenced' >&2
-            exit 1
-          fi
-          test ! -e "$JAVA_DIR/KapouchTls.java"
-          test ! -e "$JAVA_DIR/SniTlsSocketFactory.java"
-          test ! -e "$JAVA_DIR/LegacyTls.java"
+          for cert in isrg_root_x1 isrg_root_x2 isrg_root_ye isrg_root_yr; do
+            test -s "$RAW/$cert.pem"
+            openssl x509 -in "$RAW/$cert.pem" -noout -subject -issuer -dates
+          done
+
+          # Old experimental TLS implementations must not be reintroduced.
+          test ! -e evotor-app/app/src/main/java/ru/kapouch/evotor/KapouchTls.java
+          test ! -e evotor-app/app/src/main/java/ru/kapouch/evotor/SniTlsSocketFactory.java
+          test ! -e evotor-app/app/src/main/java/ru/kapouch/evotor/LegacyTls.java
 
       - name: Build debug APK with Evotor-compatible toolchain
         env:
@@ -101,7 +107,7 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='14' versionName='1.2.7'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='15' versionName='1.2.8'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
           "$AAPT" dump permissions "$APK" | tee /tmp/evotor-permissions.txt
@@ -117,18 +123,23 @@ jobs:
           unzip -l "$APK" | tee /tmp/evotor-apk-files.txt
           grep -q 'classes.dex' /tmp/evotor-apk-files.txt
           if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then echo 'Unexpected multidex APK for Evotor portal' >&2; exit 1; fi
+          grep -q 'res/raw/isrg_root_x1.pem' /tmp/evotor-apk-files.txt
+          grep -q 'res/raw/isrg_root_x2.pem' /tmp/evotor-apk-files.txt
+          grep -q 'res/raw/isrg_root_ye.pem' /tmp/evotor-apk-files.txt
+          grep -q 'res/raw/isrg_root_yr.pem' /tmp/evotor-apk-files.txt
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
           grep -q 'kapouch-order-sound' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.7' /tmp/evotor-dex-strings.txt
-          grep -q 'System HTTPS' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.8' /tmp/evotor-dex-strings.txt
+          grep -q 'Evotor HTTPS' /tmp/evotor-dex-strings.txt
+          grep -q 'EvotorTls' /tmp/evotor-dex-strings.txt
+          grep -q 'SSLCertificateSocketFactory' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch.store' /tmp/evotor-dex-strings.txt
           grep -q '/api/evotor_order_action.php' /tmp/evotor-dex-strings.txt
           grep -q '/api/evotor_customer_lookup.php' /tmp/evotor-dex-strings.txt
           grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt
           grep -q 'drink_loyalty' /tmp/evotor-dex-strings.txt
           grep -q 'ScannedCode' /tmp/evotor-dex-strings.txt
-          if grep -q 'Kapouch TLS not trusted' /tmp/evotor-dex-strings.txt; then echo 'Old custom TLS diagnostics unexpectedly remain in APK' >&2; exit 1; fi
-          if grep -q 'SNIHostName' /tmp/evotor-dex-strings.txt; then echo 'Old SNI wrapper unexpectedly remains in APK' >&2; exit 1; fi
+          if grep -q 'Kapouch TLS not trusted' /tmp/evotor-dex-strings.txt; then echo 'Old TLS diagnostic unexpectedly remains in APK' >&2; exit 1; fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
