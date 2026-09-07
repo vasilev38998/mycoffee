@@ -12,21 +12,11 @@ customer_api_guard_origin();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))!=='GET')customer_api_reply(405,['ok'=>false,'error'=>'Method not allowed']);
 try{
     $catalog=customer_pwa_catalog();
-    $requestOrigin=mb_strtolower(customer_api_request_origin());
-    $appOrigin=mb_strtolower(customer_public_app_origin());
-    if($requestOrigin!==''&&hash_equals($appOrigin,$requestOrigin)){
-        $toAppImage=static function(?string $url): ?string {
-            $url=trim((string)$url);if($url==='')return null;
-            $path=(string)(parse_url($url,PHP_URL_PATH)??'');
-            $prefix='/customer/uploads/products/';
-            if(!str_starts_with($path,$prefix))return $url;
-            return customer_public_app_origin().'/uploads/products/'.ltrim(substr($path,strlen($prefix)),'/');
-        };
-        foreach($catalog['products'] as &$product){
-            $product['image']=$toAppImage($product['image']??null);
-            if(isset($product['variants'])&&is_array($product['variants']))foreach($product['variants'] as &$variant)$variant['image']=$toAppImage($variant['image']??null);unset($variant);
-        }unset($product);
-    }
+    // Product files physically live under kapouch.store/customer/uploads/products/.
+    // Keep these canonical URLs even when the PWA itself is opened on
+    // app.kapouch.store: ordinary <img> requests may load cross-origin images
+    // without CORS, while rewriting them to /uploads/products/ on the app
+    // subdomain depends on hosting rewrite details and caused broken cards.
     $promoEnabled=(string)app_setting('customer_promo_enabled','0')==='1';
     $promoStart=trim((string)app_setting('customer_promo_start',''));
     $promoEnd=trim((string)app_setting('customer_promo_end',''));
