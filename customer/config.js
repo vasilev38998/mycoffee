@@ -29,7 +29,7 @@ window.addEventListener('DOMContentLoaded',function(){
   document.body.appendChild(authRequired);
 
   var giftCheckout=document.createElement('script');
-  giftCheckout.src='assets/sixth-drink-checkout.js?v=1';
+  giftCheckout.src='assets/sixth-drink-checkout.js?v=2';
   giftCheckout.defer=true;
   document.body.appendChild(giftCheckout);
 
