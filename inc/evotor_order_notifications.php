@@ -101,16 +101,9 @@ function evotor_order_action_claims(string $token): ?array
 
 function evotor_order_action_public_url(): string
 {
-    $configured=trim((string)app_setting('customer_app_url',''));
-    if($configured!==''&&filter_var($configured,FILTER_VALIDATE_URL)){
-        $parts=parse_url($configured);
-        if(is_array($parts)&&strtolower((string)($parts['scheme']??''))==='https'&&!empty($parts['host'])){
-            $port=isset($parts['port'])?':'.(int)$parts['port']:'';
-            return 'https://'.$parts['host'].$port.'/api/evotor_order_action.php';
-        }
-    }
-    $host=preg_replace('/[^A-Za-z0-9.:-]/','',(string)($_SERVER['HTTP_HOST']??''));
-    if($host!=='')return 'https://'.$host.'/api/evotor_order_action.php';
+    // OrderApi on the Evotor terminal intentionally accepts only this exact HTTPS endpoint.
+    // Keep the server-side payload canonical so customer subdomain settings cannot produce
+    // an action URL that the installed Android client will reject.
     return 'https://kapouch.store/api/evotor_order_action.php';
 }
 
@@ -189,7 +182,7 @@ function evotor_order_push_http(array $connection,array $payload): array
 {
     $applicationId=trim((string)$connection['push_application_id']);$deviceUuid=trim((string)$connection['push_device_uuid']);
     $url='https://api.evotor.ru/api/apps/'.rawurlencode($applicationId).'/devices/'.rawurlencode($deviceUuid).'/push-notifications';
-    $request=['payload'=>$payload,'active_until'=>gmdate('Y-m-d\TH:i:s.000\Z',time()+600)];
+    $request=['payload'=>$payload,'active_until'=>gmdate('Y-m-d\\TH:i:s.000\\Z',time()+600)];
     $encoded=json_encode($request,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
     if(strlen($encoded)>1900)throw new RuntimeException('Push-уведомление Эвотор получилось слишком большим.');
     if(isset($GLOBALS['kapouch_evotor_push_transport'])&&is_callable($GLOBALS['kapouch_evotor_push_transport'])){
@@ -215,19 +208,27 @@ function evotor_order_push_http(array $connection,array $payload): array
 
 function evotor_order_push_dispatch_log(int $logId): bool
 {
-    $stmt=db()->prepare('SELECT l.payload_json,l.connection_id,c.* FROM evotor_order_push_log l JOIN evotor_connections c ON c.id=l.connection_id WHERE l.id=? LIMIT 1');
+    $stmt=db()->prepare('SELECT l.status,l.attempts,l.payload_json,l.connection_id,c.* FROM evotor_order_push_log l JOIN evotor_connections c ON c.id=l.connection_id WHERE l.id=? LIMIT 1');
     $stmt->execute([$logId]);$row=$stmt->fetch();if(!$row)return false;
     if(empty($row['enabled'])||empty($row['push_enabled']))return false;
+    if(!in_array((string)$row['status'],['pending','error'],true)||(int)$row['attempts']>=5)return false;
     $payload=json_decode((string)$row['payload_json'],true);if(!is_array($payload))throw new RuntimeException('В очереди Эвотор сохранён некорректный payload.');
-    db()->prepare('UPDATE evotor_order_push_log SET attempts=attempts+1,last_error=NULL WHERE id=?')->execute([$logId]);
+
+    // Claim this attempt atomically. Overlapping shutdown/cron workers may select the same
+    // row, but only one of them is allowed to perform the external Evotor request.
+    $attempts=(int)$row['attempts'];
+    $claim=db()->prepare("UPDATE evotor_order_push_log SET attempts=attempts+1,last_error=NULL,updated_at=NOW() WHERE id=? AND status IN ('pending','error') AND attempts=? AND attempts<5");
+    $claim->execute([$logId,$attempts]);
+    if($claim->rowCount()!==1)return false;
+
     try{
         $response=evotor_order_push_http($row,$payload);$pushId=trim((string)($response['id']??''));
-        db()->prepare("UPDATE evotor_order_push_log SET status='sent',provider_push_id=?,sent_at=NOW(),last_error=NULL WHERE id=?")->execute([$pushId!==''?$pushId:null,$logId]);
+        db()->prepare("UPDATE evotor_order_push_log SET status='sent',provider_push_id=?,sent_at=NOW(),last_error=NULL,updated_at=NOW() WHERE id=?")->execute([$pushId!==''?$pushId:null,$logId]);
         db()->prepare('UPDATE evotor_connections SET push_last_sent_at=NOW(),push_last_error=NULL WHERE id=?')->execute([(int)$row['connection_id']]);
         return true;
     }catch(Throwable $e){
         $message=mb_substr($e->getMessage(),0,1000);
-        db()->prepare("UPDATE evotor_order_push_log SET status='error',last_error=? WHERE id=?")->execute([$message,$logId]);
+        db()->prepare("UPDATE evotor_order_push_log SET status='error',last_error=?,updated_at=NOW() WHERE id=?")->execute([$message,$logId]);
         db()->prepare('UPDATE evotor_connections SET push_last_error=? WHERE id=?')->execute([$message,(int)$row['connection_id']]);
         error_log('[Kapouch Evotor push] '.$message);
         return false;
@@ -236,11 +237,11 @@ function evotor_order_push_dispatch_log(int $logId): bool
 
 function evotor_order_notify_new(int $orderId): array
 {
-    if($orderId<=0)return ['queued'=>0,'sent'=>0];
+    if($orderId<=0)return ['queued'=>0,'sent'=>0,'log_ids'=>[]];
     $order=db()->prepare('SELECT source,status FROM online_orders WHERE id=? LIMIT 1');$order->execute([$orderId]);$state=$order->fetch();
-    if(!$state||(string)$state['source']!=='customer-web'||(string)$state['status']!=='new')return ['queued'=>0,'sent'=>0];
+    if(!$state||(string)$state['source']!=='customer-web'||(string)$state['status']!=='new')return ['queued'=>0,'sent'=>0,'log_ids'=>[]];
     $basePayload=evotor_order_push_payload($orderId);
-    $connections=db()->query('SELECT * FROM evotor_connections WHERE enabled=1 AND push_enabled=1 ORDER BY id')->fetchAll();$queued=0;$sent=0;
+    $connections=db()->query('SELECT * FROM evotor_connections WHERE enabled=1 AND push_enabled=1 ORDER BY id')->fetchAll();$queued=0;$logIds=[];
     foreach($connections as $connection){
         if(!evotor_order_push_ready($connection))continue;
         $expiresAt=time()+8*3600;
@@ -252,9 +253,32 @@ function evotor_order_notify_new(int $orderId): array
         $insert=db()->prepare("INSERT IGNORE INTO evotor_order_push_log(connection_id,order_id,event_type,status,payload_json) VALUES(?,?,'new_order','pending',?)");
         $insert->execute([(int)$connection['id'],$orderId,$json]);
         if($insert->rowCount()!==1)continue;
-        $queued++;$logId=(int)db()->lastInsertId();if($logId>0&&evotor_order_push_dispatch_log($logId))$sent++;
+        $queued++;$logId=(int)db()->lastInsertId();if($logId>0)$logIds[]=$logId;
     }
-    return ['queued'=>$queued,'sent'=>$sent];
+    return ['queued'=>$queued,'sent'=>0,'log_ids'=>$logIds];
+}
+
+function evotor_order_push_defer(array $logIds): void
+{
+    $unique=[];
+    foreach($logIds as $logId){
+        $logId=(int)$logId;
+        if($logId>0)$unique[$logId]=$logId;
+    }
+    $logIds=array_values($unique);
+    if($logIds===[]||PHP_SAPI==='cli'||!function_exists('fastcgi_finish_request'))return;
+
+    register_shutdown_function(static function() use($logIds): void {
+        ignore_user_abort(true);
+        @fastcgi_finish_request();
+        foreach($logIds as $logId){
+            try{
+                evotor_order_push_dispatch_log((int)$logId);
+            }catch(Throwable $e){
+                error_log('[Kapouch Evotor deferred push] log #'.(int)$logId.': '.$e->getMessage());
+            }
+        }
+    });
 }
 
 function evotor_order_push_test(int $connectionId): array
@@ -270,7 +294,7 @@ function evotor_order_push_test(int $connectionId): array
 function evotor_order_push_retry_pending(int $limit=20): array
 {
     $limit=max(1,min(100,$limit));
-    $rows=db()->query("SELECT l.id FROM evotor_order_push_log l JOIN evotor_connections c ON c.id=l.connection_id JOIN online_orders o ON o.id=l.order_id WHERE l.status IN ('pending','error') AND l.attempts<5 AND l.created_at>=DATE_SUB(NOW(),INTERVAL 30 MINUTE) AND c.enabled=1 AND c.push_enabled=1 AND o.status IN ('new','preparing') ORDER BY l.id LIMIT {$limit}")->fetchAll(PDO::FETCH_COLUMN);
+    $rows=db()->query("SELECT l.id FROM evotor_order_push_log l JOIN evotor_connections c ON c.id=l.connection_id JOIN online_orders o ON o.id=l.order_id WHERE l.status IN ('pending','error') AND l.attempts<5 AND l.created_at>=DATE_SUB(NOW(),INTERVAL 6 HOUR) AND (l.attempts=0 OR (l.attempts=1 AND l.updated_at<=DATE_SUB(NOW(),INTERVAL 1 MINUTE)) OR (l.attempts=2 AND l.updated_at<=DATE_SUB(NOW(),INTERVAL 5 MINUTE)) OR (l.attempts=3 AND l.updated_at<=DATE_SUB(NOW(),INTERVAL 15 MINUTE)) OR (l.attempts=4 AND l.updated_at<=DATE_SUB(NOW(),INTERVAL 60 MINUTE))) AND c.enabled=1 AND c.push_enabled=1 AND o.status IN ('new','preparing') ORDER BY l.id LIMIT {$limit}")->fetchAll(PDO::FETCH_COLUMN);
     $sent=0;foreach($rows as $id)if(evotor_order_push_dispatch_log((int)$id))$sent++;
     return ['processed'=>count($rows),'sent'=>$sent];
 }
