@@ -163,10 +163,11 @@ jobs:
           VERSION=$("$AAPT" dump badging "$APK" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -n1)
           test -n "$VERSION"
           DEST="evotor-app/releases/kapouch-orders-evotor-compatible-v${VERSION}.apk"
+          # Versioned releases are immutable. Rebuilding an already-published version must
+          # not rewrite it just because APK packaging produced different bytes.
           if [ -e "$DEST" ]; then
-            cmp -s "$APK" "$DEST" && exit 0
-            echo "Refusing to overwrite existing release $DEST with different bytes" >&2
-            exit 1
+            echo "Release $DEST already exists; keeping immutable published APK."
+            exit 0
           fi
           cp "$APK" "$DEST"
           git config user.name "github-actions[bot]"
