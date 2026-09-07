@@ -24,17 +24,23 @@ jobs:
             name="$1"; shift
             out="/tmp/${name}.txt"
             echo "=== ${name} ==="
-            if timeout 15 openssl s_client -connect kapouch.store:443 -showcerts "$@" </dev/null >"$out" 2>&1; then
-              echo "CERT_COUNT=$(grep -c 'BEGIN CERTIFICATE' "$out" || true)"
+            timeout 15 openssl s_client -connect kapouch.store:443 -showcerts "$@" </dev/null >"$out" 2>&1 || true
+            count=$(grep -c 'BEGIN CERTIFICATE' "$out" || true)
+            echo "CERT_COUNT=${count}"
+            if [ "$count" -gt 0 ]; then
               awk 'BEGIN{p=0} /-----BEGIN CERTIFICATE-----/{p=1} p{print} /-----END CERTIFICATE-----/{if(p)exit}' "$out" >"/tmp/${name}.pem"
-              openssl x509 -in "/tmp/${name}.pem" -noout -subject -issuer -serial -fingerprint -sha256 -pubkey 2>/dev/null || true
+              openssl x509 -in "/tmp/${name}.pem" -noout -subject -issuer -serial -fingerprint -sha256 2>/dev/null || true
             else
-              echo 'HANDSHAKE_FAILED'
               tail -n 30 "$out" || true
             fi
+            grep -E 'Protocol *:|Cipher *:|New, |Server Temp Key|Verify return code' "$out" | tail -n 8 || true
           }
 
           probe sni_default -servername kapouch.store
           probe no_sni
           probe sni_tls12 -servername kapouch.store -tls1_2
           probe no_sni_tls12 -tls1_2
+          probe tls12_aes128_sha -servername kapouch.store -tls1_2 -cipher 'AES128-SHA:@SECLEVEL=0'
+          probe tls12_ecdhe_rsa_aes128_sha -servername kapouch.store -tls1_2 -cipher 'ECDHE-RSA-AES128-SHA:@SECLEVEL=0'
+          probe tls11 -servername kapouch.store -tls1_1 -cipher 'ALL:@SECLEVEL=0'
+          probe tls10 -servername kapouch.store -tls1 -cipher 'ALL:@SECLEVEL=0'
