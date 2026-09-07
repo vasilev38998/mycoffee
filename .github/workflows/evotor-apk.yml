@@ -26,119 +26,54 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
+        with: {distribution: temurin, java-version: '17'}
       - name: Install Evotor-era Android SDK
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" 'platforms;android-27' 'build-tools;27.0.3' >/dev/null || true
           test -x "$ANDROID_HOME/build-tools/27.0.3/aapt"
-
       - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '8'
-
+        with: {distribution: temurin, java-version: '8'}
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '4.4'
-
+        with: {gradle-version: '4.4'}
       - name: Validate legacy TLS source contract
         run: |
           set -euo pipefail
           SRC=evotor-app/app/src/main/java/ru/kapouch/evotor/LegacyTls.java
-          grep -q 'isrg-root-x1' "$SRC"
-          grep -q 'isrg-root-x2' "$SRC"
-          grep -q 'isrg-root-ye' "$SRC"
-          grep -q 'isrg-root-yr' "$SRC"
-          grep -q 'completeLetsEncryptChain' "$SRC"
-          grep -q '.i.lencr.org' "$SRC"
-          grep -q 'TLS chain not trusted' "$SRC"
-          grep -q 'certificate-chain-helper' "$SRC"
+          grep -q 'isrg-root-x1' "$SRC"; grep -q 'isrg-root-x2' "$SRC"; grep -q 'isrg-root-ye' "$SRC"; grep -q 'isrg-root-yr' "$SRC"
+          grep -q 'completeLetsEncryptChain' "$SRC"; grep -q '.i.lencr.org' "$SRC"; grep -q 'TLS chain not trusted' "$SRC"; grep -q 'certificate-chain-helper' "$SRC"
           mkdir -p /tmp/kapouch-tls-smoke
           cat > /tmp/LegacyTlsSmoke.java <<'JAVA'
           package ru.kapouch.evotor;
-          public final class LegacyTlsSmoke {
-              public static void main(String[] args) throws Exception {
-                  if (LegacyTls.socketFactory() == null) throw new IllegalStateException("SSL factory unavailable");
-                  System.out.println("LEGACY TLS ROOTS PARSED");
-              }
-          }
+          public final class LegacyTlsSmoke { public static void main(String[] args) throws Exception { if (LegacyTls.socketFactory() == null) throw new IllegalStateException("SSL factory unavailable"); System.out.println("LEGACY TLS ROOTS PARSED"); } }
           JAVA
           javac -source 1.8 -target 1.8 -d /tmp/kapouch-tls-smoke "$SRC" /tmp/LegacyTlsSmoke.java
           java -cp /tmp/kapouch-tls-smoke ru.kapouch.evotor.LegacyTlsSmoke
-
       - name: Build debug APK with Evotor-compatible toolchain
-        env:
-          EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
+        env: {EVOTOR_APP_UUID: "${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}"}
         run: gradle -p evotor-app :app:assembleDebug -PEVOTOR_APP_UUID="$EVOTOR_APP_UUID" --no-daemon
-
       - name: Validate APK metadata for Evotor portal
-        env:
-          EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
+        env: {EVOTOR_APP_UUID: "${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}"}
         run: |
-          APK=evotor-app/app/build/outputs/apk/debug/app-debug.apk
-          AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
-          test -s "$APK"
+          APK=evotor-app/app/build/outputs/apk/debug/app-debug.apk; AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"; test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='10' versionName='1.2.3'" /tmp/evotor-badging.txt
-          grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
-          grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='11' versionName='1.2.4'" /tmp/evotor-badging.txt
+          grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt; grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
           "$AAPT" dump permissions "$APK" | tee /tmp/evotor-permissions.txt
-          grep -q 'android.permission.INTERNET' /tmp/evotor-permissions.txt
-          grep -q 'ru.evotor.devices.SCANNER_RECEIVER' /tmp/evotor-permissions.txt
+          grep -q 'android.permission.INTERNET' /tmp/evotor-permissions.txt; grep -q 'ru.evotor.devices.SCANNER_RECEIVER' /tmp/evotor-permissions.txt
           "$AAPT" dump xmltree "$APK" AndroidManifest.xml > /tmp/evotor-manifest.txt
-          grep -q 'app_uuid' /tmp/evotor-manifest.txt
-          grep -q "$EVOTOR_APP_UUID" /tmp/evotor-manifest.txt
-          grep -q 'OrderActionReceiver' /tmp/evotor-manifest.txt
-          grep -q 'OrderReminderReceiver' /tmp/evotor-manifest.txt
-          grep -q 'CustomerScanReceiver' /tmp/evotor-manifest.txt
-          grep -q 'ru.evotor.devices.ScannedCode' /tmp/evotor-manifest.txt
-          unzip -l "$APK" | tee /tmp/evotor-apk-files.txt
-          grep -q 'classes.dex' /tmp/evotor-apk-files.txt
-          if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then echo 'Unexpected multidex APK for Evotor portal' >&2; exit 1; fi
+          grep -q 'app_uuid' /tmp/evotor-manifest.txt; grep -q "$EVOTOR_APP_UUID" /tmp/evotor-manifest.txt; grep -q 'OrderActionReceiver' /tmp/evotor-manifest.txt; grep -q 'OrderReminderReceiver' /tmp/evotor-manifest.txt; grep -q 'CustomerScanReceiver' /tmp/evotor-manifest.txt; grep -q 'ru.evotor.devices.ScannedCode' /tmp/evotor-manifest.txt
+          unzip -l "$APK" | tee /tmp/evotor-apk-files.txt; grep -q 'classes.dex' /tmp/evotor-apk-files.txt; if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then exit 1; fi
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'isrg-root-x1' /tmp/evotor-dex-strings.txt
-          grep -q 'isrg-root-x2' /tmp/evotor-dex-strings.txt
-          grep -q 'isrg-root-ye' /tmp/evotor-dex-strings.txt
-          grep -q 'isrg-root-yr' /tmp/evotor-dex-strings.txt
-          grep -q 'TLS chain not trusted' /tmp/evotor-dex-strings.txt
-          grep -q 'certificate-chain-helper' /tmp/evotor-dex-strings.txt
-          grep -q '.i.lencr.org' /tmp/evotor-dex-strings.txt
-          grep -q 'kapouch-order-sound' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.3' /tmp/evotor-dex-strings.txt
-          grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt
-          grep -q 'drink_loyalty' /tmp/evotor-dex-strings.txt
-          grep -q 'ScannedCode' /tmp/evotor-dex-strings.txt
-
+          grep -q 'isrg-root-x1' /tmp/evotor-dex-strings.txt; grep -q 'isrg-root-x2' /tmp/evotor-dex-strings.txt; grep -q 'isrg-root-ye' /tmp/evotor-dex-strings.txt; grep -q 'isrg-root-yr' /tmp/evotor-dex-strings.txt; grep -q 'TLS chain not trusted' /tmp/evotor-dex-strings.txt; grep -q 'certificate-chain-helper' /tmp/evotor-dex-strings.txt; grep -q '.i.lencr.org' /tmp/evotor-dex-strings.txt; grep -q 'kapouch-order-sound' /tmp/evotor-dex-strings.txt; grep -q 'Kapouch-Orders-Evotor/1.2.4' /tmp/evotor-dex-strings.txt; grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt; grep -q 'drink_loyalty' /tmp/evotor-dex-strings.txt; grep -q 'ScannedCode' /tmp/evotor-dex-strings.txt
       - name: Upload APK
         uses: actions/upload-artifact@v4
-        with:
-          name: kapouch-orders-evotor-compatible
-          path: evotor-app/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-
+        with: {name: kapouch-orders-evotor-compatible, path: evotor-app/app/build/outputs/apk/debug/app-debug.apk, if-no-files-found: error}
       - name: Publish versioned APK to repository
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          APK=evotor-app/app/build/outputs/apk/debug/app-debug.apk
-          AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
-          VERSION=$("$AAPT" dump badging "$APK" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -n1)
-          test -n "$VERSION"
-          DEST="evotor-app/releases/kapouch-orders-evotor-compatible-v${VERSION}.apk"
-          if [ -e "$DEST" ]; then
-            cmp -s "$APK" "$DEST" && exit 0
-            echo "Refusing to overwrite existing release $DEST with different bytes" >&2
-            exit 1
-          fi
-          cp "$APK" "$DEST"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$DEST"
-          git commit -m "release: add Evotor APK v${VERSION}"
-          git push origin HEAD:main
+          APK=evotor-app/app/build/outputs/apk/debug/app-debug.apk; AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"; VERSION=$("$AAPT" dump badging "$APK" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -n1); test -n "$VERSION"; DEST="evotor-app/releases/kapouch-orders-evotor-compatible-v${VERSION}.apk"
+          if [ -e "$DEST" ]; then cmp -s "$APK" "$DEST" && exit 0; echo "Refusing to overwrite existing release $DEST with different bytes" >&2; exit 1; fi
+          cp "$APK" "$DEST"; git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"; git add "$DEST"; git commit -m "release: add Evotor APK v${VERSION}"; git push origin HEAD:main
