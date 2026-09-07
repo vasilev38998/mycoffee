@@ -41,7 +41,16 @@ function customer_pwa_category_for(?int $categoryId,string $fallback,array $byId
 }
 function customer_pwa_image_url(?string $path): ?string
 {
-    $path=trim((string)$path);if($path===''||!str_starts_with($path,'uploads/products/'))return null;$host=preg_replace('/[^A-Za-z0-9.:-]/','',(string)($_SERVER['HTTP_HOST']??''));if($host==='')return '../customer/'.$path;$forwarded=trim(explode(',',(string)($_SERVER['HTTP_X_FORWARDED_PROTO']??''))[0]??'');$scheme=$forwarded!==''?$forwarded:((!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')?'https':'http');if(!in_array($scheme,['http','https'],true))$scheme='https';return $scheme.'://'.$host.'/customer/'.$path;
+    $path=ltrim(trim((string)$path),'/');
+    if($path==='')return null;
+    if(preg_match('~^https?://~i',$path))return $path;
+    // Old uploads are stored in customer/uploads/products; newer/admin values may already
+    // contain the customer/ prefix. Return a fixed canonical host instead of deriving it
+    // from the API request host, so app.kapouch.store and kapouch.store behave identically.
+    if(str_starts_with($path,'customer/uploads/products/'))$relative=$path;
+    elseif(str_starts_with($path,'uploads/products/'))$relative='customer/'.$path;
+    else return null;
+    return 'https://kapouch.store/'.$relative;
 }
 function customer_pwa_catalog(): array
 {
