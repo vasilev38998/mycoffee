@@ -1,5 +1,7 @@
 package ru.kapouch.evotor;
 
+import android.content.Context;
+
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -18,7 +20,8 @@ final class OrderApi {
 
     private OrderApi() {}
 
-    static Result perform(OrderRecord order, String action) {
+    static Result perform(Context context, OrderRecord order, String action) {
+        if (context == null) return Result.error("Контекст Эвотора недоступен.");
         if (order == null) return Result.error("Заказ не найден на терминале.");
         if (order.actionUrl == null || order.actionUrl.trim().isEmpty()) return Result.error("В push нет адреса Kapouch.");
         if (order.actionToken == null || order.actionToken.isEmpty()) return Result.error("Ключ действия заказа отсутствует или уже истёк.");
@@ -30,12 +33,9 @@ final class OrderApi {
             if (!allowedActionUrl(url)) return Result.error("В push указан неподдерживаемый адрес Kapouch.");
             connection = (HttpURLConnection) url.openConnection();
             if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен только по HTTPS.");
+            HttpsURLConnection secure = (HttpsURLConnection) connection;
+            secure.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
 
-            // IMPORTANT: do not install a custom SSLSocketFactory here.
-            // On the affected Evotor the built-in browser successfully opens the exact
-            // kapouch.store HTTPS endpoint, while our previous custom TLS factory received
-            // a fallback self-signed virtual-host certificate. Using the platform HTTPS
-            // stack keeps the terminal's working SNI/certificate path intact.
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(7000);
             connection.setReadTimeout(10000);
@@ -45,7 +45,7 @@ final class OrderApi {
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Authorization", "Bearer " + order.actionToken);
             connection.setRequestProperty("X-Kapouch-Order-Token", order.actionToken);
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.7");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.8");
 
             JSONObject body = new JSONObject();
             body.put("action", action);
@@ -74,7 +74,7 @@ final class OrderApi {
             String message = e.getMessage();
             String type = e.getClass().getSimpleName();
             if (message == null || message.trim().isEmpty()) message = "Нет связи с Kapouch.";
-            return Result.error("System HTTPS " + type + ": " + message);
+            return Result.error("Evotor HTTPS " + type + ": " + message);
         } finally {
             if (connection != null) connection.disconnect();
         }

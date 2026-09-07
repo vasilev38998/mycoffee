@@ -42,10 +42,9 @@ final class LoyaltyApi {
             }
             connection = (HttpURLConnection) url.openConnection();
             if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен только по HTTPS.");
+            HttpsURLConnection secure = (HttpsURLConnection) connection;
+            secure.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
 
-            // IMPORTANT: use the terminal's native HTTPS implementation without a
-            // custom SSLSocketFactory. The affected Evotor browser reaches this exact
-            // endpoint successfully, proving the platform HTTPS/SNI path is usable.
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(7000);
             connection.setReadTimeout(10000);
@@ -53,7 +52,7 @@ final class LoyaltyApi {
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.7");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.8");
             if (terminalToken != null && !terminalToken.isEmpty()) connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
 
             JSONObject body = new JSONObject();
@@ -92,7 +91,7 @@ final class LoyaltyApi {
             String message = e.getMessage();
             String type = e.getClass().getSimpleName();
             if (message == null || message.trim().isEmpty()) message = "Нет связи с Kapouch.";
-            return Result.error("System HTTPS " + type + ": " + message);
+            return Result.error("Evotor HTTPS " + type + ": " + message);
         } finally {
             if (connection != null) connection.disconnect();
         }

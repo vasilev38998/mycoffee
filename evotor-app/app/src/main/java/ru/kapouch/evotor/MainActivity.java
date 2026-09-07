@@ -209,7 +209,7 @@ public class MainActivity extends Activity {
         button.setEnabled(false);
         button.setText("Отправляем…");
         new Thread(() -> {
-            OrderApi.Result result = OrderApi.perform(order, action);
+            OrderApi.Result result = OrderApi.perform(getApplicationContext(), order, action);
             if (result.ok) {
                 OrderRecord updated = OrderStore.updateStatus(this, order.orderId, result.status);
                 if (updated != null) {
