@@ -5,6 +5,8 @@ require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_orders.php';
 require_once dirname(__DIR__).'/inc/customer_pwa.php';
 require_once dirname(__DIR__).'/inc/customer_operations.php';
+require_once dirname(__DIR__).'/inc/customer_urls.php';
+require_once dirname(__DIR__).'/inc/customer_media.php';
 
 customer_api_headers();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))==='OPTIONS'){http_response_code(204);exit;}
@@ -12,11 +14,22 @@ customer_api_guard_origin();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))!=='GET')customer_api_reply(405,['ok'=>false,'error'=>'Method not allowed']);
 try{
     $catalog=customer_pwa_catalog();
-    // Product files physically live under kapouch.store/customer/uploads/products/.
-    // Keep these canonical URLs even when the PWA itself is opened on
-    // app.kapouch.store: ordinary <img> requests may load cross-origin images
-    // without CORS, while rewriting them to /uploads/products/ on the app
-    // subdomain depends on hosting rewrite details and caused broken cards.
+    // Serve uploaded product photos through a dedicated PHP endpoint on the API origin.
+    // This bypasses Beget virtual-host/static-file rewrite differences between
+    // kapouch.store and app.kapouch.store while keeping immutable image caching.
+    $stableImage=static function(?string $url): ?string {
+        $url=trim((string)$url);if($url==='')return null;
+        $path=(string)(parse_url($url,PHP_URL_PATH)??'');
+        if(!preg_match('#/(?:customer/)?uploads/products/([A-Za-z0-9._-]+\.(?:jpe?g|png|webp))$#i',$path,$m))return $url;
+        $name=(string)$m[1];$file=customer_media_root().'/'.$name;
+        if(!is_file($file)||!is_readable($file))return null;
+        $version=(int)(filemtime($file)?:0);
+        return customer_public_api_base().'/customer_product_image.php?f='.rawurlencode($name).'&v='.$version;
+    };
+    foreach($catalog['products'] as &$product){
+        $product['image']=$stableImage($product['image']??null);
+        if(isset($product['variants'])&&is_array($product['variants']))foreach($product['variants'] as &$variant)$variant['image']=$stableImage($variant['image']??null);unset($variant);
+    }unset($product);
     $promoEnabled=(string)app_setting('customer_promo_enabled','0')==='1';
     $promoStart=trim((string)app_setting('customer_promo_start',''));
     $promoEnd=trim((string)app_setting('customer_promo_end',''));
