@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-require dirname(__DIR__).'/inc/bootstrap.php';
+if(!function_exists('db'))require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/evotor_customer_loyalty.php';
 
 function evloy_ok(bool $condition,string $message): void{if(!$condition)throw new RuntimeException('ASSERT FAILED: '.$message);echo "OK: {$message}\n";}
