@@ -135,7 +135,10 @@ $GLOBALS['kapouch_evotor_push_transport']=static function(string $url,string $to
 };
 $push1=evotor_order_notify_new((int)$order2['order_id']);
 $push2=evotor_order_notify_new((int)$order2['order_id']);
-ok($push1['sent']===1&&$push2['sent']===0&&$transportCalls===1,'Evotor new-order push is delivered once per order');
+$pushLogId=(int)($push1['log_ids'][0]??0);
+ok($push1['queued']===1&&$push1['sent']===0&&$pushLogId>0&&$push2['queued']===0&&$transportCalls===0,'Evotor new-order push is queued once without blocking checkout');
+ok(evotor_order_push_dispatch_log($pushLogId)===true&&$transportCalls===1,'queued Evotor push is delivered by worker');
+ok(evotor_order_push_dispatch_log($pushLogId)===false&&$transportCalls===1,'sent Evotor push is not delivered twice');
 $pushLogCount=(int)$pdo->query('SELECT COUNT(*) FROM evotor_order_push_log WHERE order_id='.(int)$order2['order_id'])->fetchColumn();
 ok($pushLogCount===1,'Evotor push delivery log is idempotent');
 $pdo->prepare('UPDATE evotor_connections SET push_enabled=0 WHERE id=?')->execute([$evotorConnectionId]);

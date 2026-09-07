@@ -58,7 +58,7 @@ $newOrder=$makeOrder('ACT-2');
 action_throws(fn()=>evotor_order_action_apply($newOrder,'ready'),'new order cannot skip accept step');
 
 $_SERVER['HTTP_HOST']='kapouch.test';
-action_ok(evotor_order_action_public_url()==='https://kapouch.test/api/evotor_order_action.php','action URL is HTTPS and points to signed action endpoint');
+action_ok(evotor_order_action_public_url()==='https://kapouch.store/api/evotor_order_action.php','action URL is canonical HTTPS endpoint accepted by Evotor client');
 
 $pushOrder=$makeOrder('ACT-3');
 $transportCalls=0;
@@ -67,14 +67,17 @@ $GLOBALS['kapouch_evotor_push_transport']=static function(string $url,string $pu
     action_ok($publisherToken==='runtime-publisher-token','publisher token stays in server transport');
     $payload=$request['payload']??[];
     action_ok(($payload['type']??'')==='new_order','new order payload type is preserved');
-    action_ok(str_starts_with((string)($payload['action_url']??''),'https://'),'push includes HTTPS action URL');
+    action_ok(($payload['action_url']??'')==='https://kapouch.store/api/evotor_order_action.php','push includes canonical HTTPS action URL');
     $claims=evotor_order_action_claims((string)($payload['action_token']??''));
     action_ok(is_array($claims)&&(int)$claims['connection_id']===$connectionId&&(int)$claims['order_id']===$pushOrder,'push action token is scoped to terminal connection and order');
     action_ok(!str_contains(json_encode($payload,JSON_UNESCAPED_SLASHES),'runtime-publisher-token'),'publisher secret is never placed in push payload');
     return ['id'=>'33333333-3333-4333-8333-333333333333','status'=>'ACCEPTED'];
 };
 $result=evotor_order_notify_new($pushOrder);
-action_ok($result['sent']===1&&$transportCalls===1,'actionable Evotor push is dispatched');
+$pushLogId=(int)($result['log_ids'][0]??0);
+action_ok($result['queued']===1&&$result['sent']===0&&$pushLogId>0&&$transportCalls===0,'actionable Evotor push is queued without synchronous network I/O');
+action_ok(evotor_order_push_dispatch_log($pushLogId)===true&&$transportCalls===1,'queued actionable Evotor push is dispatched by worker');
+action_ok(evotor_order_push_dispatch_log($pushLogId)===false&&$transportCalls===1,'sent actionable push is not dispatched twice');
 unset($GLOBALS['kapouch_evotor_push_transport']);
 
 echo "EVOTOR ORDER ACTIONS PASSED\n";

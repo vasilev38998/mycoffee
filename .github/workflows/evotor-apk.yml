@@ -39,19 +39,26 @@ jobs:
           yes | "$SDKMANAGER" 'platforms;android-27' 'build-tools;27.0.3' >/dev/null || true
           test -x "$ANDROID_HOME/build-tools/27.0.3/aapt"
 
-      - name: Inspect live kapouch.store TLS chain
-        continue-on-error: true
+      - name: Validate live kapouch.store TLS chain
         run: |
-          set -uo pipefail
-          rm -f /tmp/live-tls.pem /tmp/live-leaf.pem
-          if timeout 15 openssl s_client -connect kapouch.store:443 -servername kapouch.store -showcerts </dev/null > /tmp/live-tls.pem 2>/tmp/live-tls.err; then
-            awk 'BEGIN{n=0} /-----BEGIN CERTIFICATE-----/{n++; if(n==1)printit=1} printit{print} /-----END CERTIFICATE-----/{if(printit){exit}}' /tmp/live-tls.pem > /tmp/live-leaf.pem
-            echo "LIVE_TLS_CERT_COUNT=$(grep -c 'BEGIN CERTIFICATE' /tmp/live-tls.pem || true)"
-            openssl x509 -in /tmp/live-leaf.pem -noout -subject -issuer -dates -ext subjectAltName
-          else
-            echo 'Live TLS diagnostic unavailable.'
-            cat /tmp/live-tls.err || true
+          set -euo pipefail
+          rm -f /tmp/live-tls.pem /tmp/live-leaf.pem /tmp/live-tls.err
+          timeout 20 openssl s_client \
+            -connect kapouch.store:443 \
+            -servername kapouch.store \
+            -verify_return_error \
+            -verify_hostname kapouch.store \
+            -showcerts </dev/null > /tmp/live-tls.pem 2>/tmp/live-tls.err
+          cat /tmp/live-tls.err || true
+          grep -q 'Verify return code: 0 (ok)' /tmp/live-tls.pem
+          CERT_COUNT=$(grep -c 'BEGIN CERTIFICATE' /tmp/live-tls.pem || true)
+          echo "LIVE_TLS_CERT_COUNT=$CERT_COUNT"
+          if [ "$CERT_COUNT" -lt 2 ]; then
+            echo 'kapouch.store did not serve an intermediate certificate; old Android clients may fail trust validation.' >&2
+            exit 1
           fi
+          awk 'BEGIN{n=0} /-----BEGIN CERTIFICATE-----/{n++; if(n==1)printit=1} printit{print} /-----END CERTIFICATE-----/{if(printit){exit}}' /tmp/live-tls.pem > /tmp/live-leaf.pem
+          openssl x509 -in /tmp/live-leaf.pem -noout -subject -issuer -dates -ext subjectAltName
 
       - uses: actions/setup-java@v4
         with:

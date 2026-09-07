@@ -57,6 +57,9 @@ jobs:
       - name: Sixth-drink PWA checkout contract
         run: php tests/sixth_drink_pwa_contract.php
 
+      - name: Evotor order push queue contract
+        run: php tests/evotor_order_push_queue_contract.php
+
       - name: PWA payment return contract
         run: |
           set -euo pipefail

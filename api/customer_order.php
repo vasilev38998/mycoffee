@@ -58,7 +58,10 @@ try{
     if(!empty($order['order_id'])){
         $read=db()->prepare('SELECT promised_at FROM online_orders WHERE id=?');$read->execute([(int)$order['order_id']]);$saved=trim((string)($read->fetchColumn()?:''));
         if($saved!==''){$order['promised_at']=$saved;$order['promised_display']=date('H:i',strtotime($saved));}
-        try{evotor_order_notify_new((int)$order['order_id']);}catch(Throwable $pushError){error_log('[Kapouch Evotor push enqueue] '.$pushError->getMessage());}
+        try{
+            $push=evotor_order_notify_new((int)$order['order_id']);
+            evotor_order_push_defer((array)($push['log_ids']??[]));
+        }catch(Throwable $pushError){error_log('[Kapouch Evotor push enqueue] '.$pushError->getMessage());}
     }
     if($requestedPaymentMethod==='sbp'&&(string)($order['payment_method']??'')!=='sbp'&&(float)($order['total_amount']??0)<1&&empty($order['payment_url'])){
         $order['payment_url']=customer_public_app_url('payment-return.html?gift=1');
