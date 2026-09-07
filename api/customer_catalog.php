@@ -15,13 +15,11 @@ if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))!=='GET')customer_api_
 try{
     $catalog=customer_pwa_catalog();
     // Serve uploaded product photos through a dedicated PHP endpoint on the API origin.
-    // This bypasses Beget virtual-host/static-file rewrite differences between
-    // kapouch.store and app.kapouch.store while keeping immutable image caching.
-    $stableImage=static function(?string $url): ?string {
-        $url=trim((string)$url);if($url==='')return null;
-        $path=(string)(parse_url($url,PHP_URL_PATH)??'');
-        if(!preg_match('#/(?:customer/)?uploads/products/([A-Za-z0-9._-]+\.(?:jpe?g|png|webp))$#i',$path,$m))return $url;
-        $name=(string)$m[1];$file=customer_media_root().'/'.$name;
+    // It accepts every legacy local image-path representation but never proxies an
+    // arbitrary external URL. This avoids Beget static-file rewrite differences.
+    $stableImage=static function(?string $value): ?string {
+        $name=customer_media_filename($value);if($name===null)return null;
+        $file=customer_media_root().'/'.$name;
         if(!is_file($file)||!is_readable($file))return null;
         $version=(int)(filemtime($file)?:0);
         return customer_public_api_base().'/customer_product_image.php?f='.rawurlencode($name).'&v='.$version;

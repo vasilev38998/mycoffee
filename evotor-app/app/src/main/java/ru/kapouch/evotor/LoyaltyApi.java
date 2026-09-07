@@ -20,6 +20,8 @@ final class LoyaltyApi {
     static final String KEY_TERMINAL_TOKEN = "loyalty_terminal_token";
     static final String KEY_BOOTSTRAP_ORDER_TOKEN = "loyalty_bootstrap_order_token";
     private static final String DEFAULT_LOOKUP_URL = "https://kapouch.store/api/evotor_customer_lookup.php";
+    private static final String KAPOUCH_HOST = "kapouch.store";
+    private static final String LOOKUP_PATH = "/api/evotor_customer_lookup.php";
 
     private LoyaltyApi() {}
 
@@ -34,9 +36,12 @@ final class LoyaltyApi {
         HttpURLConnection connection = null;
         try {
             URL url = new URL(lookupUrl == null || lookupUrl.isEmpty() ? DEFAULT_LOOKUP_URL : lookupUrl);
-            if (!"https".equalsIgnoreCase(url.getProtocol())) return Result.error("Адрес лояльности Kapouch должен быть HTTPS.");
+            if (!allowedLookupUrl(url)) {
+                url = new URL(DEFAULT_LOOKUP_URL);
+                prefs.edit().putString(KEY_LOOKUP_URL, DEFAULT_LOOKUP_URL).apply();
+            }
             connection = (HttpURLConnection) url.openConnection();
-            if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен по HTTPS.");
+            if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен только по HTTPS.");
             HttpsURLConnection secure = (HttpsURLConnection) connection;
             secure.setSSLSocketFactory(KapouchTls.socketFactory());
             connection.setRequestMethod("POST");
@@ -46,7 +51,7 @@ final class LoyaltyApi {
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.4");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.5");
             if (terminalToken != null && !terminalToken.isEmpty()) connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
 
             JSONObject body = new JSONObject();
@@ -90,13 +95,21 @@ final class LoyaltyApi {
     }
 
     static String lookupUrlFromActionUrl(String actionUrl) {
-        if (actionUrl == null) return DEFAULT_LOOKUP_URL;
-        String value = actionUrl.trim();
-        if (!value.startsWith("https://")) return DEFAULT_LOOKUP_URL;
-        String marker = "/api/evotor_order_action.php";
-        int at = value.indexOf(marker);
-        if (at < 0) return DEFAULT_LOOKUP_URL;
-        return value.substring(0, at) + "/api/evotor_customer_lookup.php";
+        try {
+            URL action = new URL(actionUrl == null ? "" : actionUrl.trim());
+            if (!OrderApi.allowedActionUrl(action)) return DEFAULT_LOOKUP_URL;
+        } catch (Exception ignored) {
+            return DEFAULT_LOOKUP_URL;
+        }
+        return DEFAULT_LOOKUP_URL;
+    }
+
+    static boolean allowedLookupUrl(URL url) {
+        if (url == null || !"https".equalsIgnoreCase(url.getProtocol())) return false;
+        if (!KAPOUCH_HOST.equalsIgnoreCase(url.getHost())) return false;
+        int port = url.getPort();
+        if (port != -1 && port != 443) return false;
+        return LOOKUP_PATH.equals(url.getPath()) && (url.getUserInfo() == null || url.getUserInfo().isEmpty());
     }
 
     private static String readAll(InputStream stream) throws Exception {

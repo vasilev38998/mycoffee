@@ -13,18 +13,21 @@ import java.nio.charset.StandardCharsets;
 import javax.net.ssl.HttpsURLConnection;
 
 final class OrderApi {
+    private static final String KAPOUCH_HOST = "kapouch.store";
+    private static final String ACTION_PATH = "/api/evotor_order_action.php";
+
     private OrderApi() {}
 
     static Result perform(OrderRecord order, String action) {
         if (order == null) return Result.error("Заказ не найден на терминале.");
-        if (order.actionUrl == null || !order.actionUrl.startsWith("https://")) return Result.error("В push нет безопасного адреса Kapouch.");
+        if (order.actionUrl == null || order.actionUrl.trim().isEmpty()) return Result.error("В push нет адреса Kapouch.");
         if (order.actionToken == null || order.actionToken.isEmpty()) return Result.error("Ключ действия заказа отсутствует или уже истёк.");
         if (!"accept".equals(action) && !"ready".equals(action)) return Result.error("Неизвестное действие заказа.");
 
         HttpURLConnection connection = null;
         try {
             URL url = new URL(order.actionUrl);
-            if (!"https".equalsIgnoreCase(url.getProtocol())) return Result.error("Разрешены только HTTPS-запросы к Kapouch.");
+            if (!allowedActionUrl(url)) return Result.error("В push указан неподдерживаемый адрес Kapouch.");
             connection = (HttpURLConnection) url.openConnection();
             if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен только по HTTPS.");
             HttpsURLConnection secure = (HttpsURLConnection) connection;
@@ -41,7 +44,7 @@ final class OrderApi {
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Authorization", "Bearer " + order.actionToken);
             connection.setRequestProperty("X-Kapouch-Order-Token", order.actionToken);
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.4");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.5");
 
             JSONObject body = new JSONObject();
             body.put("action", action);
@@ -72,6 +75,14 @@ final class OrderApi {
         } finally {
             if (connection != null) connection.disconnect();
         }
+    }
+
+    static boolean allowedActionUrl(URL url) {
+        if (url == null || !"https".equalsIgnoreCase(url.getProtocol())) return false;
+        if (!KAPOUCH_HOST.equalsIgnoreCase(url.getHost())) return false;
+        int port = url.getPort();
+        if (port != -1 && port != 443) return false;
+        return ACTION_PATH.equals(url.getPath()) && (url.getUserInfo() == null || url.getUserInfo().isEmpty());
     }
 
     private static String readAll(InputStream stream) throws Exception {

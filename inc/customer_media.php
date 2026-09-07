@@ -3,6 +3,38 @@ declare(strict_types=1);
 
 function customer_media_root(): string{return dirname(__DIR__).'/customer/uploads/products';}
 function customer_media_public_prefix(): string{return 'uploads/products/';}
+
+/**
+ * Resolve every product-image format that has existed in Kapouch to a safe
+ * basename inside customer/uploads/products. This is deliberately strict:
+ * external URLs and nested paths are never treated as local upload files.
+ */
+function customer_media_filename(?string $path): ?string
+{
+    $value=trim((string)$path);if($value==='')return null;
+    if(preg_match('~^https?://~i',$value)){
+        $parts=parse_url($value);if(!is_array($parts))return null;
+        $value=(string)($parts['path']??'');
+        if(isset($parts['query'])){
+            parse_str((string)$parts['query'],$query);
+            if(preg_match('#/api/customer_product_image\.php$#i',$value)&&isset($query['f']))$value='uploads/products/'.(string)$query['f'];
+        }
+    }
+    $value=ltrim($value,'/');
+    if(str_starts_with($value,'customer/'))$value=substr($value,strlen('customer/'));
+    $prefix=customer_media_public_prefix();
+    if(!str_starts_with($value,$prefix))return null;
+    $tail=substr($value,strlen($prefix));
+    if($tail===''||$tail!==basename($tail))return null;
+    if(!preg_match('/^[A-Za-z0-9._-]+\.(?:jpe?g|png|webp)$/i',$tail))return null;
+    return $tail;
+}
+
+function customer_media_public_path(?string $path): ?string
+{
+    $name=customer_media_filename($path);return $name===null?null:customer_media_public_prefix().$name;
+}
+
 function customer_media_ensure_dir(): void
 {
     $dir=customer_media_root();if(!is_dir($dir)&&!mkdir($dir,0775,true)&&!is_dir($dir))throw new RuntimeException('Не удалось создать папку для фотографий PWA.');if(!is_writable($dir))throw new RuntimeException('Папка customer/uploads/products недоступна для записи.');
@@ -17,9 +49,7 @@ function customer_media_orient_jpeg($img,string $tmp)
 }
 function customer_media_delete(?string $path): void
 {
-    $path=trim((string)$path);$prefix=customer_media_public_prefix();
-    if($path===''||!preg_match('#^'.preg_quote($prefix,'#').'[A-Za-z0-9._-]+$#',$path))return;
-    $name=basename(substr($path,strlen($prefix)));if($name===''||$name==='.'||$name==='..')return;
+    $name=customer_media_filename($path);if($name===null)return;
     $file=customer_media_root().'/'.$name;
     if(is_file($file))@unlink($file);
 }

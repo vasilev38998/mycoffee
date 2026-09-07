@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/customer_modifiers.php';
 require_once __DIR__.'/customer_payments.php';
+require_once __DIR__.'/customer_media.php';
 
 function customer_pwa_settings(): array
 {
@@ -41,7 +42,10 @@ function customer_pwa_category_for(?int $categoryId,string $fallback,array $byId
 }
 function customer_pwa_image_url(?string $path): ?string
 {
-    $path=trim((string)$path);if($path===''||!str_starts_with($path,'uploads/products/'))return null;$host=preg_replace('/[^A-Za-z0-9.:-]/','',(string)($_SERVER['HTTP_HOST']??''));if($host==='')return '../customer/'.$path;$forwarded=trim(explode(',',(string)($_SERVER['HTTP_X_FORWARDED_PROTO']??''))[0]??'');$scheme=$forwarded!==''?$forwarded:((!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')?'https':'http');if(!in_array($scheme,['http','https'],true))$scheme='https';return $scheme.'://'.$host.'/customer/'.$path;
+    // Keep a host-independent logical path here. The public catalog converts it
+    // to the stable API image endpoint, so both app.kapouch.store and the old
+    // /customer/ compatibility route use the same source of truth.
+    return customer_media_public_path($path);
 }
 function customer_pwa_catalog(): array
 {
