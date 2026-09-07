@@ -40,4 +40,9 @@ evloy_ok($unlinked===null,'a consumed/cancelled scan cannot leak into the next s
 $pending=(int)$pdo->query("SELECT COUNT(*) FROM evotor_customer_scans WHERE connection_id={$connectionId} AND status='pending'")->fetchColumn();
 evloy_ok($pending===0,'no stale pending customer remains after sale consumption');
 
+// This test is chained into the wider runtime suite. Remove its fake enabled
+// Evotor connection so later cron smoke tests never try to decrypt dummy tokens.
+$pdo->prepare('DELETE FROM evotor_connections WHERE id=?')->execute([$connectionId]);
+evloy_ok((int)$pdo->query("SELECT COUNT(*) FROM evotor_connections WHERE id={$connectionId}")->fetchColumn()===0,'runtime Evotor fixture is cleaned before later cron checks');
+
 echo "EVOTOR CUSTOMER LOYALTY RUNTIME PASSED\n";
