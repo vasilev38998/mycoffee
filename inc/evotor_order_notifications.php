@@ -182,7 +182,7 @@ function evotor_order_push_http(array $connection,array $payload): array
 {
     $applicationId=trim((string)$connection['push_application_id']);$deviceUuid=trim((string)$connection['push_device_uuid']);
     $url='https://api.evotor.ru/api/apps/'.rawurlencode($applicationId).'/devices/'.rawurlencode($deviceUuid).'/push-notifications';
-    $request=['payload'=>$payload,'active_until'=>gmdate('Y-m-d\\TH:i:s.000\\Z',time()+600)];
+    $request=['payload'=>$payload,'active_until'=>gmdate('Y-m-d\TH:i:s.000\Z',time()+600)];
     $encoded=json_encode($request,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
     if(strlen($encoded)>1900)throw new RuntimeException('Push-уведомление Эвотор получилось слишком большим.');
     if(isset($GLOBALS['kapouch_evotor_push_transport'])&&is_callable($GLOBALS['kapouch_evotor_push_transport'])){
@@ -214,10 +214,11 @@ function evotor_order_push_dispatch_log(int $logId): bool
     if(!in_array((string)$row['status'],['pending','error'],true)||(int)$row['attempts']>=5)return false;
     $payload=json_decode((string)$row['payload_json'],true);if(!is_array($payload))throw new RuntimeException('В очереди Эвотор сохранён некорректный payload.');
 
-    // Claim this attempt atomically. Overlapping shutdown/cron workers may select the same
-    // row, but only one of them is allowed to perform the external Evotor request.
+    // Claim this attempt atomically and enforce the same backoff used by cron. This closes
+    // the gap where a second worker could otherwise pick the row while the first request
+    // is still in flight after incrementing attempts.
     $attempts=(int)$row['attempts'];
-    $claim=db()->prepare("UPDATE evotor_order_push_log SET attempts=attempts+1,last_error=NULL,updated_at=NOW() WHERE id=? AND status IN ('pending','error') AND attempts=? AND attempts<5");
+    $claim=db()->prepare("UPDATE evotor_order_push_log SET attempts=attempts+1,last_error=NULL,updated_at=NOW() WHERE id=? AND status IN ('pending','error') AND attempts=? AND attempts<5 AND (attempts=0 OR (attempts=1 AND updated_at<=DATE_SUB(NOW(),INTERVAL 1 MINUTE)) OR (attempts=2 AND updated_at<=DATE_SUB(NOW(),INTERVAL 5 MINUTE)) OR (attempts=3 AND updated_at<=DATE_SUB(NOW(),INTERVAL 15 MINUTE)) OR (attempts=4 AND updated_at<=DATE_SUB(NOW(),INTERVAL 60 MINUTE)))");
     $claim->execute([$logId,$attempts]);
     if($claim->rowCount()!==1)return false;
 
