@@ -2,6 +2,7 @@ package ru.kapouch.evotor;
 
 import android.content.Context;
 import android.net.SSLCertificateSocketFactory;
+import android.util.Base64;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -9,6 +10,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.security.KeyStore;
+import java.security.MessageDigest;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -26,23 +28,31 @@ import javax.net.ssl.X509TrustManager;
 /**
  * TLS bridge for Evotor OS 4.x / old Android.
  *
- * The important detail here is WHEN SNI is configured. Android's
- * SSLCertificateSocketFactory.createSocket(host, port) performs the TLS
- * handshake (via hostname verification) before returning. Therefore calling
- * setHostname() on that returned socket is too late: the ClientHello has
- * already been sent and Beget can return its no-SNI fallback certificate.
+ * Normal path:
+ *  1) force SNI before connect/handshake;
+ *  2) use Android's system trust manager;
+ *  3) if old PKIX fails, verify a signature path to official public CA roots
+ *     bundled in the APK.
  *
- * This factory always creates an unconnected TLS socket first, sets SNI to
- * kapouch.store, and only then connects. Certificate verification remains
- * strict: Android's normal trust manager is tried first and a narrow fallback
- * accepts only a signature path to official public CA roots bundled in the APK.
- * There is no TrustAll path, no self-signed pin and no hostname-verification
- * bypass.
+ * Physical Evotor OS 4.x testing also proves that this firmware can ignore SNI
+ * even when it is configured before connect and Beget then serves one specific
+ * self-signed CN=kapouch.store certificate. As the final compatibility path we
+ * accept ONLY that reviewed public key, only as a single self-signed leaf, and
+ * only while it is time-valid and its self-signature verifies. Standard
+ * HttpsURLConnection hostname verification is still used by the API clients.
+ *
+ * Arbitrary self-signed certificates are never accepted.
  */
 final class EvotorTls {
     private static final String KAPOUCH_HOST = "kapouch.store";
     private static final String OID_SERVER_AUTH = "1.3.6.1.5.5.7.3.1";
     private static final String OID_ANY_EKU = "2.5.29.37.0";
+
+    // Exact SPKI SHA-256 observed for the self-signed CN=kapouch.store leaf on
+    // the affected physical Evotor / Beget no-SNI path (captured for 1.2.11).
+    private static final String LEGACY_EVOTOR_SPKI_SHA256 =
+            "TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk=";
+
     private static volatile SSLSocketFactory cached;
 
     private EvotorTls() {}
@@ -91,10 +101,12 @@ final class EvotorTls {
         throw new IllegalStateException("X509TrustManager unavailable");
     }
 
-    /**
-     * Configures SNI on an UNCONNECTED socket, before any ClientHello can be
-     * emitted. This is the ordering required by SSLCertificateSocketFactory.
-     */
+    private static String spkiSha256(X509Certificate certificate) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        return Base64.encodeToString(digest.digest(certificate.getPublicKey().getEncoded()), Base64.NO_WRAP);
+    }
+
+    /** Configure SNI on an unconnected socket, before ClientHello. */
     private static final class PreHandshakeSniSocketFactory extends SSLSocketFactory {
         private final SSLCertificateSocketFactory delegate;
         private final String hostname;
@@ -146,33 +158,14 @@ final class EvotorTls {
 
         @Override public String[] getDefaultCipherSuites() { return delegate.getDefaultCipherSuites(); }
         @Override public String[] getSupportedCipherSuites() { return delegate.getSupportedCipherSuites(); }
+        @Override public Socket createSocket() throws IOException { return newSocket(); }
+        @Override public Socket createSocket(String host, int port) throws IOException { return connect(host, port, null, 0); }
+        @Override public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException { return connect(host, port, localHost, localPort); }
+        @Override public Socket createSocket(InetAddress host, int port) throws IOException { return connect(host, port, null, 0); }
+        @Override public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException { return connect(address, port, localAddress, localPort); }
 
-        @Override public Socket createSocket() throws IOException {
-            return newSocket();
-        }
-
-        @Override public Socket createSocket(String host, int port) throws IOException {
-            return connect(host, port, null, 0);
-        }
-
-        @Override public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
-            return connect(host, port, localHost, localPort);
-        }
-
-        @Override public Socket createSocket(InetAddress host, int port) throws IOException {
-            return connect(host, port, null, 0);
-        }
-
-        @Override public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
-            return connect(address, port, localAddress, localPort);
-        }
-
-        @Override public Socket createSocket(Socket plain, String host, int port, boolean autoClose) throws IOException {
-            // Android's public SSLCertificateSocketFactory has no API for adding
-            // SNI to an already-layered socket before its own verification starts
-            // the handshake. On the affected Evotor direct HTTPS path, reconnect
-            // with a preconfigured SSL socket instead. Proxy tunnelling is not used
-            // by Kapouch and is intentionally not emulated here.
+        @Override
+        public Socket createSocket(Socket plain, String host, int port, boolean autoClose) throws IOException {
             if (plain != null && autoClose) {
                 try { plain.close(); } catch (IOException ignored) {}
             }
@@ -200,19 +193,30 @@ final class EvotorTls {
                 system.checkServerTrusted(chain, authType);
                 return;
             } catch (CertificateException | RuntimeException ignored) {
-                // Old Evotor PKIX can reject otherwise valid modern public chains.
+                // Continue with narrow compatibility validation.
             }
 
+            Exception publicError;
             try {
                 verifyPublicChain(chain);
-            } catch (CertificateException e) {
-                throw new CertificateException(
-                        "Kapouch TLS chain rejected: " + describe(chain) + "; " + e.getMessage(), e);
+                return;
             } catch (Exception e) {
-                throw new CertificateException(
-                        "Kapouch TLS chain rejected: " + describe(chain) + "; "
-                                + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+                publicError = e;
             }
+
+            Exception pinError;
+            try {
+                verifyReviewedLegacyLeaf(chain);
+                return;
+            } catch (Exception e) {
+                pinError = e;
+            }
+
+            throw new CertificateException(
+                    "Kapouch TLS chain rejected: " + describe(chain)
+                            + "; public=" + safeMessage(publicError)
+                            + "; reviewed-pin=" + safeMessage(pinError),
+                    pinError);
         }
 
         private void verifyPublicChain(X509Certificate[] chain) throws Exception {
@@ -226,6 +230,22 @@ final class EvotorTls {
             Set<String> visited = new HashSet<>();
             if (!walkToTrustedRoot(chain[0], candidates, visited, 0)) {
                 throw new CertificateException("no signature path to bundled public CA root");
+            }
+        }
+
+        private static void verifyReviewedLegacyLeaf(X509Certificate[] chain) throws Exception {
+            if (chain == null || chain.length != 1) {
+                throw new CertificateException("expected one self-signed fallback certificate");
+            }
+            X509Certificate leaf = chain[0];
+            leaf.checkValidity();
+            if (!leaf.getSubjectX500Principal().equals(leaf.getIssuerX500Principal())) {
+                throw new CertificateException("fallback certificate is not self-issued");
+            }
+            leaf.verify(leaf.getPublicKey());
+            String observed = spkiSha256(leaf);
+            if (!LEGACY_EVOTOR_SPKI_SHA256.equals(observed)) {
+                throw new CertificateException("fallback SPKI mismatch: " + observed);
             }
         }
 
@@ -277,7 +297,6 @@ final class EvotorTls {
 
         private static void checkLeafUsage(X509Certificate leaf) throws Exception {
             if (leaf.getBasicConstraints() >= 0) throw new CertificateException("leaf certificate is a CA");
-
             boolean[] usage = leaf.getKeyUsage();
             if (usage != null) {
                 boolean digitalSignature = usage.length > 0 && usage[0];
@@ -287,7 +306,6 @@ final class EvotorTls {
                     throw new CertificateException("leaf keyUsage is not valid for TLS server use");
                 }
             }
-
             List<String> eku = leaf.getExtendedKeyUsage();
             if (eku != null && !eku.contains(OID_SERVER_AUTH) && !eku.contains(OID_ANY_EKU)) {
                 throw new CertificateException("leaf EKU does not permit serverAuth");
@@ -300,6 +318,12 @@ final class EvotorTls {
             if (usage != null && (usage.length <= 5 || !usage[5])) {
                 throw new CertificateException("issuer keyUsage does not permit certificate signing");
             }
+        }
+
+        private static String safeMessage(Exception error) {
+            if (error == null) return "unknown";
+            String message = error.getMessage();
+            return message == null || message.trim().isEmpty() ? error.getClass().getSimpleName() : message;
         }
 
         private static String describe(X509Certificate[] chain) {
