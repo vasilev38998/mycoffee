@@ -44,6 +44,7 @@ final class LoyaltyApi {
             if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен только по HTTPS.");
             HttpsURLConnection secure = (HttpsURLConnection) connection;
             secure.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
+            secure.setHostnameVerifier(EvotorTls.hostnameVerifier());
 
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(7000);
