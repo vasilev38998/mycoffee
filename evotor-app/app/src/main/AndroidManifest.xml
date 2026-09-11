@@ -41,16 +41,6 @@
         </receiver>
 
         <receiver
-            android:name=".CustomerScanReceiver"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="ru.evotor.devices.SCANNER_SENDER">
-            <intent-filter android:priority="1000">
-                <action android:name="ru.evotor.devices.ScannedCode" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
             android:name=".OrderActionReceiver"
             android:enabled="true"
             android:exported="false" />
