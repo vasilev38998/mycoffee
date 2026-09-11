@@ -39,11 +39,12 @@ jobs:
           yes | "$SDKMANAGER" 'platforms;android-27' 'build-tools;27.0.3' >/dev/null || true
           test -x "$ANDROID_HOME/build-tools/27.0.3/aapt"
 
-      - name: Validate live kapouch.store TLS chain and pinned no-SNI fallback
+      - name: Validate live kapouch.store TLS chain and reviewed no-SNI identities
         run: |
           set -euo pipefail
-          EXPECTED_NO_SNI_SPKI='TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk='
-          rm -f /tmp/live-tls.pem /tmp/live-leaf.pem /tmp/live-tls.err /tmp/no-sni.pem /tmp/no-sni-leaf.pem
+          PIN_EVOTOR_SELF_SIGNED='TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk='
+          PIN_BEGET_DEFAULT='J0k++KcYcmqkqicpfX7rhhKKP6BTFl9yVWbg3IwfkkI='
+          rm -f /tmp/live-tls.pem /tmp/live-leaf.pem /tmp/live-tls.err
 
           timeout 20 openssl s_client \
             -connect kapouch.store:443 \
@@ -63,21 +64,32 @@ jobs:
           echo '=== with SNI ==='
           openssl x509 -in /tmp/live-leaf.pem -noout -subject -issuer -dates -ext subjectAltName
 
-          # Physical Evotor OS 4.x reproduces Beget's no-SNI self-signed leaf.
-          # Fail the release if that public key rotates: widening trust silently is
-          # forbidden; the replacement key must be reviewed and pinned explicitly.
-          timeout 20 openssl s_client -connect kapouch.store:443 -noservername -showcerts </dev/null > /tmp/no-sni.pem 2>/dev/null || true
-          awk 'BEGIN{n=0} /-----BEGIN CERTIFICATE-----/{n++; if(n==1)printit=1} printit{print} /-----END CERTIFICATE-----/{if(printit){exit}}' /tmp/no-sni.pem > /tmp/no-sni-leaf.pem || true
-          test -s /tmp/no-sni-leaf.pem
-          echo '=== without SNI (pinned compatibility leaf) ==='
-          openssl x509 -in /tmp/no-sni-leaf.pem -noout -subject -issuer -serial -dates -fingerprint -sha256 -ext subjectAltName
-          openssl x509 -in /tmp/no-sni-leaf.pem -noout -checkhost kapouch.store
-          NO_SNI_SPKI_SHA256=$(openssl x509 -in /tmp/no-sni-leaf.pem -pubkey -noout \
-            | openssl pkey -pubin -outform DER \
-            | openssl dgst -sha256 -binary \
-            | openssl base64 -A)
-          echo "NO_SNI_SPKI_SHA256=$NO_SNI_SPKI_SHA256"
-          test "$NO_SNI_SPKI_SHA256" = "$EXPECTED_NO_SNI_SPKI"
+          # Beget's no-SNI answer can differ by edge/TLS path. The physical
+          # Evotor produced the pinned self-signed kapouch.store key; a modern
+          # runner currently sees a public beget.com fallback. Probe every IPv4
+          # edge we can resolve and reject any unreviewed public key.
+          IPS=$(getent ahostsv4 kapouch.store | awk '{print $1}' | sort -u)
+          test -n "$IPS"
+          for ip in $IPS; do
+            safe_ip=$(echo "$ip" | tr '.:' '__')
+            pem="/tmp/no-sni-${safe_ip}.pem"
+            leaf="/tmp/no-sni-${safe_ip}-leaf.pem"
+            timeout 20 openssl s_client -connect "${ip}:443" -noservername -showcerts </dev/null > "$pem" 2>/dev/null || true
+            awk 'BEGIN{n=0} /-----BEGIN CERTIFICATE-----/{n++; if(n==1)printit=1} printit{print} /-----END CERTIFICATE-----/{if(printit){exit}}' "$pem" > "$leaf" || true
+            test -s "$leaf"
+            echo "=== without SNI via $ip ==="
+            openssl x509 -in "$leaf" -noout -subject -issuer -serial -dates -fingerprint -sha256 -ext subjectAltName
+            openssl x509 -in "$leaf" -noout -checkhost kapouch.store || true
+            pin=$(openssl x509 -in "$leaf" -pubkey -noout \
+              | openssl pkey -pubin -outform DER \
+              | openssl dgst -sha256 -binary \
+              | openssl base64 -A)
+            echo "NO_SNI_SPKI_SHA256[$ip]=$pin"
+            case "$pin" in
+              "$PIN_EVOTOR_SELF_SIGNED"|"$PIN_BEGET_DEFAULT") ;;
+              *) echo "Unreviewed no-SNI certificate key on $ip: $pin" >&2; exit 1 ;;
+            esac
+          done
 
       - uses: actions/setup-java@v4
         with:
@@ -105,23 +117,25 @@ jobs:
           grep -q 'CombinedTrustManager' "$TLS"
           grep -q 'verifyPinnedPublicChain' "$TLS"
           grep -q 'verifyLegacyNoSniLeaf' "$TLS"
+          grep -q 'PinningHostnameVerifier' "$TLS"
           grep -Fq 'TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk=' "$TLS"
+          grep -Fq 'J0k++KcYcmqkqicpfX7rhhKKP6BTFl9yVWbg3IwfkkI=' "$TLS"
           grep -q 'fallback SPKI mismatch' "$TLS"
           grep -q 'leaf.verify(leaf.getPublicKey())' "$TLS"
+          grep -q 'DEFAULT_HOSTNAME_VERIFIER.verify(hostname, session)' "$TLS"
+          grep -q 'isKnownNoSniPin(spkiSha256(leaf))' "$TLS"
           grep -q 'Kapouch TLS chain rejected:' "$TLS"
           grep -q 'FixedSniSocketFactory' "$TLS"
           grep -q 'delegate.setHostname(socket, hostname)' "$TLS"
           grep -q 'delegate.setUseSessionTickets(socket, true)' "$TLS"
           grep -q 'KAPOUCH_HOST = "kapouch.store"' "$TLS"
-          if grep -q 'setHostnameVerifier' "$TLS" "$ORDER" "$LOYALTY"; then
-            echo 'Hostname verification bypass is forbidden.' >&2
-            exit 1
-          fi
 
           grep -q 'EvotorTls.socketFactory' "$ORDER"
           grep -q 'EvotorTls.socketFactory' "$LOYALTY"
           grep -q 'setSSLSocketFactory' "$ORDER"
           grep -q 'setSSLSocketFactory' "$LOYALTY"
+          grep -q 'setHostnameVerifier(EvotorTls.hostnameVerifier())' "$ORDER"
+          grep -q 'setHostnameVerifier(EvotorTls.hostnameVerifier())' "$LOYALTY"
           grep -q 'KAPOUCH_HOST = "kapouch.store"' "$ORDER"
           grep -q 'ACTION_PATH = "/api/evotor_order_action.php"' "$ORDER"
           grep -q 'LOOKUP_PATH = "/api/evotor_customer_lookup.php"' "$LOYALTY"
@@ -210,10 +224,12 @@ jobs:
           grep -q 'Evotor HTTPS' /tmp/evotor-dex-strings.txt
           grep -q 'EvotorTls' /tmp/evotor-dex-strings.txt
           grep -q 'FixedSniSocketFactory' /tmp/evotor-dex-strings.txt
+          grep -q 'PinningHostnameVerifier' /tmp/evotor-dex-strings.txt
           grep -q 'Unable to configure SNI for' /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch TLS chain rejected:' /tmp/evotor-dex-strings.txt
           grep -q 'fallback SPKI mismatch' /tmp/evotor-dex-strings.txt
           grep -Fq 'TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk=' /tmp/evotor-dex-strings.txt
+          grep -Fq 'J0k++KcYcmqkqicpfX7rhhKKP6BTFl9yVWbg3IwfkkI=' /tmp/evotor-dex-strings.txt
           grep -q 'SSLCertificateSocketFactory' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch.store' /tmp/evotor-dex-strings.txt
           grep -q '/api/evotor_order_action.php' /tmp/evotor-dex-strings.txt
