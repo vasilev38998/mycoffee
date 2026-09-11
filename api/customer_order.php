@@ -60,7 +60,15 @@ try{
         if($saved!==''){$order['promised_at']=$saved;$order['promised_display']=date('H:i',strtotime($saved));}
         try{
             $push=evotor_order_notify_new((int)$order['order_id']);
-            evotor_order_push_defer((array)($push['log_ids']??[]));
+            // Beget installations do not always expose fastcgi_finish_request().
+            // The old deferred helper silently returned in that case, leaving a
+            // perfectly queued notification unsent until an external cron happened
+            // to retry it. Send the just-created rows immediately; delivery errors
+            // remain isolated from checkout because dispatch_log records and returns
+            // false instead of failing the order.
+            foreach((array)($push['log_ids']??[]) as $pushLogId){
+                evotor_order_push_dispatch_log((int)$pushLogId);
+            }
         }catch(Throwable $pushError){error_log('[Kapouch Evotor push enqueue] '.$pushError->getMessage());}
     }
     if($requestedPaymentMethod==='sbp'&&(string)($order['payment_method']??'')!=='sbp'&&(float)($order['total_amount']??0)<1&&empty($order['payment_url'])){

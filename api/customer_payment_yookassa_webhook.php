@@ -35,7 +35,9 @@ try{
         if(!empty($result['paid'])&&!empty($result['order_id'])){
             try{
                 $push=evotor_order_notify_new((int)$result['order_id']);
-                evotor_order_push_defer((array)($push['log_ids']??[]));
+                foreach((array)($push['log_ids']??[]) as $pushLogId){
+                    evotor_order_push_dispatch_log((int)$pushLogId);
+                }
             }catch(Throwable $pushError){error_log('[Kapouch Evotor push paid webhook] '.$pushError->getMessage());}
         }
     }else{
