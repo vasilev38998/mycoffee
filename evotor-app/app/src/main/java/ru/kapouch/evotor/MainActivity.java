@@ -1,6 +1,7 @@
 package ru.kapouch.evotor;
 
 import android.app.Activity;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -27,6 +28,10 @@ public class MainActivity extends Activity {
 
     private LinearLayout ordersContainer;
     private TextView lastMessage;
+    private TextView customerStatus;
+    private Button customerScanButton;
+    private CustomerScanReceiver customerScanReceiver;
+    private boolean customerScanRegistered;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,7 +51,7 @@ public class MainActivity extends Activity {
         root.addView(title, matchWrap());
 
         TextView intro = new TextView(this);
-        intro.setText("Рабочий экран бариста: новые PWA-заказы, принятие и готовность.");
+        intro.setText("Рабочий экран бариста: новые PWA-заказы, принятие, готовность и карта клиента.");
         intro.setTextSize(16);
         intro.setTextColor(Color.DKGRAY);
         intro.setPadding(0, 0, 0, dp(18));
@@ -77,6 +82,36 @@ public class MainActivity extends Activity {
         note.setTextColor(Color.GRAY);
         note.setPadding(0, dp(6), 0, dp(26));
         root.addView(note);
+
+        TextView customerTitle = sectionTitle("Карта клиента");
+        root.addView(customerTitle);
+
+        customerStatus = new TextView(this);
+        customerStatus.setTextSize(16);
+        customerStatus.setTextColor(Color.DKGRAY);
+        customerStatus.setPadding(dp(16), dp(14), dp(16), dp(14));
+        customerStatus.setBackgroundColor(Color.WHITE);
+        root.addView(customerStatus, matchWrap());
+
+        customerScanButton = new Button(this);
+        customerScanButton.setText("СКАНИРОВАТЬ КАРТУ КЛИЕНТА");
+        customerScanButton.setTextSize(17);
+        customerScanButton.setMinHeight(dp(58));
+        customerScanButton.setOnClickListener(v -> {
+            if (customerScanRegistered) stopCustomerScan(true);
+            else startCustomerScan();
+        });
+        LinearLayout.LayoutParams scanButtonParams = matchWrap();
+        scanButtonParams.setMargins(0, dp(10), 0, 0);
+        customerScanButton.setLayoutParams(scanButtonParams);
+        root.addView(customerScanButton);
+
+        TextView scanHint = new TextView(this);
+        scanHint.setText("Для карты клиента сначала откройте Kapouch и нажмите эту кнопку, затем сканируйте QR. Не сканируйте QR клиента на экране «Продажа» — Эвотор считает любой QR там штрихкодом товара.");
+        scanHint.setTextSize(13);
+        scanHint.setTextColor(Color.GRAY);
+        scanHint.setPadding(0, dp(8), 0, dp(26));
+        root.addView(scanHint);
 
         TextView activeTitle = sectionTitle("Активные заказы");
         root.addView(activeTitle);
@@ -109,9 +144,100 @@ public class MainActivity extends Activity {
         refreshAll();
     }
 
+    @Override
+    protected void onPause() {
+        stopCustomerScan(false);
+        super.onPause();
+    }
+
+    private void startCustomerScan() {
+        if (customerScanRegistered || customerScanButton == null) return;
+
+        customerScanReceiver = new CustomerScanReceiver(new CustomerScanReceiver.Listener() {
+            @Override
+            public void onCodeAccepted() {
+                customerScanButton.setEnabled(false);
+                customerScanButton.setText("ПРОВЕРЯЕМ КЛИЕНТА…");
+                customerStatus.setText("QR-карта получена. Проверяем клиента в Kapouch…");
+            }
+
+            @Override
+            public void onNonKapouchCode() {
+                customerStatus.setText("Это не QR-карта Kapouch. Откройте карту клиента в приложении и отсканируйте её ещё раз.");
+                Toast.makeText(MainActivity.this, "Ожидается QR-карта Kapouch", Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onLookupFinished(boolean ok, String message) {
+                stopCustomerScan(false);
+                customerStatus.setText(message);
+                Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
+                refreshLastMessage();
+            }
+        });
+
+        try {
+            IntentFilter filter = new IntentFilter(CustomerScanReceiver.ACTION_SCANNED);
+            registerReceiver(
+                    customerScanReceiver,
+                    filter,
+                    "ru.evotor.devices.SCANNER_SENDER",
+                    null);
+            customerScanRegistered = true;
+            customerScanButton.setEnabled(true);
+            customerScanButton.setText("ОТМЕНИТЬ СКАНИРОВАНИЕ");
+            customerStatus.setText("Режим карты включён. Отсканируйте QR-код клиента сейчас.");
+        } catch (RuntimeException e) {
+            customerScanReceiver = null;
+            customerScanRegistered = false;
+            String detail = e.getMessage();
+            if (detail == null || detail.trim().isEmpty()) detail = e.getClass().getSimpleName();
+            customerStatus.setText("Сканер Эвотора недоступен: " + detail);
+            customerScanButton.setEnabled(true);
+            customerScanButton.setText("СКАНИРОВАТЬ КАРТУ КЛИЕНТА");
+        }
+    }
+
+    private void stopCustomerScan(boolean showCancelled) {
+        if (customerScanRegistered && customerScanReceiver != null) {
+            try {
+                unregisterReceiver(customerScanReceiver);
+            } catch (RuntimeException ignored) {
+            }
+        }
+        customerScanRegistered = false;
+        customerScanReceiver = null;
+        if (customerScanButton != null) {
+            customerScanButton.setEnabled(true);
+            customerScanButton.setText("СКАНИРОВАТЬ КАРТУ КЛИЕНТА");
+        }
+        if (showCancelled && customerStatus != null) {
+            customerStatus.setText("Сканирование карты отменено.");
+        }
+    }
+
     private void refreshAll() {
         refreshOrders();
         refreshLastMessage();
+        if (!customerScanRegistered) refreshCustomerStatus();
+    }
+
+    private void refreshCustomerStatus() {
+        if (customerStatus == null) return;
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String name = prefs.getString(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_NAME, "");
+        String balance = prefs.getString(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_BALANCE, "");
+        long at = prefs.getLong(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_AT, 0L);
+        if (name == null || name.trim().isEmpty()) {
+            customerStatus.setText("Клиент не выбран. Нажмите кнопку ниже перед сканированием QR-карты.");
+            return;
+        }
+        String when = at > 0
+                ? DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(new Date(at))
+                : "";
+        customerStatus.setText(name
+                + (balance == null || balance.isEmpty() ? "" : " · " + balance + " ★")
+                + (when.isEmpty() ? "" : "\nОпределён: " + when));
     }
 
     private void refreshOrders() {
