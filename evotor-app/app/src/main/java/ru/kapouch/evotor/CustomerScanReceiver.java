@@ -23,6 +23,15 @@ public class CustomerScanReceiver extends BroadcastReceiver {
         if (context == null || intent == null || !ACTION_SCANNED.equals(intent.getAction())) return;
         String code = intent.getStringExtra(EXTRA_SCANNED_CODE);
         if (code == null || !code.startsWith(KAPOUCH_PREFIX)) return;
+
+        // Kapouch loyalty QR is not a product barcode. On Evotor builds which
+        // dispatch scanner events as ordered broadcasts, consume it before the
+        // stock application tries to resolve it in the product database and
+        // shows the misleading "barcode not found" dialog.
+        if (isOrderedBroadcast()) {
+            abortBroadcast();
+        }
+
         final Context appContext = context.getApplicationContext();
         final PendingResult pending = goAsync();
         new Thread(() -> {
