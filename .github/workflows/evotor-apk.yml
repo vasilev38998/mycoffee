@@ -63,14 +63,19 @@ jobs:
           openssl x509 -in /tmp/live-leaf.pem -noout -subject -issuer -dates -ext subjectAltName
 
           # Diagnostic only: Beget currently presents a different fallback certificate
-          # when SNI is absent. This is exactly what the old Evotor exposed in the
-          # physical test, so keep the contrast visible in CI without depending on the
-          # fallback certificate remaining unchanged forever.
+          # when SNI is absent. Physical Evotor OS 4.x reproduces this path, so capture
+          # enough immutable public-key information to implement a narrow compatibility
+          # pin without ever introducing TrustAll or disabling hostname verification.
           timeout 20 openssl s_client -connect kapouch.store:443 -noservername -showcerts </dev/null > /tmp/no-sni.pem 2>/dev/null || true
           awk 'BEGIN{n=0} /-----BEGIN CERTIFICATE-----/{n++; if(n==1)printit=1} printit{print} /-----END CERTIFICATE-----/{if(printit){exit}}' /tmp/no-sni.pem > /tmp/no-sni-leaf.pem || true
           if [ -s /tmp/no-sni-leaf.pem ]; then
             echo '=== without SNI (diagnostic only) ==='
-            openssl x509 -in /tmp/no-sni-leaf.pem -noout -subject -issuer -dates || true
+            openssl x509 -in /tmp/no-sni-leaf.pem -noout -subject -issuer -serial -dates -fingerprint -sha256 -ext subjectAltName || true
+            NO_SNI_SPKI_SHA256=$(openssl x509 -in /tmp/no-sni-leaf.pem -pubkey -noout \
+              | openssl pkey -pubin -outform DER \
+              | openssl dgst -sha256 -binary \
+              | openssl base64 -A)
+            echo "NO_SNI_SPKI_SHA256=$NO_SNI_SPKI_SHA256"
           fi
 
       - uses: actions/setup-java@v4
