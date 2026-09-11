@@ -10,6 +10,7 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.security.KeyStore;
 import java.security.MessageDigest;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -19,6 +20,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
@@ -30,26 +34,32 @@ import javax.net.ssl.X509TrustManager;
  * Verification order is deliberately strict:
  *  1) Android's normal system trust manager;
  *  2) a manual path to one of the official public CA roots bundled in the APK;
- *  3) one legacy hosting fallback key observed on physical Evotor OS 4.x when
- *     the terminal fails to send effective SNI and Beget serves its self-signed
- *     kapouch.store certificate.
+ *  3) the exact self-signed kapouch.store key observed on the physical Evotor
+ *     when its TLS stack fails to send effective SNI.
  *
- * The legacy fallback is an SPKI pin, not TrustAll. The peer must present one
- * current, self-signed certificate whose public key exactly matches the known
- * Beget fallback key. HttpsURLConnection still performs its normal hostname
- * verification afterwards, so the certificate must also identify kapouch.store.
+ * Beget can also answer a no-SNI connection with its normal beget.com public
+ * certificate. That chain is publicly trusted but its hostname is intentionally
+ * different. For that one compatibility case we keep hostname verification and
+ * allow an exact SPKI identity pin instead. There is no TrustAll path and no
+ * unconditional hostname bypass.
  */
 final class EvotorTls {
     private static final String KAPOUCH_HOST = "kapouch.store";
     private static final String OID_SERVER_AUTH = "1.3.6.1.5.5.7.3.1";
     private static final String OID_ANY_EKU = "2.5.29.37.0";
 
-    // Captured by CI from `openssl s_client -noservername` and independently
-    // reproduced by the physical Evotor. If Beget rotates this key, CI fails
-    // before release and this pin must be reviewed instead of silently widened.
-    private static final String LEGACY_NO_SNI_SPKI_SHA256 =
+    // Physical Evotor OS 4.x: self-signed CN/SAN kapouch.store, valid to 2035.
+    private static final String LEGACY_SELF_SIGNED_SPKI_SHA256 =
             "TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk=";
 
+    // Current Beget no-SNI default certificate. Its chain is public, but the
+    // hostname is beget.com. Pinning the public key gives us an explicit server
+    // identity when the old client cannot make SNI effective.
+    private static final String LEGACY_BEGET_DEFAULT_SPKI_SHA256 =
+            "J0k++KcYcmqkqicpfX7rhhKKP6BTFl9yVWbg3IwfkkI=";
+
+    private static final HostnameVerifier DEFAULT_HOSTNAME_VERIFIER =
+            HttpsURLConnection.getDefaultHostnameVerifier();
     private static volatile SSLSocketFactory cached;
 
     private EvotorTls() {}
@@ -74,11 +84,15 @@ final class EvotorTls {
             platform.setTrustManagers(new TrustManager[]{combined});
 
             // Keep forcing SNI for terminals on which it works. The pinned
-            // fallback below exists only for the physical OS 4.x path where
+            // fallbacks below exist only for the physical OS 4.x path where
             // this call still results in the provider's no-SNI certificate.
             cached = new FixedSniSocketFactory(platform, KAPOUCH_HOST);
             return cached;
         }
+    }
+
+    static HostnameVerifier hostnameVerifier() {
+        return PinningHostnameVerifier.INSTANCE;
     }
 
     private static X509Certificate load(CertificateFactory factory, Context context, int resourceId) throws Exception {
@@ -99,6 +113,42 @@ final class EvotorTls {
             if (manager instanceof X509TrustManager) return (X509TrustManager) manager;
         }
         throw new IllegalStateException("X509TrustManager unavailable");
+    }
+
+    private static String spkiSha256(X509Certificate certificate) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] value = digest.digest(certificate.getPublicKey().getEncoded());
+        return Base64.encodeToString(value, Base64.NO_WRAP);
+    }
+
+    private static boolean isKnownNoSniPin(String pin) {
+        return LEGACY_SELF_SIGNED_SPKI_SHA256.equals(pin)
+                || LEGACY_BEGET_DEFAULT_SPKI_SHA256.equals(pin);
+    }
+
+    /**
+     * Normal hostname verification wins whenever SNI works. If the old terminal
+     * receives a no-SNI fallback certificate, only one of the reviewed public-key
+     * pins above may stand in for the missing kapouch.store hostname. The URL is
+     * separately restricted to https://kapouch.store:443 by both API clients.
+     */
+    private static final class PinningHostnameVerifier implements HostnameVerifier {
+        static final PinningHostnameVerifier INSTANCE = new PinningHostnameVerifier();
+
+        @Override
+        public boolean verify(String hostname, SSLSession session) {
+            if (!KAPOUCH_HOST.equalsIgnoreCase(hostname) || session == null) return false;
+            if (DEFAULT_HOSTNAME_VERIFIER.verify(hostname, session)) return true;
+            try {
+                Certificate[] peer = session.getPeerCertificates();
+                if (peer == null || peer.length == 0 || !(peer[0] instanceof X509Certificate)) return false;
+                X509Certificate leaf = (X509Certificate) peer[0];
+                leaf.checkValidity();
+                return isKnownNoSniPin(spkiSha256(leaf));
+            } catch (Exception ignored) {
+                return false;
+            }
+        }
     }
 
     /**
@@ -220,7 +270,6 @@ final class EvotorTls {
             }
             X509Certificate leaf = chain[0];
             leaf.checkValidity();
-            checkLeafUsage(leaf);
             if (!leaf.getSubjectX500Principal().equals(leaf.getIssuerX500Principal())) {
                 throw new CertificateException("fallback certificate is not self-issued");
             }
@@ -231,7 +280,7 @@ final class EvotorTls {
             }
 
             String observed = spkiSha256(leaf);
-            if (!LEGACY_NO_SNI_SPKI_SHA256.equals(observed)) {
+            if (!LEGACY_SELF_SIGNED_SPKI_SHA256.equals(observed)) {
                 throw new CertificateException("fallback SPKI mismatch: " + observed);
             }
         }
@@ -307,12 +356,6 @@ final class EvotorTls {
             if (usage != null && (usage.length <= 5 || !usage[5])) {
                 throw new CertificateException("issuer keyUsage does not permit certificate signing");
             }
-        }
-
-        private static String spkiSha256(X509Certificate certificate) throws Exception {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] value = digest.digest(certificate.getPublicKey().getEncoded());
-            return Base64.encodeToString(value, Base64.NO_WRAP);
         }
 
         private static String safeMessage(Exception error) {
