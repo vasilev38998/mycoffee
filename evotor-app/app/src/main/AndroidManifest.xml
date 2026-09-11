@@ -45,7 +45,7 @@
             android:enabled="true"
             android:exported="true"
             android:permission="ru.evotor.devices.SCANNER_SENDER">
-            <intent-filter>
+            <intent-filter android:priority="1000">
                 <action android:name="ru.evotor.devices.ScannedCode" />
             </intent-filter>
         </receiver>

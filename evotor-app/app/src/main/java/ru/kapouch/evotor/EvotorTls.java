@@ -11,6 +11,11 @@ import java.security.KeyStore;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
@@ -20,18 +25,22 @@ import javax.net.ssl.X509TrustManager;
 /**
  * TLS bridge for Evotor OS 4.x / old Android.
  *
- * Two old-platform problems have to be handled explicitly:
- *  1) the Java trust store can be older than the browser trust store;
- *  2) HttpsURLConnection on the affected Evotor does not reliably configure
- *     SNI when a custom socket factory is installed.
+ * The affected terminals have two independent compatibility problems:
+ *  1) their system trust store / PKIX implementation can reject a modern
+ *     public chain even when the required public roots are bundled;
+ *  2) HttpsURLConnection does not reliably configure SNI when a custom socket
+ *     factory is installed.
  *
- * We therefore keep Android's SSLCertificateSocketFactory, extend its trust
- * manager only with official CA roots, and wrap every created socket to force
- * SNI=kapouch.store before the TLS handshake. Hostname verification remains the
- * platform default in HttpsURLConnection; no TrustAll/hostname bypass is used.
+ * We keep the platform verification first. If it fails, a narrow fallback
+ * verifies the server chain manually by validity dates, signatures, CA usage
+ * and serverAuth EKU, and only accepts a path ending at one of the official CA
+ * roots bundled with this app. Hostname verification is still performed by
+ * HttpsURLConnection. There is no TrustAll or hostname-verification bypass.
  */
 final class EvotorTls {
     private static final String KAPOUCH_HOST = "kapouch.store";
+    private static final String OID_SERVER_AUTH = "1.3.6.1.5.5.7.3.1";
+    private static final String OID_ANY_EKU = "2.5.29.37.0";
     private static volatile SSLSocketFactory cached;
 
     private EvotorTls() {}
@@ -43,36 +52,32 @@ final class EvotorTls {
             if (cached != null) return cached;
 
             X509TrustManager system = trustManager(null);
-
-            KeyStore extraStore = KeyStore.getInstance(KeyStore.getDefaultType());
-            extraStore.load(null, null);
             CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-            add(extraStore, certificateFactory, context, "isrg-root-x1", R.raw.isrg_root_x1);
-            add(extraStore, certificateFactory, context, "isrg-root-x2", R.raw.isrg_root_x2);
-            add(extraStore, certificateFactory, context, "isrg-root-ye", R.raw.isrg_root_ye);
-            add(extraStore, certificateFactory, context, "isrg-root-yr", R.raw.isrg_root_yr);
-            add(extraStore, certificateFactory, context, "digicert-global-root-ca", R.raw.digicert_global_root_ca);
-            X509TrustManager extra = trustManager(extraStore);
+            List<X509Certificate> roots = new ArrayList<>();
+            roots.add(load(certificateFactory, context, R.raw.isrg_root_x1));
+            roots.add(load(certificateFactory, context, R.raw.isrg_root_x2));
+            roots.add(load(certificateFactory, context, R.raw.isrg_root_ye));
+            roots.add(load(certificateFactory, context, R.raw.isrg_root_yr));
+            roots.add(load(certificateFactory, context, R.raw.digicert_global_root_ca));
 
-            X509TrustManager combined = new CombinedTrustManager(system, extra);
-
+            X509TrustManager combined = new CombinedTrustManager(system, roots);
             SSLCertificateSocketFactory platform = new SSLCertificateSocketFactory(10000);
             platform.setTrustManagers(new TrustManager[]{combined});
 
             // Do not rely on HttpsURLConnection to propagate SNI through a custom
-            // factory on Evotor OS 4.x. The physical terminal otherwise receives
-            // Beget's fallback self-signed CN=kapouch.store certificate.
+            // factory on Evotor OS 4.x. The physical terminal may otherwise
+            // receive the hosting provider's fallback certificate.
             cached = new FixedSniSocketFactory(platform, KAPOUCH_HOST);
             return cached;
         }
     }
 
-    private static void add(KeyStore store, CertificateFactory factory, Context context, String alias, int resourceId) throws Exception {
+    private static X509Certificate load(CertificateFactory factory, Context context, int resourceId) throws Exception {
         InputStream input = context.getResources().openRawResource(resourceId);
         try {
             X509Certificate certificate = (X509Certificate) factory.generateCertificate(input);
             certificate.checkValidity();
-            store.setCertificateEntry(alias, certificate);
+            return certificate;
         } finally {
             input.close();
         }
@@ -88,9 +93,9 @@ final class EvotorTls {
     }
 
     /**
-     * A host-pinned wrapper is intentional: OrderApi and LoyaltyApi already
-     * reject every host except kapouch.store, so even createSocket() overloads
-     * that do not receive a hostname can still set the correct SNI value.
+     * A host-pinned wrapper is intentional: OrderApi and LoyaltyApi reject every
+     * host except kapouch.store, so createSocket() overloads which do not receive
+     * a hostname can still set the correct SNI value.
      */
     private static final class FixedSniSocketFactory extends SSLSocketFactory {
         private final SSLCertificateSocketFactory delegate;
@@ -142,11 +147,11 @@ final class EvotorTls {
 
     private static final class CombinedTrustManager implements X509TrustManager {
         private final X509TrustManager system;
-        private final X509TrustManager extra;
+        private final List<X509Certificate> roots;
 
-        CombinedTrustManager(X509TrustManager system, X509TrustManager extra) {
+        CombinedTrustManager(X509TrustManager system, List<X509Certificate> roots) {
             this.system = system;
-            this.extra = extra;
+            this.roots = roots;
         }
 
         @Override
@@ -160,18 +165,137 @@ final class EvotorTls {
                 system.checkServerTrusted(chain, authType);
                 return;
             } catch (CertificateException | RuntimeException ignored) {
-                // Old Evotor CA store may not contain the current public root.
+                // Old Evotor CA store / PKIX path builder may reject a valid
+                // modern public chain. Continue with the narrow manual fallback.
             }
-            extra.checkServerTrusted(chain, authType);
+
+            try {
+                verifyPinnedPublicChain(chain);
+            } catch (CertificateException e) {
+                throw new CertificateException(
+                        "Kapouch TLS chain rejected: " + describe(chain) + "; " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new CertificateException(
+                        "Kapouch TLS chain rejected: " + describe(chain) + "; " + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+            }
+        }
+
+        private void verifyPinnedPublicChain(X509Certificate[] chain) throws Exception {
+            if (chain == null || chain.length == 0) throw new CertificateException("empty server chain");
+            if (chain.length > 10) throw new CertificateException("server chain is unexpectedly long");
+
+            for (X509Certificate certificate : chain) certificate.checkValidity();
+            checkLeafUsage(chain[0]);
+
+            List<X509Certificate> candidates = new ArrayList<>(Arrays.asList(chain));
+            Set<String> visited = new HashSet<>();
+            if (!walkToTrustedRoot(chain[0], candidates, visited, 0)) {
+                throw new CertificateException("no signature path to bundled public CA root");
+            }
+        }
+
+        private boolean walkToTrustedRoot(
+                X509Certificate certificate,
+                List<X509Certificate> candidates,
+                Set<String> visited,
+                int depth) throws Exception {
+            if (depth > 10) return false;
+            String marker = certificate.getSubjectX500Principal().getName() + "#" + certificate.getSerialNumber();
+            if (!visited.add(marker)) return false;
+
+            try {
+                for (X509Certificate root : roots) {
+                    if (sameIdentity(certificate, root)) {
+                        root.checkValidity();
+                        return true;
+                    }
+                    if (certificate.getIssuerX500Principal().equals(root.getSubjectX500Principal())) {
+                        root.checkValidity();
+                        checkCaUsage(root);
+                        certificate.verify(root.getPublicKey());
+                        return true;
+                    }
+                }
+
+                for (X509Certificate issuer : candidates) {
+                    if (issuer == certificate) continue;
+                    if (!certificate.getIssuerX500Principal().equals(issuer.getSubjectX500Principal())) continue;
+                    issuer.checkValidity();
+                    checkCaUsage(issuer);
+                    try {
+                        certificate.verify(issuer.getPublicKey());
+                    } catch (Exception ignored) {
+                        continue;
+                    }
+                    if (walkToTrustedRoot(issuer, candidates, visited, depth + 1)) return true;
+                }
+                return false;
+            } finally {
+                visited.remove(marker);
+            }
+        }
+
+        private static boolean sameIdentity(X509Certificate certificate, X509Certificate root) {
+            return certificate.getSubjectX500Principal().equals(root.getSubjectX500Principal())
+                    && Arrays.equals(certificate.getPublicKey().getEncoded(), root.getPublicKey().getEncoded());
+        }
+
+        private static void checkLeafUsage(X509Certificate leaf) throws Exception {
+            if (leaf.getBasicConstraints() >= 0) throw new CertificateException("leaf certificate is a CA");
+
+            boolean[] usage = leaf.getKeyUsage();
+            if (usage != null) {
+                boolean digitalSignature = usage.length > 0 && usage[0];
+                boolean keyEncipherment = usage.length > 2 && usage[2];
+                boolean keyAgreement = usage.length > 4 && usage[4];
+                if (!digitalSignature && !keyEncipherment && !keyAgreement) {
+                    throw new CertificateException("leaf keyUsage is not valid for TLS server use");
+                }
+            }
+
+            List<String> eku = leaf.getExtendedKeyUsage();
+            if (eku != null && !eku.contains(OID_SERVER_AUTH) && !eku.contains(OID_ANY_EKU)) {
+                throw new CertificateException("leaf EKU does not permit serverAuth");
+            }
+        }
+
+        private static void checkCaUsage(X509Certificate issuer) throws CertificateException {
+            if (issuer.getBasicConstraints() < 0) throw new CertificateException("issuer is not a CA");
+            boolean[] usage = issuer.getKeyUsage();
+            if (usage != null && (usage.length <= 5 || !usage[5])) {
+                throw new CertificateException("issuer keyUsage does not permit certificate signing");
+            }
+        }
+
+        private static String describe(X509Certificate[] chain) {
+            if (chain == null || chain.length == 0) return "<empty>";
+            StringBuilder out = new StringBuilder();
+            for (int i = 0; i < chain.length; i++) {
+                if (i > 0) out.append(" | ");
+                X509Certificate certificate = chain[i];
+                out.append(shortName(certificate.getSubjectX500Principal().getName()))
+                        .append(" -> ")
+                        .append(shortName(certificate.getIssuerX500Principal().getName()));
+            }
+            return out.toString();
+        }
+
+        private static String shortName(String name) {
+            if (name == null) return "?";
+            String[] parts = name.split(",");
+            for (String part : parts) {
+                String value = part.trim();
+                if (value.startsWith("CN=")) return value;
+            }
+            return name.length() > 80 ? name.substring(0, 80) : name;
         }
 
         @Override
         public X509Certificate[] getAcceptedIssuers() {
-            X509Certificate[] a = system.getAcceptedIssuers();
-            X509Certificate[] b = extra.getAcceptedIssuers();
-            X509Certificate[] all = new X509Certificate[a.length + b.length];
-            System.arraycopy(a, 0, all, 0, a.length);
-            System.arraycopy(b, 0, all, a.length, b.length);
+            X509Certificate[] systemIssuers = system.getAcceptedIssuers();
+            X509Certificate[] all = new X509Certificate[systemIssuers.length + roots.size()];
+            System.arraycopy(systemIssuers, 0, all, 0, systemIssuers.length);
+            for (int i = 0; i < roots.size(); i++) all[systemIssuers.length + i] = roots.get(i);
             return all;
         }
     }
