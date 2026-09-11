@@ -52,7 +52,7 @@ final class LoyaltyApi {
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.14");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.15");
             if (terminalToken != null && !terminalToken.isEmpty()) connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
 
             JSONObject body = new JSONObject();

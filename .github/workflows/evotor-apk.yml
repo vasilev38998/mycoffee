@@ -116,7 +116,7 @@ jobs:
           # were actually shown by the physical terminal. Never trust Beget's
           # generic default public key as a shortcut.
           if grep -Fq 'J0k++KcYcmqkqicpfX7rhhKKP6BTFl9yVWbg3IwfkkI=' "$TLS"; then
-            echo 'Do not trust Beget default certificate in 1.2.14.' >&2
+            echo 'Do not trust Beget default certificate in 1.2.15.' >&2
             exit 1
           fi
           if grep -Eq 'TrustAll|ALLOW_ALL_HOSTNAME_VERIFIER|setHostnameVerifier' "$TLS" "$ORDER" "$LOYALTY"; then
@@ -124,8 +124,8 @@ jobs:
             exit 1
           fi
 
-          grep -q 'Kapouch-Orders-Evotor/1.2.14' "$ORDER"
-          grep -q 'Kapouch-Orders-Evotor/1.2.14' "$LOYALTY"
+          grep -q 'Kapouch-Orders-Evotor/1.2.15' "$ORDER"
+          grep -q 'Kapouch-Orders-Evotor/1.2.15' "$LOYALTY"
           grep -q 'ACTION_PATH = "/api/evotor_order_action.php"' "$ORDER"
           grep -q 'LOOKUP_PATH = "/api/evotor_customer_lookup.php"' "$LOYALTY"
 
@@ -158,14 +158,14 @@ jobs:
           PIN_B='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmoqSlzs='
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='21' versionName='1.2.14'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='22' versionName='1.2.15'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
           unzip -l "$APK" | tee /tmp/evotor-apk-files.txt
           grep -q 'classes.dex' /tmp/evotor-apk-files.txt
           if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then echo 'Unexpected multidex APK' >&2; exit 1; fi
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.14' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.15' /tmp/evotor-dex-strings.txt
           grep -q 'PreHandshakeSniSocketFactory' /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch TLS chain rejected:' /tmp/evotor-dex-strings.txt
           grep -q 'fallback SPKI mismatch' /tmp/evotor-dex-strings.txt
