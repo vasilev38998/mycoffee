@@ -2,15 +2,13 @@ package ru.kapouch.evotor;
 
 import android.content.Context;
 import android.net.SSLCertificateSocketFactory;
-import android.util.Base64;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.security.KeyStore;
-import java.security.MessageDigest;
-import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -20,9 +18,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
@@ -31,35 +26,23 @@ import javax.net.ssl.X509TrustManager;
 /**
  * TLS bridge for Evotor OS 4.x / old Android.
  *
- * Verification order is deliberately strict:
- *  1) Android's normal system trust manager;
- *  2) a manual path to one of the official public CA roots bundled in the APK;
- *  3) the exact self-signed kapouch.store key observed on the physical Evotor
- *     when its TLS stack fails to send effective SNI.
+ * The important detail here is WHEN SNI is configured. Android's
+ * SSLCertificateSocketFactory.createSocket(host, port) performs the TLS
+ * handshake (via hostname verification) before returning. Therefore calling
+ * setHostname() on that returned socket is too late: the ClientHello has
+ * already been sent and Beget can return its no-SNI fallback certificate.
  *
- * Beget can also answer a no-SNI connection with its normal beget.com public
- * certificate. That chain is publicly trusted but its hostname is intentionally
- * different. For that one compatibility case we keep hostname verification and
- * allow an exact SPKI identity pin instead. There is no TrustAll path and no
- * unconditional hostname bypass.
+ * This factory always creates an unconnected TLS socket first, sets SNI to
+ * kapouch.store, and only then connects. Certificate verification remains
+ * strict: Android's normal trust manager is tried first and a narrow fallback
+ * accepts only a signature path to official public CA roots bundled in the APK.
+ * There is no TrustAll path, no self-signed pin and no hostname-verification
+ * bypass.
  */
 final class EvotorTls {
     private static final String KAPOUCH_HOST = "kapouch.store";
     private static final String OID_SERVER_AUTH = "1.3.6.1.5.5.7.3.1";
     private static final String OID_ANY_EKU = "2.5.29.37.0";
-
-    // Physical Evotor OS 4.x: self-signed CN/SAN kapouch.store, valid to 2035.
-    private static final String LEGACY_SELF_SIGNED_SPKI_SHA256 =
-            "TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk=";
-
-    // Current Beget no-SNI default certificate. Its chain is public, but the
-    // hostname is beget.com. Pinning the public key gives us an explicit server
-    // identity when the old client cannot make SNI effective.
-    private static final String LEGACY_BEGET_DEFAULT_SPKI_SHA256 =
-            "J0k++KcYcmqkqicpfX7rhhKKP6BTFl9yVWbg3IwfkkI=";
-
-    private static final HostnameVerifier DEFAULT_HOSTNAME_VERIFIER =
-            HttpsURLConnection.getDefaultHostnameVerifier();
     private static volatile SSLSocketFactory cached;
 
     private EvotorTls() {}
@@ -83,16 +66,9 @@ final class EvotorTls {
             SSLCertificateSocketFactory platform = new SSLCertificateSocketFactory(10000);
             platform.setTrustManagers(new TrustManager[]{combined});
 
-            // Keep forcing SNI for terminals on which it works. The pinned
-            // fallbacks below exist only for the physical OS 4.x path where
-            // this call still results in the provider's no-SNI certificate.
-            cached = new FixedSniSocketFactory(platform, KAPOUCH_HOST);
+            cached = new PreHandshakeSniSocketFactory(platform, KAPOUCH_HOST);
             return cached;
         }
-    }
-
-    static HostnameVerifier hostnameVerifier() {
-        return PinningHostnameVerifier.INSTANCE;
     }
 
     private static X509Certificate load(CertificateFactory factory, Context context, int resourceId) throws Exception {
@@ -115,64 +91,56 @@ final class EvotorTls {
         throw new IllegalStateException("X509TrustManager unavailable");
     }
 
-    private static String spkiSha256(X509Certificate certificate) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] value = digest.digest(certificate.getPublicKey().getEncoded());
-        return Base64.encodeToString(value, Base64.NO_WRAP);
-    }
-
-    private static boolean isKnownNoSniPin(String pin) {
-        return LEGACY_SELF_SIGNED_SPKI_SHA256.equals(pin)
-                || LEGACY_BEGET_DEFAULT_SPKI_SHA256.equals(pin);
-    }
-
     /**
-     * Normal hostname verification wins whenever SNI works. If the old terminal
-     * receives a no-SNI fallback certificate, only one of the reviewed public-key
-     * pins above may stand in for the missing kapouch.store hostname. The URL is
-     * separately restricted to https://kapouch.store:443 by both API clients.
+     * Configures SNI on an UNCONNECTED socket, before any ClientHello can be
+     * emitted. This is the ordering required by SSLCertificateSocketFactory.
      */
-    private static final class PinningHostnameVerifier implements HostnameVerifier {
-        static final PinningHostnameVerifier INSTANCE = new PinningHostnameVerifier();
-
-        @Override
-        public boolean verify(String hostname, SSLSession session) {
-            if (!KAPOUCH_HOST.equalsIgnoreCase(hostname) || session == null) return false;
-            if (DEFAULT_HOSTNAME_VERIFIER.verify(hostname, session)) return true;
-            try {
-                Certificate[] peer = session.getPeerCertificates();
-                if (peer == null || peer.length == 0 || !(peer[0] instanceof X509Certificate)) return false;
-                X509Certificate leaf = (X509Certificate) peer[0];
-                leaf.checkValidity();
-                return isKnownNoSniPin(spkiSha256(leaf));
-            } catch (Exception ignored) {
-                return false;
-            }
-        }
-    }
-
-    /**
-     * A host-pinned wrapper is intentional: OrderApi and LoyaltyApi reject every
-     * host except kapouch.store, so createSocket() overloads which do not receive
-     * a hostname can still set the correct SNI value.
-     */
-    private static final class FixedSniSocketFactory extends SSLSocketFactory {
+    private static final class PreHandshakeSniSocketFactory extends SSLSocketFactory {
         private final SSLCertificateSocketFactory delegate;
         private final String hostname;
 
-        FixedSniSocketFactory(SSLCertificateSocketFactory delegate, String hostname) {
+        PreHandshakeSniSocketFactory(SSLCertificateSocketFactory delegate, String hostname) {
             this.delegate = delegate;
             this.hostname = hostname;
         }
 
-        private Socket configure(Socket socket) throws IOException {
+        private Socket newSocket() throws IOException {
+            Socket socket = delegate.createSocket();
             try {
                 delegate.setUseSessionTickets(socket, true);
                 delegate.setHostname(socket, hostname);
                 return socket;
             } catch (RuntimeException e) {
                 try { socket.close(); } catch (IOException ignored) {}
-                throw new IOException("Unable to configure SNI for " + hostname, e);
+                throw new IOException("Unable to configure pre-handshake SNI for " + hostname, e);
+            }
+        }
+
+        private Socket connect(String host, int port, InetAddress localHost, int localPort) throws IOException {
+            Socket socket = newSocket();
+            try {
+                if (localHost != null || localPort > 0) {
+                    socket.bind(new InetSocketAddress(localHost, Math.max(localPort, 0)));
+                }
+                socket.connect(new InetSocketAddress(host, port));
+                return socket;
+            } catch (IOException | RuntimeException e) {
+                try { socket.close(); } catch (IOException ignored) {}
+                throw e;
+            }
+        }
+
+        private Socket connect(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+            Socket socket = newSocket();
+            try {
+                if (localAddress != null || localPort > 0) {
+                    socket.bind(new InetSocketAddress(localAddress, Math.max(localPort, 0)));
+                }
+                socket.connect(new InetSocketAddress(address, port));
+                return socket;
+            } catch (IOException | RuntimeException e) {
+                try { socket.close(); } catch (IOException ignored) {}
+                throw e;
             }
         }
 
@@ -180,27 +148,35 @@ final class EvotorTls {
         @Override public String[] getSupportedCipherSuites() { return delegate.getSupportedCipherSuites(); }
 
         @Override public Socket createSocket() throws IOException {
-            return configure(delegate.createSocket());
+            return newSocket();
         }
 
         @Override public Socket createSocket(String host, int port) throws IOException {
-            return configure(delegate.createSocket(host, port));
+            return connect(host, port, null, 0);
         }
 
         @Override public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
-            return configure(delegate.createSocket(host, port, localHost, localPort));
+            return connect(host, port, localHost, localPort);
         }
 
         @Override public Socket createSocket(InetAddress host, int port) throws IOException {
-            return configure(delegate.createSocket(host, port));
+            return connect(host, port, null, 0);
         }
 
         @Override public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
-            return configure(delegate.createSocket(address, port, localAddress, localPort));
+            return connect(address, port, localAddress, localPort);
         }
 
-        @Override public Socket createSocket(Socket socket, String host, int port, boolean autoClose) throws IOException {
-            return configure(delegate.createSocket(socket, host, port, autoClose));
+        @Override public Socket createSocket(Socket plain, String host, int port, boolean autoClose) throws IOException {
+            // Android's public SSLCertificateSocketFactory has no API for adding
+            // SNI to an already-layered socket before its own verification starts
+            // the handshake. On the affected Evotor direct HTTPS path, reconnect
+            // with a preconfigured SSL socket instead. Proxy tunnelling is not used
+            // by Kapouch and is intentionally not emulated here.
+            if (plain != null && autoClose) {
+                try { plain.close(); } catch (IOException ignored) {}
+            }
+            return connect(host, port, null, 0);
         }
     }
 
@@ -224,33 +200,22 @@ final class EvotorTls {
                 system.checkServerTrusted(chain, authType);
                 return;
             } catch (CertificateException | RuntimeException ignored) {
-                // Continue with narrowly scoped compatibility checks.
+                // Old Evotor PKIX can reject otherwise valid modern public chains.
             }
 
-            Exception publicChainError;
             try {
-                verifyPinnedPublicChain(chain);
-                return;
+                verifyPublicChain(chain);
+            } catch (CertificateException e) {
+                throw new CertificateException(
+                        "Kapouch TLS chain rejected: " + describe(chain) + "; " + e.getMessage(), e);
             } catch (Exception e) {
-                publicChainError = e;
+                throw new CertificateException(
+                        "Kapouch TLS chain rejected: " + describe(chain) + "; "
+                                + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
             }
-
-            Exception legacyPinError;
-            try {
-                verifyLegacyNoSniLeaf(chain);
-                return;
-            } catch (Exception e) {
-                legacyPinError = e;
-            }
-
-            throw new CertificateException(
-                    "Kapouch TLS chain rejected: " + describe(chain)
-                            + "; public=" + safeMessage(publicChainError)
-                            + "; legacy-pin=" + safeMessage(legacyPinError),
-                    legacyPinError);
         }
 
-        private void verifyPinnedPublicChain(X509Certificate[] chain) throws Exception {
+        private void verifyPublicChain(X509Certificate[] chain) throws Exception {
             if (chain == null || chain.length == 0) throw new CertificateException("empty server chain");
             if (chain.length > 10) throw new CertificateException("server chain is unexpectedly long");
 
@@ -261,27 +226,6 @@ final class EvotorTls {
             Set<String> visited = new HashSet<>();
             if (!walkToTrustedRoot(chain[0], candidates, visited, 0)) {
                 throw new CertificateException("no signature path to bundled public CA root");
-            }
-        }
-
-        private static void verifyLegacyNoSniLeaf(X509Certificate[] chain) throws Exception {
-            if (chain == null || chain.length != 1) {
-                throw new CertificateException("expected one self-signed fallback certificate");
-            }
-            X509Certificate leaf = chain[0];
-            leaf.checkValidity();
-            if (!leaf.getSubjectX500Principal().equals(leaf.getIssuerX500Principal())) {
-                throw new CertificateException("fallback certificate is not self-issued");
-            }
-            try {
-                leaf.verify(leaf.getPublicKey());
-            } catch (Exception e) {
-                throw new CertificateException("fallback certificate self-signature is invalid", e);
-            }
-
-            String observed = spkiSha256(leaf);
-            if (!LEGACY_SELF_SIGNED_SPKI_SHA256.equals(observed)) {
-                throw new CertificateException("fallback SPKI mismatch: " + observed);
             }
         }
 
@@ -356,13 +300,6 @@ final class EvotorTls {
             if (usage != null && (usage.length <= 5 || !usage[5])) {
                 throw new CertificateException("issuer keyUsage does not permit certificate signing");
             }
-        }
-
-        private static String safeMessage(Exception error) {
-            if (error == null) return "unknown";
-            String message = error.getMessage();
-            if (message == null || message.trim().isEmpty()) return error.getClass().getSimpleName();
-            return message;
         }
 
         private static String describe(X509Certificate[] chain) {
