@@ -35,6 +35,7 @@ final class OrderApi {
             if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен только по HTTPS.");
             HttpsURLConnection secure = (HttpsURLConnection) connection;
             secure.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
+            secure.setHostnameVerifier(EvotorTls.hostnameVerifier());
 
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(7000);
@@ -45,7 +46,7 @@ final class OrderApi {
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Authorization", "Bearer " + order.actionToken);
             connection.setRequestProperty("X-Kapouch-Order-Token", order.actionToken);
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.10");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.11");
 
             JSONObject body = new JSONObject();
             body.put("action", action);
