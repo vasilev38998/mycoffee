@@ -30,16 +30,20 @@ $dispatchBody=substr($notifications,$dispatchStart,$notifyStart-$dispatchStart);
 $notifyBody=substr($notifications,$notifyStart,$deferStart-$notifyStart);
 
 evotor_queue_contract_require(!str_contains($notifyBody,'evotor_order_push_dispatch_log('),'evotor_order_notify_new must enqueue only and never call the external push transport');
-evotor_queue_contract_require(str_contains($notifyBody,"'log_ids'"),'enqueue result must expose log_ids for post-response dispatch');
-evotor_queue_contract_require(str_contains($notifications,'function evotor_order_push_defer'),'post-response Evotor dispatch helper is missing');
-evotor_queue_contract_require(str_contains($notifications,'fastcgi_finish_request'),'deferred push must flush the HTTP response before network delivery');
+evotor_queue_contract_require(str_contains($notifyBody,"'log_ids'"),'enqueue result must expose log_ids for delivery');
 evotor_queue_contract_require(str_contains($dispatchBody,'attempts=attempts+1'),'push dispatch must atomically claim an attempt');
 evotor_queue_contract_require(str_contains($dispatchBody,"attempts=? AND attempts<5 AND (attempts=0 OR"),'atomic claim must enforce retry backoff and reject duplicate workers');
 evotor_queue_contract_require(str_contains($dispatchBody,"INTERVAL 60 MINUTE"),'dispatch claim must protect the final retry backoff window');
 evotor_queue_contract_require(str_contains($notifications,"INTERVAL 6 HOUR"),'retry horizon must preserve failed notifications beyond the old 30-minute window');
 evotor_queue_contract_require(str_contains($notifications,"INTERVAL 60 MINUTE"),'retry schedule must include backoff for the final attempt');
 evotor_queue_contract_require(str_contains($notifications,"return 'https://kapouch.store/api/evotor_order_action.php';"),'server action URL must match the Android allowlist exactly');
-evotor_queue_contract_require(str_contains($checkout,'evotor_order_push_defer'),'checkout must defer Evotor delivery until after its response');
-evotor_queue_contract_require(str_contains($webhook,'evotor_order_push_defer'),'payment webhook must defer Evotor delivery until after its response');
+
+// Beget can run PHP without fastcgi_finish_request(). In that environment the old
+// evotor_order_push_defer() path returned without delivering anything. New checkout
+// and paid-webhook paths must dispatch their freshly queued rows explicitly.
+evotor_queue_contract_require(str_contains($checkout,'evotor_order_push_dispatch_log((int)$pushLogId)'),'checkout must immediately dispatch queued Evotor notifications');
+evotor_queue_contract_require(str_contains($webhook,'evotor_order_push_dispatch_log((int)$pushLogId)'),'payment webhook must immediately dispatch queued Evotor notifications');
+evotor_queue_contract_require(!str_contains($checkout,'evotor_order_push_defer('),'checkout must not depend on fastcgi_finish_request for Evotor delivery');
+evotor_queue_contract_require(!str_contains($webhook,'evotor_order_push_defer('),'payment webhook must not depend on fastcgi_finish_request for Evotor delivery');
 
 echo "Evotor order push queue contract OK\n";
