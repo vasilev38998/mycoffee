@@ -39,10 +39,11 @@ jobs:
           yes | "$SDKMANAGER" 'platforms;android-27' 'build-tools;27.0.3' >/dev/null || true
           test -x "$ANDROID_HOME/build-tools/27.0.3/aapt"
 
-      - name: Validate live kapouch.store TLS chain
+      - name: Validate live kapouch.store TLS chain and SNI behavior
         run: |
           set -euo pipefail
-          rm -f /tmp/live-tls.pem /tmp/live-leaf.pem /tmp/live-tls.err
+          rm -f /tmp/live-tls.pem /tmp/live-leaf.pem /tmp/live-tls.err /tmp/no-sni.pem /tmp/no-sni-leaf.pem
+
           timeout 20 openssl s_client \
             -connect kapouch.store:443 \
             -servername kapouch.store \
@@ -58,7 +59,19 @@ jobs:
             exit 1
           fi
           awk 'BEGIN{n=0} /-----BEGIN CERTIFICATE-----/{n++; if(n==1)printit=1} printit{print} /-----END CERTIFICATE-----/{if(printit){exit}}' /tmp/live-tls.pem > /tmp/live-leaf.pem
+          echo '=== with SNI ==='
           openssl x509 -in /tmp/live-leaf.pem -noout -subject -issuer -dates -ext subjectAltName
+
+          # Diagnostic only: Beget currently presents a different fallback certificate
+          # when SNI is absent. This is exactly what the old Evotor exposed in the
+          # physical test, so keep the contrast visible in CI without depending on the
+          # fallback certificate remaining unchanged forever.
+          timeout 20 openssl s_client -connect kapouch.store:443 -noservername -showcerts </dev/null > /tmp/no-sni.pem 2>/dev/null || true
+          awk 'BEGIN{n=0} /-----BEGIN CERTIFICATE-----/{n++; if(n==1)printit=1} printit{print} /-----END CERTIFICATE-----/{if(printit){exit}}' /tmp/no-sni.pem > /tmp/no-sni-leaf.pem || true
+          if [ -s /tmp/no-sni-leaf.pem ]; then
+            echo '=== without SNI (diagnostic only) ==='
+            openssl x509 -in /tmp/no-sni-leaf.pem -noout -subject -issuer -dates || true
+          fi
 
       - uses: actions/setup-java@v4
         with:
@@ -69,7 +82,7 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate Evotor TLS trust bridge source contract
+      - name: Validate Evotor TLS trust and SNI bridge source contract
         run: |
           set -euo pipefail
           TLS=evotor-app/app/src/main/java/ru/kapouch/evotor/EvotorTls.java
@@ -81,6 +94,10 @@ jobs:
           grep -q 'SSLCertificateSocketFactory' "$TLS"
           grep -q 'setTrustManagers' "$TLS"
           grep -q 'CombinedTrustManager' "$TLS"
+          grep -q 'FixedSniSocketFactory' "$TLS"
+          grep -q 'delegate.setHostname(socket, hostname)' "$TLS"
+          grep -q 'delegate.setUseSessionTickets(socket, true)' "$TLS"
+          grep -q 'KAPOUCH_HOST = "kapouch.store"' "$TLS"
           grep -q 'EvotorTls.socketFactory' "$ORDER"
           grep -q 'EvotorTls.socketFactory' "$LOYALTY"
           grep -q 'setSSLSocketFactory' "$ORDER"
@@ -91,10 +108,12 @@ jobs:
           grep -q 'Evotor HTTPS' "$ORDER"
           grep -q 'Evotor HTTPS' "$LOYALTY"
 
-          for cert in isrg_root_x1 isrg_root_x2 isrg_root_ye isrg_root_yr; do
+          for cert in isrg_root_x1 isrg_root_x2 isrg_root_ye isrg_root_yr digicert_global_root_ca; do
             test -s "$RAW/$cert.pem"
             openssl x509 -in "$RAW/$cert.pem" -noout -subject -issuer -dates
           done
+          DIGICERT_FP=$(openssl x509 -in "$RAW/digicert_global_root_ca.pem" -noout -fingerprint -sha256 | sed 's/.*=//;s/://g' | tr '[:upper:]' '[:lower:]')
+          test "$DIGICERT_FP" = '4348a0e9444c78cb265e058d5e8944b4d84f9662bd26db257f8934a443c70161'
 
           # Old experimental TLS implementations must not be reintroduced.
           test ! -e evotor-app/app/src/main/java/ru/kapouch/evotor/KapouchTls.java
@@ -114,7 +133,7 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='15' versionName='1.2.8'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='16' versionName='1.2.9'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
           "$AAPT" dump permissions "$APK" | tee /tmp/evotor-permissions.txt
@@ -134,11 +153,14 @@ jobs:
           grep -q 'res/raw/isrg_root_x2.pem' /tmp/evotor-apk-files.txt
           grep -q 'res/raw/isrg_root_ye.pem' /tmp/evotor-apk-files.txt
           grep -q 'res/raw/isrg_root_yr.pem' /tmp/evotor-apk-files.txt
+          grep -q 'res/raw/digicert_global_root_ca.pem' /tmp/evotor-apk-files.txt
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
           grep -q 'kapouch-order-sound' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.8' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.9' /tmp/evotor-dex-strings.txt
           grep -q 'Evotor HTTPS' /tmp/evotor-dex-strings.txt
           grep -q 'EvotorTls' /tmp/evotor-dex-strings.txt
+          grep -q 'FixedSniSocketFactory' /tmp/evotor-dex-strings.txt
+          grep -q 'Unable to configure SNI for' /tmp/evotor-dex-strings.txt
           grep -q 'SSLCertificateSocketFactory' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch.store' /tmp/evotor-dex-strings.txt
           grep -q '/api/evotor_order_action.php' /tmp/evotor-dex-strings.txt
