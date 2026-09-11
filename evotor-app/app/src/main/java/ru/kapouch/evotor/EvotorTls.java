@@ -34,12 +34,13 @@ import javax.net.ssl.X509TrustManager;
  *  3) if old PKIX fails, verify a signature path to official public CA roots
  *     bundled in the APK.
  *
- * Physical Evotor OS 4.x testing also proves that this firmware can ignore SNI
- * even when it is configured before connect and Beget then serves one specific
- * self-signed CN=kapouch.store certificate. As the final compatibility path we
- * accept ONLY that reviewed public key, only as a single self-signed leaf, and
- * only while it is time-valid and its self-signature verifies. Standard
- * HttpsURLConnection hostname verification is still used by the API clients.
+ * Physical Evotor OS 4.x testing proves that this firmware can still receive a
+ * self-signed CN=kapouch.store certificate from the hosting edge even when SNI
+ * is configured before connect. Two different public keys have now been seen on
+ * the same physical terminal, so the compatibility path is an explicit allowlist
+ * of those reviewed SPKI identities. The leaf must still be single, time-valid,
+ * self-issued and correctly self-signed. Standard HttpsURLConnection hostname
+ * verification remains enabled by the API clients.
  *
  * Arbitrary self-signed certificates are never accepted.
  */
@@ -48,10 +49,13 @@ final class EvotorTls {
     private static final String OID_SERVER_AUTH = "1.3.6.1.5.5.7.3.1";
     private static final String OID_ANY_EKU = "2.5.29.37.0";
 
-    // Exact SPKI SHA-256 observed for the self-signed CN=kapouch.store leaf on
-    // the affected physical Evotor / Beget no-SNI path (captured for 1.2.11).
-    private static final String LEGACY_EVOTOR_SPKI_SHA256 =
+    // Reviewed physical-terminal identities. The first was captured during the
+    // 1.2.11 investigation; the second was displayed by the same terminal on
+    // 1.2.13 as the actual fallback SPKI mismatch.
+    private static final String LEGACY_EVOTOR_SPKI_SHA256_A =
             "TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk=";
+    private static final String LEGACY_EVOTOR_SPKI_SHA256_B =
+            "823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmoqSlzs=";
 
     private static volatile SSLSocketFactory cached;
 
@@ -104,6 +108,11 @@ final class EvotorTls {
     private static String spkiSha256(X509Certificate certificate) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         return Base64.encodeToString(digest.digest(certificate.getPublicKey().getEncoded()), Base64.NO_WRAP);
+    }
+
+    private static boolean isReviewedLegacySpki(String value) {
+        return LEGACY_EVOTOR_SPKI_SHA256_A.equals(value)
+                || LEGACY_EVOTOR_SPKI_SHA256_B.equals(value);
     }
 
     /** Configure SNI on an unconnected socket, before ClientHello. */
@@ -244,7 +253,7 @@ final class EvotorTls {
             }
             leaf.verify(leaf.getPublicKey());
             String observed = spkiSha256(leaf);
-            if (!LEGACY_EVOTOR_SPKI_SHA256.equals(observed)) {
+            if (!isReviewedLegacySpki(observed)) {
                 throw new CertificateException("fallback SPKI mismatch: " + observed);
             }
         }
