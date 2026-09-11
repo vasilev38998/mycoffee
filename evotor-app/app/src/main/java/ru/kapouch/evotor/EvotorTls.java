@@ -41,7 +41,7 @@ import javax.net.ssl.X509TrustManager;
  * only while it is time-valid and its self-signature verifies. Standard
  * HttpsURLConnection hostname verification is still used by the API clients.
  *
- * This is not TrustAll and does not accept arbitrary self-signed certificates.
+ * Arbitrary self-signed certificates are never accepted.
  */
 final class EvotorTls {
     private static final String KAPOUCH_HOST = "kapouch.store";
