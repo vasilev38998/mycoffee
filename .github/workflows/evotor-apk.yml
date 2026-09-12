@@ -63,7 +63,7 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate Evotor 1.2.16 source contract
+      - name: Validate Evotor 1.2.17 source contract
         run: |
           set -euo pipefail
           TLS=evotor-app/app/src/main/java/ru/kapouch/evotor/EvotorTls.java
@@ -73,9 +73,8 @@ jobs:
           MAIN=evotor-app/app/src/main/java/ru/kapouch/evotor/MainActivity.java
           MANIFEST=evotor-app/app/src/main/AndroidManifest.xml
           RAW=evotor-app/app/src/main/res/raw
-          PIN_A='TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk='
-          PIN_B='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmogSlzs='
-          OLD_PIN='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmoqSlzs='
+          HEX_A='4ee80751bcff28354f7fe5541bc1351a62ea4d280d9090acf1df25f1d2068989'
+          HEX_B='f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66e881a49a8812973b'
 
           test -s "$TLS"
           grep -q 'SSLCertificateSocketFactory' "$TLS"
@@ -85,10 +84,15 @@ jobs:
           grep -q 'PreHandshakeSniSocketFactory' "$TLS"
           grep -q 'delegate.setHostname(socket, hostname);' "$TLS"
           grep -q 'socket.connect(new InetSocketAddress' "$TLS"
-          grep -Fq "$PIN_A" "$TLS"
-          grep -Fq "$PIN_B" "$TLS"
-          if grep -Fq "$OLD_PIN" "$TLS"; then
-            echo 'Typoed 1.2.15 SPKI pin is still present.' >&2
+          grep -Fq "$HEX_A" "$TLS"
+          grep -Fq "$HEX_B" "$TLS"
+          grep -q 'MessageDigest.isEqual(LEGACY_EVOTOR_SPKI_SHA256_A, value)' "$TLS"
+          grep -q 'MessageDigest.isEqual(LEGACY_EVOTOR_SPKI_SHA256_B, value)' "$TLS"
+          grep -q 'byte\[\] observed = spkiSha256(leaf);' "$TLS"
+          grep -q 'Base64.encodeToString(observed, Base64.NO_WRAP)' "$TLS"
+          grep -q 'bytes=' "$TLS"
+          if grep -q 'LEGACY_EVOTOR_SPKI_SHA256_B.equals(value)' "$TLS"; then
+            echo '1.2.17 must not make trust decisions by comparing Base64 strings.' >&2
             exit 1
           fi
           if grep -Eq 'TrustAll|ALLOW_ALL_HOSTNAME_VERIFIER|setHostnameVerifier' "$TLS" "$ORDER" "$LOYALTY"; then
@@ -100,8 +104,8 @@ jobs:
           CONNECT_LINE=$(grep -n 'socket.connect(new InetSocketAddress' "$TLS" | head -n1 | cut -d: -f1)
           test "$SNI_LINE" -lt "$CONNECT_LINE"
 
-          grep -q 'Kapouch-Orders-Evotor/1.2.16' "$ORDER"
-          grep -q 'Kapouch-Orders-Evotor/1.2.16' "$LOYALTY"
+          grep -q 'Kapouch-Orders-Evotor/1.2.17' "$ORDER"
+          grep -q 'Kapouch-Orders-Evotor/1.2.17' "$LOYALTY"
           grep -q 'BuildConfig.VERSION_NAME' "$MAIN"
           grep -q 'Kapouch Orders · v' "$MAIN"
           grep -q 'Foreground-only loyalty scanner receiver' "$SCAN"
@@ -122,20 +126,19 @@ jobs:
           EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
         run: gradle -p evotor-app :app:assembleDebug -PEVOTOR_APP_UUID="$EVOTOR_APP_UUID" --no-daemon
 
-      - name: Validate APK metadata and TLS pins
+      - name: Validate APK metadata and raw TLS digests
         env:
           EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
         run: |
           set -euo pipefail
           APK=evotor-app/app/build/outputs/apk/debug/app-debug.apk
           AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
-          PIN_A='TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk='
-          PIN_B='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmogSlzs='
-          OLD_PIN='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmoqSlzs='
+          HEX_A='4ee80751bcff28354f7fe5541bc1351a62ea4d280d9090acf1df25f1d2068989'
+          HEX_B='f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66e881a49a8812973b'
 
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='23' versionName='1.2.16'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='24' versionName='1.2.17'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
 
@@ -151,16 +154,12 @@ jobs:
           fi
 
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.16' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.17' /tmp/evotor-dex-strings.txt
           grep -q 'PreHandshakeSniSocketFactory' /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch TLS chain rejected:' /tmp/evotor-dex-strings.txt
-          grep -q 'fallback SPKI mismatch' /tmp/evotor-dex-strings.txt
-          grep -Fq "$PIN_A" /tmp/evotor-dex-strings.txt
-          grep -Fq "$PIN_B" /tmp/evotor-dex-strings.txt
-          if grep -Fq "$OLD_PIN" /tmp/evotor-dex-strings.txt; then
-            echo 'Typoed 1.2.15 SPKI pin unexpectedly remains in APK.' >&2
-            exit 1
-          fi
+          grep -q 'fallback SPKI mismatch: base64=' /tmp/evotor-dex-strings.txt
+          grep -Fq "$HEX_A" /tmp/evotor-dex-strings.txt
+          grep -Fq "$HEX_B" /tmp/evotor-dex-strings.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
