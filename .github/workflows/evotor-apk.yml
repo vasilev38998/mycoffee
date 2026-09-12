@@ -58,10 +58,9 @@ jobs:
           awk 'BEGIN{n=0} /-----BEGIN CERTIFICATE-----/{n++; if(n==1)printit=1} printit{print} /-----END CERTIFICATE-----/{if(printit){exit}}' /tmp/live-tls.pem > /tmp/live-leaf.pem
           openssl x509 -in /tmp/live-leaf.pem -noout -subject -issuer -dates -ext subjectAltName
 
-          # Diagnostic only: old physical Evotor firmware has now exposed more
-          # than one self-signed kapouch.store key while modern CI sees Beget's
-          # public default certificate. Never derive physical-terminal pins from
-          # this modern runner probe.
+          # Diagnostic only: old physical Evotor firmware has exposed self-signed
+          # kapouch.store keys while modern CI sees Beget's public default path.
+          # Never derive physical-terminal pins from this modern runner probe.
           timeout 20 openssl s_client -connect kapouch.store:443 -noservername -showcerts </dev/null > /tmp/no-sni.pem 2>/dev/null || true
           awk 'BEGIN{n=0} /-----BEGIN CERTIFICATE-----/{n++; if(n==1)printit=1} printit{print} /-----END CERTIFICATE-----/{if(printit){exit}}' /tmp/no-sni.pem > /tmp/no-sni-leaf.pem || true
           if [ -s /tmp/no-sni-leaf.pem ]; then
@@ -89,7 +88,7 @@ jobs:
           MANIFEST=evotor-app/app/src/main/AndroidManifest.xml
           RAW=evotor-app/app/src/main/res/raw
           PIN_A='TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk='
-          PIN_B='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmoqSlzs='
+          PIN_B='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmogSlzs='
 
           test -s "$TLS"
           grep -q 'SSLCertificateSocketFactory' "$TLS"
@@ -112,11 +111,8 @@ jobs:
           CONNECT_LINE=$(grep -n 'socket.connect(new InetSocketAddress' "$TLS" | head -n1 | cut -d: -f1)
           test "$SNI_LINE" -lt "$CONNECT_LINE"
 
-          # Keep the compatibility path constrained to the two identities that
-          # were actually shown by the physical terminal. Never trust Beget's
-          # generic default public key as a shortcut.
           if grep -Fq 'J0k++KcYcmqkqicpfX7rhhKKP6BTFl9yVWbg3IwfkkI=' "$TLS"; then
-            echo 'Do not trust Beget default certificate in 1.2.15.' >&2
+            echo 'Do not trust Beget default certificate in 1.2.16.' >&2
             exit 1
           fi
           if grep -Eq 'TrustAll|ALLOW_ALL_HOSTNAME_VERIFIER|setHostnameVerifier' "$TLS" "$ORDER" "$LOYALTY"; then
@@ -124,10 +120,12 @@ jobs:
             exit 1
           fi
 
-          grep -q 'Kapouch-Orders-Evotor/1.2.15' "$ORDER"
-          grep -q 'Kapouch-Orders-Evotor/1.2.15' "$LOYALTY"
+          grep -q 'Kapouch-Orders-Evotor/1.2.16' "$ORDER"
+          grep -q 'Kapouch-Orders-Evotor/1.2.16' "$LOYALTY"
           grep -q 'ACTION_PATH = "/api/evotor_order_action.php"' "$ORDER"
           grep -q 'LOOKUP_PATH = "/api/evotor_customer_lookup.php"' "$LOYALTY"
+          grep -q 'BuildConfig.VERSION_NAME' "$MAIN"
+          grep -q 'Kapouch Orders · v' "$MAIN"
 
           grep -q 'Foreground-only loyalty scanner receiver' "$SCAN"
           grep -q 'registerReceiver(' "$MAIN"
@@ -155,22 +153,27 @@ jobs:
           APK=evotor-app/app/build/outputs/apk/debug/app-debug.apk
           AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
           PIN_A='TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk='
-          PIN_B='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmoqSlzs='
+          PIN_B='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmogSlzs='
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='22' versionName='1.2.15'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='23' versionName='1.2.16'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
           unzip -l "$APK" | tee /tmp/evotor-apk-files.txt
           grep -q 'classes.dex' /tmp/evotor-apk-files.txt
           if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then echo 'Unexpected multidex APK' >&2; exit 1; fi
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.15' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.16' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch Orders · v' /tmp/evotor-dex-strings.txt
           grep -q 'PreHandshakeSniSocketFactory' /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch TLS chain rejected:' /tmp/evotor-dex-strings.txt
           grep -q 'fallback SPKI mismatch' /tmp/evotor-dex-strings.txt
           grep -Fq "$PIN_A" /tmp/evotor-dex-strings.txt
           grep -Fq "$PIN_B" /tmp/evotor-dex-strings.txt
+          if grep -Fq '823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmoqSlzs=' /tmp/evotor-dex-strings.txt; then
+            echo 'Typoed 1.2.15 SPKI pin unexpectedly remains in APK.' >&2
+            exit 1
+          fi
           if grep -Fq 'J0k++KcYcmqkqicpfX7rhhKKP6BTFl9yVWbg3IwfkkI=' /tmp/evotor-dex-strings.txt; then
             echo 'Broad Beget fallback pin unexpectedly packaged.' >&2
             exit 1
