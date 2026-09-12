@@ -44,7 +44,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(250, 248, 245));
 
         TextView title = new TextView(this);
-        title.setText("Kapouch Orders");
+        title.setText("Kapouch Orders · v" + BuildConfig.VERSION_NAME);
         title.setTextSize(30);
         title.setTextColor(Color.rgb(30, 26, 22));
         title.setPadding(0, 0, 0, dp(8));

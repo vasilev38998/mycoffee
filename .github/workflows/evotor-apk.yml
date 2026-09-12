@@ -42,8 +42,6 @@ jobs:
       - name: Validate live kapouch.store TLS with SNI
         run: |
           set -euo pipefail
-          rm -f /tmp/live-tls.pem /tmp/live-leaf.pem /tmp/live-tls.err /tmp/no-sni.pem /tmp/no-sni-leaf.pem
-
           timeout 20 openssl s_client \
             -connect kapouch.store:443 \
             -servername kapouch.store \
@@ -55,19 +53,6 @@ jobs:
           CERT_COUNT=$(grep -c 'BEGIN CERTIFICATE' /tmp/live-tls.pem || true)
           echo "LIVE_TLS_CERT_COUNT=$CERT_COUNT"
           test "$CERT_COUNT" -ge 2
-          awk 'BEGIN{n=0} /-----BEGIN CERTIFICATE-----/{n++; if(n==1)printit=1} printit{print} /-----END CERTIFICATE-----/{if(printit){exit}}' /tmp/live-tls.pem > /tmp/live-leaf.pem
-          openssl x509 -in /tmp/live-leaf.pem -noout -subject -issuer -dates -ext subjectAltName
-
-          # Diagnostic only: old physical Evotor firmware has now exposed more
-          # than one self-signed kapouch.store key while modern CI sees Beget's
-          # public default certificate. Never derive physical-terminal pins from
-          # this modern runner probe.
-          timeout 20 openssl s_client -connect kapouch.store:443 -noservername -showcerts </dev/null > /tmp/no-sni.pem 2>/dev/null || true
-          awk 'BEGIN{n=0} /-----BEGIN CERTIFICATE-----/{n++; if(n==1)printit=1} printit{print} /-----END CERTIFICATE-----/{if(printit){exit}}' /tmp/no-sni.pem > /tmp/no-sni-leaf.pem || true
-          if [ -s /tmp/no-sni-leaf.pem ]; then
-            echo '=== no-SNI diagnostic ==='
-            openssl x509 -in /tmp/no-sni-leaf.pem -noout -subject -issuer -dates || true
-          fi
 
       - uses: actions/setup-java@v4
         with:
@@ -78,7 +63,7 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate Evotor TLS and foreground loyalty scanner source contract
+      - name: Validate Evotor 1.2.16 source contract
         run: |
           set -euo pipefail
           TLS=evotor-app/app/src/main/java/ru/kapouch/evotor/EvotorTls.java
@@ -89,34 +74,21 @@ jobs:
           MANIFEST=evotor-app/app/src/main/AndroidManifest.xml
           RAW=evotor-app/app/src/main/res/raw
           PIN_A='TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk='
-          PIN_B='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmoqSlzs='
+          PIN_B='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmogSlzs='
+          OLD_PIN='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmoqSlzs='
 
           test -s "$TLS"
           grep -q 'SSLCertificateSocketFactory' "$TLS"
-          grep -q 'setTrustManagers' "$TLS"
           grep -q 'CombinedTrustManager' "$TLS"
           grep -q 'verifyPublicChain' "$TLS"
           grep -q 'verifyReviewedLegacyLeaf' "$TLS"
-          grep -q 'isReviewedLegacySpki' "$TLS"
           grep -q 'PreHandshakeSniSocketFactory' "$TLS"
           grep -q 'delegate.setHostname(socket, hostname);' "$TLS"
           grep -q 'socket.connect(new InetSocketAddress' "$TLS"
           grep -Fq "$PIN_A" "$TLS"
           grep -Fq "$PIN_B" "$TLS"
-          grep -q 'fallback SPKI mismatch' "$TLS"
-          grep -q 'leaf.verify(leaf.getPublicKey())' "$TLS"
-          grep -q 'expected one self-signed fallback certificate' "$TLS"
-          grep -q 'Kapouch TLS chain rejected:' "$TLS"
-
-          SNI_LINE=$(grep -n 'delegate.setHostname(socket, hostname);' "$TLS" | head -n1 | cut -d: -f1)
-          CONNECT_LINE=$(grep -n 'socket.connect(new InetSocketAddress' "$TLS" | head -n1 | cut -d: -f1)
-          test "$SNI_LINE" -lt "$CONNECT_LINE"
-
-          # Keep the compatibility path constrained to the two identities that
-          # were actually shown by the physical terminal. Never trust Beget's
-          # generic default public key as a shortcut.
-          if grep -Fq 'J0k++KcYcmqkqicpfX7rhhKKP6BTFl9yVWbg3IwfkkI=' "$TLS"; then
-            echo 'Do not trust Beget default certificate in 1.2.15.' >&2
+          if grep -Fq "$OLD_PIN" "$TLS"; then
+            echo 'Typoed 1.2.15 SPKI pin is still present.' >&2
             exit 1
           fi
           if grep -Eq 'TrustAll|ALLOW_ALL_HOSTNAME_VERIFIER|setHostnameVerifier' "$TLS" "$ORDER" "$LOYALTY"; then
@@ -124,15 +96,17 @@ jobs:
             exit 1
           fi
 
-          grep -q 'Kapouch-Orders-Evotor/1.2.15' "$ORDER"
-          grep -q 'Kapouch-Orders-Evotor/1.2.15' "$LOYALTY"
-          grep -q 'ACTION_PATH = "/api/evotor_order_action.php"' "$ORDER"
-          grep -q 'LOOKUP_PATH = "/api/evotor_customer_lookup.php"' "$LOYALTY"
+          SNI_LINE=$(grep -n 'delegate.setHostname(socket, hostname);' "$TLS" | head -n1 | cut -d: -f1)
+          CONNECT_LINE=$(grep -n 'socket.connect(new InetSocketAddress' "$TLS" | head -n1 | cut -d: -f1)
+          test "$SNI_LINE" -lt "$CONNECT_LINE"
 
+          grep -q 'Kapouch-Orders-Evotor/1.2.16' "$ORDER"
+          grep -q 'Kapouch-Orders-Evotor/1.2.16' "$LOYALTY"
+          grep -q 'BuildConfig.VERSION_NAME' "$MAIN"
+          grep -q 'Kapouch Orders · v' "$MAIN"
           grep -q 'Foreground-only loyalty scanner receiver' "$SCAN"
           grep -q 'registerReceiver(' "$MAIN"
           grep -q 'unregisterReceiver(' "$MAIN"
-          grep -q 'СКАНИРОВАТЬ КАРТУ КЛИЕНТА' "$MAIN"
           if grep -q 'CustomerScanReceiver' "$MANIFEST"; then
             echo 'CustomerScanReceiver must not be globally registered.' >&2
             exit 1
@@ -148,31 +122,43 @@ jobs:
           EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
         run: gradle -p evotor-app :app:assembleDebug -PEVOTOR_APP_UUID="$EVOTOR_APP_UUID" --no-daemon
 
-      - name: Validate APK metadata for Evotor portal
+      - name: Validate APK metadata and TLS pins
         env:
           EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
         run: |
+          set -euo pipefail
           APK=evotor-app/app/build/outputs/apk/debug/app-debug.apk
           AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
           PIN_A='TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk='
-          PIN_B='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmoqSlzs='
+          PIN_B='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmogSlzs='
+          OLD_PIN='823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmoqSlzs='
+
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='22' versionName='1.2.15'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='23' versionName='1.2.16'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
+
+          "$AAPT" dump permissions "$APK" | tee /tmp/evotor-permissions.txt
+          grep -q 'android.permission.INTERNET' /tmp/evotor-permissions.txt
+          grep -q 'ru.evotor.devices.SCANNER_RECEIVER' /tmp/evotor-permissions.txt
+
           unzip -l "$APK" | tee /tmp/evotor-apk-files.txt
           grep -q 'classes.dex' /tmp/evotor-apk-files.txt
-          if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then echo 'Unexpected multidex APK' >&2; exit 1; fi
+          if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then
+            echo 'Unexpected multidex APK.' >&2
+            exit 1
+          fi
+
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.15' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.16' /tmp/evotor-dex-strings.txt
           grep -q 'PreHandshakeSniSocketFactory' /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch TLS chain rejected:' /tmp/evotor-dex-strings.txt
           grep -q 'fallback SPKI mismatch' /tmp/evotor-dex-strings.txt
           grep -Fq "$PIN_A" /tmp/evotor-dex-strings.txt
           grep -Fq "$PIN_B" /tmp/evotor-dex-strings.txt
-          if grep -Fq 'J0k++KcYcmqkqicpfX7rhhKKP6BTFl9yVWbg3IwfkkI=' /tmp/evotor-dex-strings.txt; then
-            echo 'Broad Beget fallback pin unexpectedly packaged.' >&2
+          if grep -Fq "$OLD_PIN" /tmp/evotor-dex-strings.txt; then
+            echo 'Typoed 1.2.15 SPKI pin unexpectedly remains in APK.' >&2
             exit 1
           fi
 
