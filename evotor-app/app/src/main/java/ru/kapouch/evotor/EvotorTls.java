@@ -50,12 +50,12 @@ final class EvotorTls {
     private static final String OID_ANY_EKU = "2.5.29.37.0";
 
     // Reviewed physical-terminal identities. The first was captured during the
-    // 1.2.11 investigation; the second was displayed by the same terminal on
-    // 1.2.13 as the actual fallback SPKI mismatch.
+    // 1.2.11 investigation; the second is copied exactly from the physical
+    // terminal diagnostics (1.2.13/1.2.15).
     private static final String LEGACY_EVOTOR_SPKI_SHA256_A =
             "TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk=";
     private static final String LEGACY_EVOTOR_SPKI_SHA256_B =
-            "823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmoqSlzs=";
+            "823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmogSlzs=";
 
     private static volatile SSLSocketFactory cached;
 
