@@ -34,19 +34,16 @@ import javax.net.ssl.X509TrustManager;
  *  3) if old PKIX fails, verify a signature path to official public CA roots
  *     bundled in the APK.
  *
- * Physical Evotor OS 4.x testing proves that this firmware can still receive a
- * self-signed CN=kapouch.store certificate from the hosting edge even when SNI
- * is configured before connect. Two different public keys have now been seen on
- * the same physical terminal, so the compatibility path is an explicit allowlist
- * of those reviewed SPKI identities. The leaf must still be single, time-valid,
- * self-issued and correctly self-signed. Standard HttpsURLConnection hostname
- * verification remains enabled by the API clients.
+ * Physical Evotor OS 4.x can still receive a self-signed CN=kapouch.store
+ * certificate from the hosting edge even when SNI is configured before connect.
+ * The compatibility path therefore accepts only explicitly reviewed SPKI SHA-256
+ * identities. The leaf must still be a single time-valid self-issued certificate
+ * with a valid self-signature. Standard HttpsURLConnection hostname verification
+ * remains enabled by the API clients.
  *
- * Important Evotor quirk: do not compare Base64 text when deciding whether a
- * reviewed SPKI is trusted. On the physical terminal the diagnostic text can
- * render exactly like the reviewed value while String.equals still rejects it.
- * Trust decisions therefore compare the 32 SHA-256 bytes directly; Base64 is
- * diagnostic output only.
+ * Trust decisions compare the 32 SHA-256 bytes directly. Base64 is diagnostics
+ * only, because visually similar Base64 characters caused earlier transcription
+ * mistakes on photographs of the physical terminal.
  *
  * Arbitrary self-signed certificates are never accepted.
  */
@@ -55,13 +52,15 @@ final class EvotorTls {
     private static final String OID_SERVER_AUTH = "1.3.6.1.5.5.7.3.1";
     private static final String OID_ANY_EKU = "2.5.29.37.0";
 
-    // SHA-256 bytes of the two reviewed physical-terminal SPKI identities.
-    // A = TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk=
-    // B = 823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmogSlzs=
+    // Reviewed physical-terminal identities.
+    // A = legacy capture from the first investigation.
+    // B = exact digest printed by v1.2.17 on the physical Evotor:
+    //     base64 823B/vYbleOA//VaKDvUca+OTu5bYU9m6lGkmogSlzs=
+    //     hex    f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66ea51a49a8812973b
     private static final byte[] LEGACY_EVOTOR_SPKI_SHA256_A = hex(
             "4ee80751bcff28354f7fe5541bc1351a62ea4d280d9090acf1df25f1d2068989");
     private static final byte[] LEGACY_EVOTOR_SPKI_SHA256_B = hex(
-            "f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66e881a49a8812973b");
+            "f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66ea51a49a8812973b");
 
     private static volatile SSLSocketFactory cached;
 
