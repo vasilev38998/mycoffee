@@ -42,6 +42,12 @@ import javax.net.ssl.X509TrustManager;
  * self-issued and correctly self-signed. Standard HttpsURLConnection hostname
  * verification remains enabled by the API clients.
  *
+ * Important Evotor quirk: do not compare Base64 text when deciding whether a
+ * reviewed SPKI is trusted. On the physical terminal the diagnostic text can
+ * render exactly like the reviewed value while String.equals still rejects it.
+ * Trust decisions therefore compare the 32 SHA-256 bytes directly; Base64 is
+ * diagnostic output only.
+ *
  * Arbitrary self-signed certificates are never accepted.
  */
 final class EvotorTls {
@@ -49,13 +55,13 @@ final class EvotorTls {
     private static final String OID_SERVER_AUTH = "1.3.6.1.5.5.7.3.1";
     private static final String OID_ANY_EKU = "2.5.29.37.0";
 
-    // Reviewed physical-terminal identities. The first was captured during the
-    // 1.2.11 investigation; the second is copied exactly from the physical
-    // terminal diagnostics (1.2.13/1.2.15).
-    private static final String LEGACY_EVOTOR_SPKI_SHA256_A =
-            "TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk=";
-    private static final String LEGACY_EVOTOR_SPKI_SHA256_B =
-            "823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmogSlzs=";
+    // SHA-256 bytes of the two reviewed physical-terminal SPKI identities.
+    // A = TugHUbz/KDVPf+VUG8E1GmLqTSgNkJCs8d8l8dIGiYk=
+    // B = 823B/vYbleOA//VaKDvUca+OTu5bYU9m6IGkmogSlzs=
+    private static final byte[] LEGACY_EVOTOR_SPKI_SHA256_A = hex(
+            "4ee80751bcff28354f7fe5541bc1351a62ea4d280d9090acf1df25f1d2068989");
+    private static final byte[] LEGACY_EVOTOR_SPKI_SHA256_B = hex(
+            "f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66e881a49a8812973b");
 
     private static volatile SSLSocketFactory cached;
 
@@ -105,14 +111,40 @@ final class EvotorTls {
         throw new IllegalStateException("X509TrustManager unavailable");
     }
 
-    private static String spkiSha256(X509Certificate certificate) throws Exception {
+    private static byte[] spkiSha256(X509Certificate certificate) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        return Base64.encodeToString(digest.digest(certificate.getPublicKey().getEncoded()), Base64.NO_WRAP);
+        return digest.digest(certificate.getPublicKey().getEncoded());
     }
 
-    private static boolean isReviewedLegacySpki(String value) {
-        return LEGACY_EVOTOR_SPKI_SHA256_A.equals(value)
-                || LEGACY_EVOTOR_SPKI_SHA256_B.equals(value);
+    private static boolean isReviewedLegacySpki(byte[] value) {
+        return MessageDigest.isEqual(LEGACY_EVOTOR_SPKI_SHA256_A, value)
+                || MessageDigest.isEqual(LEGACY_EVOTOR_SPKI_SHA256_B, value);
+    }
+
+    private static byte[] hex(String value) {
+        if (value == null || value.length() != 64) {
+            throw new IllegalArgumentException("Expected 32-byte SHA-256 hex value");
+        }
+        byte[] out = new byte[32];
+        for (int i = 0; i < out.length; i++) {
+            int hi = Character.digit(value.charAt(i * 2), 16);
+            int lo = Character.digit(value.charAt(i * 2 + 1), 16);
+            if (hi < 0 || lo < 0) throw new IllegalArgumentException("Invalid SHA-256 hex value");
+            out[i] = (byte) ((hi << 4) | lo);
+        }
+        return out;
+    }
+
+    private static String hex(byte[] value) {
+        if (value == null) return "<null>";
+        final char[] digits = "0123456789abcdef".toCharArray();
+        char[] out = new char[value.length * 2];
+        for (int i = 0; i < value.length; i++) {
+            int b = value[i] & 0xff;
+            out[i * 2] = digits[b >>> 4];
+            out[i * 2 + 1] = digits[b & 0x0f];
+        }
+        return new String(out);
     }
 
     /** Configure SNI on an unconnected socket, before ClientHello. */
@@ -252,9 +284,13 @@ final class EvotorTls {
                 throw new CertificateException("fallback certificate is not self-issued");
             }
             leaf.verify(leaf.getPublicKey());
-            String observed = spkiSha256(leaf);
+            byte[] observed = spkiSha256(leaf);
             if (!isReviewedLegacySpki(observed)) {
-                throw new CertificateException("fallback SPKI mismatch: " + observed);
+                throw new CertificateException(
+                        "fallback SPKI mismatch: base64="
+                                + Base64.encodeToString(observed, Base64.NO_WRAP)
+                                + "; hex=" + hex(observed)
+                                + "; bytes=" + observed.length);
             }
         }
 
