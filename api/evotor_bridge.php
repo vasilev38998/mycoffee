@@ -20,8 +20,33 @@ function evotor_bridge_reply(int $status,array $body): never
     exit;
 }
 
-function evotor_bridge_bearer(): string
+function evotor_bridge_b64url_decode(string $value): string|false
 {
+    if($value===''||strlen($value)>4096)return false;
+    $value=strtr($value,'-_','+/');
+    $padding=strlen($value)%4;
+    if($padding)$value.=str_repeat('=',4-$padding);
+    return base64_decode($value,true);
+}
+
+function evotor_bridge_cookie_payload(): array
+{
+    $raw=trim((string)($_COOKIE['kapouch_evotor']??''));
+    if($raw==='')return [];
+    $decoded=evotor_bridge_b64url_decode($raw);
+    if($decoded===false||strlen($decoded)>3072)return [];
+    try{
+        $data=json_decode($decoded,true,16,JSON_THROW_ON_ERROR);
+    }catch(Throwable $e){
+        return [];
+    }
+    return is_array($data)?$data:[];
+}
+
+function evotor_bridge_bearer(array $cookie): string
+{
+    $token=trim((string)($cookie['token']??''));
+    if($token!=='')return $token;
     $token=trim((string)($_SERVER['HTTP_X_KAPOUCH_ORDER_TOKEN']??''));
     if($token!=='')return $token;
     $auth=trim((string)($_SERVER['HTTP_AUTHORIZATION']??''));
@@ -40,6 +65,11 @@ if(count($_GET)!==1){
     evotor_bridge_reply(400,['ok'=>false,'error'=>'Bridge не принимает данные в URL.']);
 }
 
+$cookie=evotor_bridge_cookie_payload();
+if($cookie!==[]&&trim((string)($cookie['type']??''))!==$type){
+    evotor_bridge_reply(400,['ok'=>false,'error'=>'Тип bridge-cookie не совпадает с запросом.']);
+}
+
 if($type==='order'){
     $limit=kapouch_rate_limit_hit('evotor_order_bridge',kapouch_client_ip(),90,60);
     if(empty($limit['allowed'])){
@@ -47,7 +77,7 @@ if($type==='order'){
         evotor_bridge_reply(429,['ok'=>false,'error'=>'Слишком много запросов. Повторите позже.']);
     }
 
-    $token=evotor_bridge_bearer();
+    $token=evotor_bridge_bearer($cookie);
     $claims=evotor_order_action_claims($token);
     if(!$claims)evotor_bridge_reply(401,['ok'=>false,'error'=>'Недействительный или просроченный ключ действия.']);
 
@@ -56,8 +86,8 @@ if($type==='order'){
         evotor_bridge_reply(401,['ok'=>false,'error'=>'Управление заказами с этого Эвотора отключено.']);
     }
 
-    $action=trim((string)($_SERVER['HTTP_X_KAPOUCH_ACTION']??''));
-    $orderId=(int)($_SERVER['HTTP_X_KAPOUCH_ORDER_ID']??$claims['order_id']);
+    $action=trim((string)($cookie['action']??($_SERVER['HTTP_X_KAPOUCH_ACTION']??'')));
+    $orderId=(int)($cookie['order_id']??($_SERVER['HTTP_X_KAPOUCH_ORDER_ID']??$claims['order_id']));
     if($orderId!==(int)$claims['order_id']){
         evotor_bridge_reply(403,['ok'=>false,'error'=>'Ключ выпущен для другого заказа.']);
     }
@@ -71,7 +101,7 @@ if($type==='order'){
             'ok'=>true,
             'action'=>$action,
             'order'=>$order,
-            'transport'=>'root-bridge',
+            'transport'=>$cookie!==[]?'cookie-bridge':'header-bridge',
         ]);
     }catch(RuntimeException $e){
         evotor_bridge_reply(409,['ok'=>false,'error'=>$e->getMessage()]);
@@ -81,10 +111,12 @@ if($type==='order'){
     }
 }
 
-$terminalToken=trim((string)($_SERVER['HTTP_X_KAPOUCH_TERMINAL_TOKEN']??''));
-$bootstrapToken=trim((string)($_SERVER['HTTP_X_KAPOUCH_BOOTSTRAP_ORDER_TOKEN']??''));
-$code=trim((string)($_SERVER['HTTP_X_KAPOUCH_LOYALTY_CODE']??''));
-if(strlen($code)>200)evotor_bridge_reply(422,['ok'=>false,'error'=>'Некорректный QR-код Kapouch.']);
+$terminalToken=trim((string)($cookie['terminal_token']??($_SERVER['HTTP_X_KAPOUCH_TERMINAL_TOKEN']??'')));
+$bootstrapToken=trim((string)($cookie['bootstrap_token']??($_SERVER['HTTP_X_KAPOUCH_BOOTSTRAP_ORDER_TOKEN']??'')));
+$code=trim((string)($cookie['code']??($_SERVER['HTTP_X_KAPOUCH_LOYALTY_CODE']??'')));
+if(strlen($terminalToken)>1200||strlen($bootstrapToken)>1200||strlen($code)>200){
+    evotor_bridge_reply(422,['ok'=>false,'error'=>'Некорректные данные bridge-запроса.']);
+}
 
 $connectionId=evotor_loyalty_terminal_connection_id($terminalToken);
 $issuedTerminalToken='';
@@ -130,7 +162,7 @@ try{
             'expires_at'=>$scan['expires_at'],
             'message'=>'Клиент будет привязан к следующей продаже на этом Эвоторе.',
         ],
-        'transport'=>'root-bridge',
+        'transport'=>$cookie!==[]?'cookie-bridge':'header-bridge',
     ];
     if($issuedTerminalToken!=='')$response['terminal_token']=$issuedTerminalToken;
     evotor_bridge_reply(200,$response);
