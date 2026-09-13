@@ -77,7 +77,6 @@ jobs:
           BRIDGE=api/evotor_bridge.php
           HTACCESS=.htaccess
           MAIN=evotor-app/app/src/main/java/ru/kapouch/evotor/MainActivity.java
-          SCAN=evotor-app/app/src/main/java/ru/kapouch/evotor/CustomerScanReceiver.java
           SELL=evotor-app/app/src/main/java/ru/kapouch/evotor/KapouchSellIntegrationService.java
           LINK=evotor-app/app/src/main/java/ru/kapouch/evotor/CustomerLinkService.java
           MANIFEST=evotor-app/app/src/main/AndroidManifest.xml
@@ -114,8 +113,8 @@ jobs:
           grep -q 'setRequestProperty("Cookie", "kapouch_evotor="' "$LOYALTY"
           grep -q 'Base64.URL_SAFE' "$ORDER"
           grep -q 'Base64.URL_SAFE' "$LOYALTY"
-          grep -q 'Kapouch-Orders-Evotor/1.2.23' "$ORDER"
-          grep -q 'Kapouch-Orders-Evotor/1.2.23' "$LOYALTY"
+          grep -q 'Kapouch-Orders-Evotor/1.2.24' "$ORDER"
+          grep -q 'Kapouch-Orders-Evotor/1.2.24' "$LOYALTY"
 
           grep -q 'SSLCertificateSocketFactory' "$TLS"
           grep -q 'CombinedTrustManager' "$TLS"
@@ -140,7 +139,7 @@ jobs:
 
           grep -q 'BuildConfig.VERSION_NAME' "$MAIN"
           grep -q 'Kapouch Orders · v' "$MAIN"
-          grep -q 'Foreground-only loyalty scanner receiver' "$SCAN"
+          grep -q 'registerReceiver' "$MAIN"
           if grep -q 'CustomerScanReceiver' "$MANIFEST"; then
             echo 'CustomerScanReceiver must not be globally registered.' >&2
             exit 1
@@ -181,9 +180,12 @@ jobs:
           grep -q "sdkVersion:'22'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
 
+          "$AAPT" dump xmltree "$APK" AndroidManifest.xml > /tmp/evotor-manifest.txt
+          grep -q 'ru.evotor.event.sell.BARCODE_RECEIVED' /tmp/evotor-manifest.txt
+          grep -q 'KapouchSellIntegrationService' /tmp/evotor-manifest.txt
+
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.23' /tmp/evotor-dex-strings.txt
-          grep -q 'ru.evotor.event.sell.BARCODE_RECEIVED' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.24' /tmp/evotor-dex-strings.txt
           grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=order' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=loyalty' /tmp/evotor-dex-strings.txt
