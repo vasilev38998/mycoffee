@@ -66,7 +66,7 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate Evotor 1.2.22 source contract
+      - name: Validate Evotor 1.2.23 source contract
         run: |
           set -euo pipefail
           TLS=evotor-app/app/src/main/java/ru/kapouch/evotor/EvotorTls.java
@@ -89,24 +89,25 @@ jobs:
           grep -q "kapouch_evotor" "$BRIDGE"
           grep -q 'evotor_bridge_b64url_decode' "$BRIDGE"
           grep -q "cookie-bridge" "$BRIDGE"
-          grep -q 'count($_GET)!==1' "$BRIDGE"
 
-          grep -q 'BRIDGE_URL' "$ORDER"
-          grep -q 'BRIDGE_URL' "$LOYALTY"
+          grep -q 'import java.io.IOException;' "$ORDER"
+          grep -q 'import java.io.IOException;' "$LOYALTY"
+          grep -q 'catch (IOException primary)' "$ORDER"
+          grep -q 'catch (IOException primary)' "$LOYALTY"
+          grep -q 'POST оборвался:' "$ORDER"
+          grep -q 'POST оборвался:' "$LOYALTY"
+          grep -q 'transportMessage(primary)' "$ORDER"
+          grep -q 'transportMessage(primary)' "$LOYALTY"
+          grep -q 'bridgeAction(context, order, action)' "$ORDER"
+          grep -q 'bridgeLookup(context, code, terminalToken, bootstrapToken)' "$LOYALTY"
           grep -q 'response.status == 405' "$ORDER"
           grep -q 'response.status == 405' "$LOYALTY"
           grep -q 'setRequestProperty("Cookie", "kapouch_evotor="' "$ORDER"
           grep -q 'setRequestProperty("Cookie", "kapouch_evotor="' "$LOYALTY"
           grep -q 'Base64.URL_SAFE' "$ORDER"
           grep -q 'Base64.URL_SAFE' "$LOYALTY"
-          grep -q 'User-Agent", "Mozilla/5.0"' "$ORDER"
-          grep -q 'User-Agent", "Mozilla/5.0"' "$LOYALTY"
-          grep -q 'Kapouch-Orders-Evotor/1.2.22' "$ORDER"
-          grep -q 'Kapouch-Orders-Evotor/1.2.22' "$LOYALTY"
-          if grep -q 'X-Kapouch-Evotor-Bridge' "$ORDER" || grep -q 'X-Kapouch-Evotor-Bridge' "$LOYALTY"; then
-            echo '1.2.22 bridge must not use custom X-* transport headers.' >&2
-            exit 1
-          fi
+          grep -q 'Kapouch-Orders-Evotor/1.2.23' "$ORDER"
+          grep -q 'Kapouch-Orders-Evotor/1.2.23' "$LOYALTY"
 
           grep -q 'SSLCertificateSocketFactory' "$TLS"
           grep -q 'CombinedTrustManager' "$TLS"
@@ -147,7 +148,7 @@ jobs:
           EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
         run: gradle -p evotor-app :app:assembleDebug -PEVOTOR_APP_UUID="$EVOTOR_APP_UUID" --no-daemon
 
-      - name: Validate APK metadata and cookie bridge fallback
+      - name: Validate APK metadata and broken-pipe fallback
         run: |
           set -euo pipefail
           APK=evotor-app/app/build/outputs/apk/debug/app-debug.apk
@@ -158,16 +159,16 @@ jobs:
 
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='29' versionName='1.2.22'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='30' versionName='1.2.23'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
 
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.22' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.23' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=order' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=loyalty' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch_evotor=' /tmp/evotor-dex-strings.txt
-          grep -q 'cookie-only' /tmp/evotor-dex-strings.txt
+          grep -q 'POST оборвался:' /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_A" /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_B" /tmp/evotor-dex-strings.txt
           if grep -Fq "$OLD_HEX_B" /tmp/evotor-dex-strings.txt; then
