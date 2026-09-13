@@ -44,6 +44,7 @@ final class LoyaltyApi {
             if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен только по HTTPS.");
             HttpsURLConnection secure = (HttpsURLConnection) connection;
             secure.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
+            secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);
 
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(7000);
@@ -52,7 +53,7 @@ final class LoyaltyApi {
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.18");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.19");
             if (terminalToken != null && !terminalToken.isEmpty()) connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
 
             JSONObject body = new JSONObject();
