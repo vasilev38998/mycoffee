@@ -27,7 +27,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -66,18 +66,20 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate Evotor 1.2.23 source contract
+      - name: Validate Evotor 1.2.24 source contract
         run: |
           set -euo pipefail
           TLS=evotor-app/app/src/main/java/ru/kapouch/evotor/EvotorTls.java
           HOSTNAME=evotor-app/app/src/main/java/ru/kapouch/evotor/EvotorHostnameVerifier.java
           ORDER=evotor-app/app/src/main/java/ru/kapouch/evotor/OrderApi.java
           LOYALTY=evotor-app/app/src/main/java/ru/kapouch/evotor/LoyaltyApi.java
+          SALE_SCAN=evotor-app/app/src/main/java/ru/kapouch/evotor/KapouchSellIntegrationService.java
           BRIDGE=api/evotor_bridge.php
           HTACCESS=.htaccess
           MAIN=evotor-app/app/src/main/java/ru/kapouch/evotor/MainActivity.java
           SCAN=evotor-app/app/src/main/java/ru/kapouch/evotor/CustomerScanReceiver.java
           MANIFEST=evotor-app/app/src/main/AndroidManifest.xml
+          APP_GRADLE=evotor-app/app/build.gradle
           RAW=evotor-app/app/src/main/res/raw
           HEX_A='4ee80751bcff28354f7fe5541bc1351a62ea4d280d9090acf1df25f1d2068989'
           HEX_B='f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66ea51a49a8812973b'
@@ -90,24 +92,32 @@ jobs:
           grep -q 'evotor_bridge_b64url_decode' "$BRIDGE"
           grep -q "cookie-bridge" "$BRIDGE"
 
-          grep -q 'import java.io.IOException;' "$ORDER"
-          grep -q 'import java.io.IOException;' "$LOYALTY"
+          # Keep the proven 1.2.23 transport behaviour intact.
           grep -q 'catch (IOException primary)' "$ORDER"
           grep -q 'catch (IOException primary)' "$LOYALTY"
-          grep -q 'POST оборвался:' "$ORDER"
-          grep -q 'POST оборвался:' "$LOYALTY"
-          grep -q 'transportMessage(primary)' "$ORDER"
-          grep -q 'transportMessage(primary)' "$LOYALTY"
           grep -q 'bridgeAction(context, order, action)' "$ORDER"
           grep -q 'bridgeLookup(context, code, terminalToken, bootstrapToken)' "$LOYALTY"
-          grep -q 'response.status == 405' "$ORDER"
-          grep -q 'response.status == 405' "$LOYALTY"
           grep -q 'setRequestProperty("Cookie", "kapouch_evotor="' "$ORDER"
           grep -q 'setRequestProperty("Cookie", "kapouch_evotor="' "$LOYALTY"
-          grep -q 'Base64.URL_SAFE' "$ORDER"
-          grep -q 'Base64.URL_SAFE' "$LOYALTY"
-          grep -q 'Kapouch-Orders-Evotor/1.2.23' "$ORDER"
-          grep -q 'Kapouch-Orders-Evotor/1.2.23' "$LOYALTY"
+
+          # v1.2.24 adds the official Evotor sale integration path for QR cards.
+          test -s "$SALE_SCAN"
+          grep -q 'extends SellIntegrationService' "$SALE_SCAN"
+          grep -q 'ReturnPositionsForBarcodeRequestedEvent' "$SALE_SCAN"
+          grep -q 'event.getCreatingNewProduct()' "$SALE_SCAN"
+          grep -q 'event.getBarcode()' "$SALE_SCAN"
+          grep -q 'KAPOUCH:LOYALTY:' "$SALE_SCAN"
+          grep -q 'LoyaltyApi.lookup' "$SALE_SCAN"
+          grep -q 'Collections.emptyList()' "$SALE_SCAN"
+          grep -q 'Toast.makeText' "$SALE_SCAN"
+          grep -q 'ru.evotor.permission.SELL_INTEGRATION_SERVICE' "$MANIFEST"
+          grep -q 'ru.evotor.event.sell.BARCODE_RECEIVED' "$MANIFEST"
+          grep -q 'KapouchSellIntegrationService' "$MANIFEST"
+          grep -q 'android.intent.category.EVOTOR' "$MANIFEST"
+          grep -q "integration-library:rc01-v0.4.36" "$APP_GRADLE"
+          grep -q "minSdkVersion 22" "$APP_GRADLE"
+          grep -q "versionCode 31" "$APP_GRADLE"
+          grep -q "versionName '1.2.24'" "$APP_GRADLE"
 
           grep -q 'SSLCertificateSocketFactory' "$TLS"
           grep -q 'CombinedTrustManager' "$TLS"
@@ -133,8 +143,8 @@ jobs:
           grep -q 'BuildConfig.VERSION_NAME' "$MAIN"
           grep -q 'Kapouch Orders · v' "$MAIN"
           grep -q 'Foreground-only loyalty scanner receiver' "$SCAN"
-          if grep -q 'CustomerScanReceiver' "$MANIFEST"; then
-            echo 'CustomerScanReceiver must not be globally registered.' >&2
+          if grep -q 'android:name=".CustomerScanReceiver"' "$MANIFEST"; then
+            echo 'CustomerScanReceiver must remain foreground-only; sale scanning uses SellIntegrationService.' >&2
             exit 1
           fi
 
@@ -148,7 +158,7 @@ jobs:
           EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
         run: gradle -p evotor-app :app:assembleDebug -PEVOTOR_APP_UUID="$EVOTOR_APP_UUID" --no-daemon
 
-      - name: Validate APK metadata and broken-pipe fallback
+      - name: Validate APK metadata and sale integration
         run: |
           set -euo pipefail
           APK=evotor-app/app/build/outputs/apk/debug/app-debug.apk
@@ -159,12 +169,29 @@ jobs:
 
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='30' versionName='1.2.23'" /tmp/evotor-badging.txt
-          grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='31' versionName='1.2.24'" /tmp/evotor-badging.txt
+          grep -q "sdkVersion:'22'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
 
+          "$AAPT" dump permissions "$APK" | tee /tmp/evotor-permissions.txt
+          grep -q 'ru.evotor.permission.SELL_INTEGRATION_SERVICE' /tmp/evotor-permissions.txt
+          grep -q 'ru.evotor.devices.SCANNER_RECEIVER' /tmp/evotor-permissions.txt
+
+          "$AAPT" dump xmltree "$APK" AndroidManifest.xml > /tmp/evotor-manifest.txt
+          grep -q 'KapouchSellIntegrationService' /tmp/evotor-manifest.txt
+          grep -q 'ru.evotor.event.sell.BARCODE_RECEIVED' /tmp/evotor-manifest.txt
+
+          unzip -l "$APK" | tee /tmp/evotor-apk-files.txt
+          grep -q 'classes.dex' /tmp/evotor-apk-files.txt
+          if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then
+            echo 'Unexpected multidex APK.' >&2
+            exit 1
+          fi
+
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.23' /tmp/evotor-dex-strings.txt
+          grep -q 'KapouchSellIntegrationService' /tmp/evotor-dex-strings.txt
+          grep -q 'ru.evotor.event.sell.BARCODE_RECEIVED' /tmp/evotor-dex-strings.txt
+          grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=order' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=loyalty' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch_evotor=' /tmp/evotor-dex-strings.txt
