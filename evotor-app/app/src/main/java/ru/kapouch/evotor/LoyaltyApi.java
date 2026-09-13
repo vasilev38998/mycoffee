@@ -33,43 +33,24 @@ final class LoyaltyApi {
         String lookupUrl = prefs.getString(KEY_LOOKUP_URL, DEFAULT_LOOKUP_URL);
         String terminalToken = prefs.getString(KEY_TERMINAL_TOKEN, "");
         String bootstrapToken = prefs.getString(KEY_BOOTSTRAP_ORDER_TOKEN, "");
-        HttpURLConnection connection = null;
+
         try {
             URL url = new URL(lookupUrl == null || lookupUrl.isEmpty() ? DEFAULT_LOOKUP_URL : lookupUrl);
             if (!allowedLookupUrl(url)) {
                 url = new URL(DEFAULT_LOOKUP_URL);
                 prefs.edit().putString(KEY_LOOKUP_URL, DEFAULT_LOOKUP_URL).apply();
             }
-            connection = (HttpURLConnection) url.openConnection();
-            if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен только по HTTPS.");
-            HttpsURLConnection secure = (HttpsURLConnection) connection;
-            secure.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
-            secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);
 
-            connection.setRequestMethod("POST");
-            connection.setConnectTimeout(7000);
-            connection.setReadTimeout(10000);
-            connection.setDoOutput(true);
-            connection.setInstanceFollowRedirects(false);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.19");
-            if (terminalToken != null && !terminalToken.isEmpty()) connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
+            Response response = request(context, url, code, terminalToken, bootstrapToken, false);
+            if (response.status == 405) {
+                response = request(context, url, code, terminalToken, bootstrapToken, true);
+            }
 
-            JSONObject body = new JSONObject();
-            body.put("code", code);
-            if (bootstrapToken != null && !bootstrapToken.isEmpty()) body.put("bootstrap_order_token", bootstrapToken);
-            byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
-            connection.setFixedLengthStreamingMode(payload.length);
-            OutputStream output = connection.getOutputStream();
-            output.write(payload);output.flush();output.close();
-
-            int status = connection.getResponseCode();
-            InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
-            String response = readAll(stream);
-            JSONObject json = response.isEmpty() ? new JSONObject() : new JSONObject(response);
-            if (status < 200 || status >= 300 || !json.optBoolean("ok", false)) {
-                return Result.error(json.optString("error", "Kapouch вернул HTTP " + status));
+            JSONObject json = response.body.isEmpty() ? new JSONObject() : new JSONObject(response.body);
+            if (response.status < 200 || response.status >= 300 || !json.optBoolean("ok", false)) {
+                String fallback = "Kapouch вернул HTTP " + response.status;
+                if (response.status == 405) fallback += " (legacy transport тоже отклонён)";
+                return Result.error(json.optString("error", fallback));
             }
             String issuedToken = json.optString("terminal_token", "");
             if (!issuedToken.isEmpty()) prefs.edit().putString(KEY_TERMINAL_TOKEN, issuedToken).apply();
@@ -93,6 +74,53 @@ final class LoyaltyApi {
             String type = e.getClass().getSimpleName();
             if (message == null || message.trim().isEmpty()) message = "Нет связи с Kapouch.";
             return Result.error("Evotor HTTPS " + type + ": " + message);
+        }
+    }
+
+    private static Response request(Context context, URL url, String code, String terminalToken, String bootstrapToken, boolean legacyGet) throws Exception {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) url.openConnection();
+            if (!(connection instanceof HttpsURLConnection)) {
+                return new Response(400, "{\"ok\":false,\"error\":\"Kapouch должен быть доступен только по HTTPS.\"}");
+            }
+            HttpsURLConnection secure = (HttpsURLConnection) connection;
+            secure.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
+            secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);
+
+            connection.setRequestMethod(legacyGet ? "GET" : "POST");
+            connection.setConnectTimeout(7000);
+            connection.setReadTimeout(10000);
+            connection.setDoOutput(!legacyGet);
+            connection.setInstanceFollowRedirects(false);
+            connection.setUseCaches(false);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Cache-Control", "no-store");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.20");
+            if (terminalToken != null && !terminalToken.isEmpty()) connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
+
+            if (legacyGet) {
+                connection.setRequestProperty("X-Kapouch-Evotor-Legacy", "1");
+                connection.setRequestProperty("X-Kapouch-Loyalty-Code", code);
+                if (bootstrapToken != null && !bootstrapToken.isEmpty()) {
+                    connection.setRequestProperty("X-Kapouch-Bootstrap-Order-Token", bootstrapToken);
+                }
+            } else {
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                JSONObject body = new JSONObject();
+                body.put("code", code);
+                if (bootstrapToken != null && !bootstrapToken.isEmpty()) body.put("bootstrap_order_token", bootstrapToken);
+                byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
+                connection.setFixedLengthStreamingMode(payload.length);
+                OutputStream output = connection.getOutputStream();
+                output.write(payload);
+                output.flush();
+                output.close();
+            }
+
+            int status = connection.getResponseCode();
+            InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
+            return new Response(status, readAll(stream));
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -119,9 +147,21 @@ final class LoyaltyApi {
     private static String readAll(InputStream stream) throws Exception {
         if (stream == null) return "";
         BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
-        StringBuilder result = new StringBuilder();String line;
+        StringBuilder result = new StringBuilder();
+        String line;
         while ((line = reader.readLine()) != null) result.append(line);
-        reader.close();return result.toString();
+        reader.close();
+        return result.toString();
+    }
+
+    private static final class Response {
+        final int status;
+        final String body;
+
+        Response(int status, String body) {
+            this.status = status;
+            this.body = body == null ? "" : body;
+        }
     }
 
     static final class Result {

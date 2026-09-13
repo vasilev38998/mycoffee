@@ -10,12 +10,25 @@ require_once dirname(__DIR__).'/inc/evotor_customer_loyalty.php';
 require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
 
 customer_api_headers();
+header('Cache-Control: no-store');
 $method=strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'));
 if($method==='OPTIONS'){http_response_code(204);exit;}
-if($method!=='POST')customer_api_reply(405,['ok'=>false,'error'=>'Method not allowed']);
+$legacyTransport=$method==='GET'
+    && trim((string)($_SERVER['HTTP_X_KAPOUCH_EVOTOR_LEGACY']??''))==='1';
+if($method!=='POST'&&!$legacyTransport)customer_api_reply(405,['ok'=>false,'error'=>'Method not allowed']);
+if($legacyTransport&&trim((string)($_SERVER['QUERY_STRING']??''))!==''){
+    customer_api_reply(400,['ok'=>false,'error'=>'Legacy-запрос не должен содержать параметры URL.']);
+}
 
 try{
-    $data=customer_api_json();
+    if($legacyTransport){
+        $data=[
+            'code'=>trim((string)($_SERVER['HTTP_X_KAPOUCH_LOYALTY_CODE']??'')),
+            'bootstrap_order_token'=>trim((string)($_SERVER['HTTP_X_KAPOUCH_BOOTSTRAP_ORDER_TOKEN']??'')),
+        ];
+    }else{
+        $data=customer_api_json();
+    }
     $terminalToken=trim((string)($_SERVER['HTTP_X_KAPOUCH_TERMINAL_TOKEN']??($data['terminal_token']??'')));
     $connectionId=evotor_loyalty_terminal_connection_id($terminalToken);
     $issuedTerminalToken='';
@@ -48,6 +61,7 @@ try{
         'loyalty'=>['balance'=>$customer['loyalty_balance'],'earn_percent'=>customer_loyalty_rate()],
         'drink_loyalty'=>$drink,
         'link'=>['active'=>true,'scan_id'=>$scan['scan_id'],'expires_at'=>$scan['expires_at'],'message'=>'Клиент будет привязан к следующей продаже на этом Эвоторе.'],
+        'transport'=>$legacyTransport?'legacy-get':'post',
     ];
     if($issuedTerminalToken!=='')$response['terminal_token']=$issuedTerminalToken;
     customer_api_reply(200,$response);
