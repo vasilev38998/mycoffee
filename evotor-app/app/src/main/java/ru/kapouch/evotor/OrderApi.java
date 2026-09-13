@@ -27,44 +27,20 @@ final class OrderApi {
         if (order.actionToken == null || order.actionToken.isEmpty()) return Result.error("Ключ действия заказа отсутствует или уже истёк.");
         if (!"accept".equals(action) && !"ready".equals(action)) return Result.error("Неизвестное действие заказа.");
 
-        HttpURLConnection connection = null;
         try {
             URL url = new URL(order.actionUrl);
             if (!allowedActionUrl(url)) return Result.error("В push указан неподдерживаемый адрес Kapouch.");
-            connection = (HttpURLConnection) url.openConnection();
-            if (!(connection instanceof HttpsURLConnection)) return Result.error("Kapouch должен быть доступен только по HTTPS.");
-            HttpsURLConnection secure = (HttpsURLConnection) connection;
-            secure.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
-            secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);
 
-            connection.setRequestMethod("POST");
-            connection.setConnectTimeout(7000);
-            connection.setReadTimeout(10000);
-            connection.setDoOutput(true);
-            connection.setInstanceFollowRedirects(false);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setRequestProperty("Authorization", "Bearer " + order.actionToken);
-            connection.setRequestProperty("X-Kapouch-Order-Token", order.actionToken);
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.19");
+            Response response = request(context, url, order, action, false);
+            if (response.status == 405) {
+                response = request(context, url, order, action, true);
+            }
 
-            JSONObject body = new JSONObject();
-            body.put("action", action);
-            body.put("order_id", Integer.parseInt(order.orderId));
-            byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
-            connection.setFixedLengthStreamingMode(payload.length);
-            OutputStream output = connection.getOutputStream();
-            output.write(payload);
-            output.flush();
-            output.close();
-
-            int status = connection.getResponseCode();
-            InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
-            String response = readAll(stream);
-            JSONObject json = response.isEmpty() ? new JSONObject() : new JSONObject(response);
-            if (status < 200 || status >= 300 || !json.optBoolean("ok", false)) {
-                String message = json.optString("error", "Kapouch вернул HTTP " + status);
-                return Result.error(message);
+            JSONObject json = response.body.isEmpty() ? new JSONObject() : new JSONObject(response.body);
+            if (response.status < 200 || response.status >= 300 || !json.optBoolean("ok", false)) {
+                String fallback = "Kapouch вернул HTTP " + response.status;
+                if (response.status == 405) fallback += " (legacy transport тоже отклонён)";
+                return Result.error(json.optString("error", fallback));
             }
             JSONObject orderJson = json.optJSONObject("order");
             if (orderJson == null) return Result.error("Kapouch не вернул новый статус заказа.");
@@ -76,6 +52,52 @@ final class OrderApi {
             String type = e.getClass().getSimpleName();
             if (message == null || message.trim().isEmpty()) message = "Нет связи с Kapouch.";
             return Result.error("Evotor HTTPS " + type + ": " + message);
+        }
+    }
+
+    private static Response request(Context context, URL url, OrderRecord order, String action, boolean legacyGet) throws Exception {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) url.openConnection();
+            if (!(connection instanceof HttpsURLConnection)) {
+                return new Response(400, "{\"ok\":false,\"error\":\"Kapouch должен быть доступен только по HTTPS.\"}");
+            }
+            HttpsURLConnection secure = (HttpsURLConnection) connection;
+            secure.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
+            secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);
+
+            connection.setRequestMethod(legacyGet ? "GET" : "POST");
+            connection.setConnectTimeout(7000);
+            connection.setReadTimeout(10000);
+            connection.setDoOutput(!legacyGet);
+            connection.setInstanceFollowRedirects(false);
+            connection.setUseCaches(false);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Authorization", "Bearer " + order.actionToken);
+            connection.setRequestProperty("X-Kapouch-Order-Token", order.actionToken);
+            connection.setRequestProperty("Cache-Control", "no-store");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.20");
+
+            if (legacyGet) {
+                connection.setRequestProperty("X-Kapouch-Evotor-Legacy", "1");
+                connection.setRequestProperty("X-Kapouch-Action", action);
+                connection.setRequestProperty("X-Kapouch-Order-Id", order.orderId);
+            } else {
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                JSONObject body = new JSONObject();
+                body.put("action", action);
+                body.put("order_id", Integer.parseInt(order.orderId));
+                byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
+                connection.setFixedLengthStreamingMode(payload.length);
+                OutputStream output = connection.getOutputStream();
+                output.write(payload);
+                output.flush();
+                output.close();
+            }
+
+            int status = connection.getResponseCode();
+            InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
+            return new Response(status, readAll(stream));
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -97,6 +119,16 @@ final class OrderApi {
         while ((line = reader.readLine()) != null) result.append(line);
         reader.close();
         return result.toString();
+    }
+
+    private static final class Response {
+        final int status;
+        final String body;
+
+        Response(int status, String body) {
+            this.status = status;
+            this.body = body == null ? "" : body;
+        }
     }
 
     static final class Result {
