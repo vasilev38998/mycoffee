@@ -14,8 +14,14 @@ function evotor_order_action_response(int $status,array $body): never
     exit;
 }
 
-if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))!=='POST'){
+$method=strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'));
+$legacyTransport=$method==='GET'
+    && trim((string)($_SERVER['HTTP_X_KAPOUCH_EVOTOR_LEGACY']??''))==='1';
+if($method!=='POST'&&!$legacyTransport){
     evotor_order_action_response(405,['ok'=>false,'error'=>'Метод не поддерживается.']);
+}
+if($legacyTransport&&trim((string)($_SERVER['QUERY_STRING']??''))!==''){
+    evotor_order_action_response(400,['ok'=>false,'error'=>'Legacy-запрос не должен содержать параметры URL.']);
 }
 
 $limit=kapouch_rate_limit_hit('evotor_order_action',kapouch_client_ip(),90,60);
@@ -38,17 +44,22 @@ if(!$connection||empty($connection['push_enabled'])){
 }
 
 try{
-    $raw=file_get_contents('php://input');
-    if(!is_string($raw)||strlen($raw)>16384)throw new RuntimeException('Некорректное тело запроса.');
-    $data=json_decode($raw,true,32,JSON_THROW_ON_ERROR);
-    if(!is_array($data))throw new RuntimeException('JSON должен быть объектом.');
-    $action=trim((string)($data['action']??''));
-    $orderId=(int)($data['order_id']??$claims['order_id']);
+    if($legacyTransport){
+        $action=trim((string)($_SERVER['HTTP_X_KAPOUCH_ACTION']??''));
+        $orderId=(int)($_SERVER['HTTP_X_KAPOUCH_ORDER_ID']??$claims['order_id']);
+    }else{
+        $raw=file_get_contents('php://input');
+        if(!is_string($raw)||strlen($raw)>16384)throw new RuntimeException('Некорректное тело запроса.');
+        $data=json_decode($raw,true,32,JSON_THROW_ON_ERROR);
+        if(!is_array($data))throw new RuntimeException('JSON должен быть объектом.');
+        $action=trim((string)($data['action']??''));
+        $orderId=(int)($data['order_id']??$claims['order_id']);
+    }
     if($orderId!==(int)$claims['order_id'])evotor_order_action_response(403,['ok'=>false,'error'=>'Ключ выпущен для другого заказа.']);
     if(!in_array($action,['accept','ready'],true))throw new RuntimeException('Допустимые действия: accept или ready.');
 
     $order=evotor_order_action_apply($orderId,$action);
-    evotor_order_action_response(200,['ok'=>true,'action'=>$action,'order'=>$order]);
+    evotor_order_action_response(200,['ok'=>true,'action'=>$action,'order'=>$order,'transport'=>$legacyTransport?'legacy-get':'post']);
 }catch(JsonException $e){
     evotor_order_action_response(400,['ok'=>false,'error'=>'Некорректный JSON.']);
 }catch(RuntimeException $e){
