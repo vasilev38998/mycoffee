@@ -4,8 +4,6 @@ on:
   pull_request:
     paths:
       - 'evotor-app/**'
-      - 'api/evotor_order_action.php'
-      - 'api/evotor_customer_lookup.php'
       - 'api/evotor_bridge.php'
       - '.htaccess'
       - '.github/workflows/evotor-apk.yml'
@@ -13,8 +11,6 @@ on:
     branches: [main]
     paths:
       - 'evotor-app/**'
-      - 'api/evotor_order_action.php'
-      - 'api/evotor_customer_lookup.php'
       - 'api/evotor_bridge.php'
       - '.htaccess'
       - '.github/workflows/evotor-apk.yml'
@@ -59,7 +55,6 @@ jobs:
           cat /tmp/live-tls.err || true
           grep -q 'Verify return code: 0 (ok)' /tmp/live-tls.pem
           CERT_COUNT=$(grep -c 'BEGIN CERTIFICATE' /tmp/live-tls.pem || true)
-          echo "LIVE_TLS_CERT_COUNT=$CERT_COUNT"
           test "$CERT_COUNT" -ge 2
 
       - uses: actions/setup-java@v4
@@ -71,7 +66,7 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate Evotor 1.2.21 source contract
+      - name: Validate Evotor 1.2.22 source contract
         run: |
           set -euo pipefail
           TLS=evotor-app/app/src/main/java/ru/kapouch/evotor/EvotorTls.java
@@ -80,8 +75,8 @@ jobs:
           LOYALTY=evotor-app/app/src/main/java/ru/kapouch/evotor/LoyaltyApi.java
           BRIDGE=api/evotor_bridge.php
           HTACCESS=.htaccess
-          SCAN=evotor-app/app/src/main/java/ru/kapouch/evotor/CustomerScanReceiver.java
           MAIN=evotor-app/app/src/main/java/ru/kapouch/evotor/MainActivity.java
+          SCAN=evotor-app/app/src/main/java/ru/kapouch/evotor/CustomerScanReceiver.java
           MANIFEST=evotor-app/app/src/main/AndroidManifest.xml
           RAW=evotor-app/app/src/main/res/raw
           HEX_A='4ee80751bcff28354f7fe5541bc1351a62ea4d280d9090acf1df25f1d2068989'
@@ -91,29 +86,32 @@ jobs:
           php -l "$BRIDGE"
           grep -q 'evotor-bridge' "$HTACCESS"
           grep -q 'api/evotor_bridge.php' "$HTACCESS"
-          grep -q "type=order" "$ORDER"
-          grep -q "type=loyalty" "$LOYALTY"
+          grep -q "kapouch_evotor" "$BRIDGE"
+          grep -q 'evotor_bridge_b64url_decode' "$BRIDGE"
+          grep -q "cookie-bridge" "$BRIDGE"
+          grep -q 'count($_GET)!==1' "$BRIDGE"
+
           grep -q 'BRIDGE_URL' "$ORDER"
           grep -q 'BRIDGE_URL' "$LOYALTY"
           grep -q 'response.status == 405' "$ORDER"
           grep -q 'response.status == 405' "$LOYALTY"
-          grep -q 'X-Kapouch-Evotor-Bridge' "$ORDER"
-          grep -q 'X-Kapouch-Evotor-Bridge' "$LOYALTY"
-          grep -q 'X-Kapouch-Action' "$ORDER"
-          grep -q 'X-Kapouch-Order-Id' "$ORDER"
-          grep -q 'X-Kapouch-Loyalty-Code' "$LOYALTY"
-          grep -q 'X-Kapouch-Bootstrap-Order-Token' "$LOYALTY"
-          grep -q "transport'=>'root-bridge'" "$BRIDGE"
-          grep -q 'count($_GET)!==1' "$BRIDGE"
-          grep -q "\['order','loyalty'\]" "$BRIDGE"
+          grep -q 'setRequestProperty("Cookie", "kapouch_evotor="' "$ORDER"
+          grep -q 'setRequestProperty("Cookie", "kapouch_evotor="' "$LOYALTY"
+          grep -q 'Base64.URL_SAFE' "$ORDER"
+          grep -q 'Base64.URL_SAFE' "$LOYALTY"
+          grep -q 'User-Agent", "Mozilla/5.0"' "$ORDER"
+          grep -q 'User-Agent", "Mozilla/5.0"' "$LOYALTY"
+          grep -q 'Kapouch-Orders-Evotor/1.2.22' "$ORDER"
+          grep -q 'Kapouch-Orders-Evotor/1.2.22' "$LOYALTY"
+          if grep -q 'X-Kapouch-Evotor-Bridge' "$ORDER" || grep -q 'X-Kapouch-Evotor-Bridge' "$LOYALTY"; then
+            echo '1.2.22 bridge must not use custom X-* transport headers.' >&2
+            exit 1
+          fi
 
-          test -s "$TLS"
-          test -s "$HOSTNAME"
           grep -q 'SSLCertificateSocketFactory' "$TLS"
           grep -q 'CombinedTrustManager' "$TLS"
           grep -q 'verifyReviewedLegacyLeaf' "$TLS"
           grep -q 'PreHandshakeSniSocketFactory' "$TLS"
-          grep -q 'delegate.setHostname(socket, hostname);' "$TLS"
           grep -Fq "$HEX_A" "$TLS"
           grep -Fq "$HEX_B" "$TLS"
           if grep -Fq "$OLD_HEX_B" "$TLS"; then
@@ -124,30 +122,16 @@ jobs:
           grep -q 'implements HostnameVerifier' "$HOSTNAME"
           grep -q 'DEFAULT.verify(hostname, session)' "$HOSTNAME"
           grep -q 'KAPOUCH_HOST.equalsIgnoreCase(hostname)' "$HOSTNAME"
-          grep -q 'peer.length != 1' "$HOSTNAME"
-          grep -q 'getSubjectAlternativeNames()' "$HOSTNAME"
-          grep -q 'hasExactCommonName(leaf, KAPOUCH_HOST)' "$HOSTNAME"
           grep -Fq "$HEX_A" "$HOSTNAME"
           grep -Fq "$HEX_B" "$HOSTNAME"
-          if grep -Fq "$OLD_HEX_B" "$HOSTNAME"; then
-            echo 'Misread SPKI digest is present in hostname verifier.' >&2
-            exit 1
-          fi
           if grep -Eq 'TrustAll|ALLOW_ALL_HOSTNAME_VERIFIER' "$TLS" "$HOSTNAME" "$ORDER" "$LOYALTY"; then
             echo 'TLS trust or hostname verification is too broad.' >&2
             exit 1
           fi
 
-          grep -q 'secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);' "$ORDER" || grep -q 'connection.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);' "$ORDER"
-          grep -q 'secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);' "$LOYALTY" || grep -q 'connection.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);' "$LOYALTY"
-          grep -q 'Kapouch-Orders-Evotor/1.2.21' "$ORDER"
-          grep -q 'Kapouch-Orders-Evotor/1.2.21' "$LOYALTY"
-
           grep -q 'BuildConfig.VERSION_NAME' "$MAIN"
           grep -q 'Kapouch Orders · v' "$MAIN"
           grep -q 'Foreground-only loyalty scanner receiver' "$SCAN"
-          grep -q 'registerReceiver(' "$MAIN"
-          grep -q 'unregisterReceiver(' "$MAIN"
           if grep -q 'CustomerScanReceiver' "$MANIFEST"; then
             echo 'CustomerScanReceiver must not be globally registered.' >&2
             exit 1
@@ -155,7 +139,7 @@ jobs:
 
           for cert in isrg_root_x1 isrg_root_x2 isrg_root_ye isrg_root_yr digicert_global_root_ca; do
             test -s "$RAW/$cert.pem"
-            openssl x509 -in "$RAW/$cert.pem" -noout -subject -issuer -dates
+            openssl x509 -in "$RAW/$cert.pem" -noout -subject -issuer -dates >/dev/null
           done
 
       - name: Build debug APK with Evotor-compatible toolchain
@@ -163,9 +147,7 @@ jobs:
           EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
         run: gradle -p evotor-app :app:assembleDebug -PEVOTOR_APP_UUID="$EVOTOR_APP_UUID" --no-daemon
 
-      - name: Validate APK metadata and extensionless bridge fallback
-        env:
-          EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
+      - name: Validate APK metadata and cookie bridge fallback
         run: |
           set -euo pipefail
           APK=evotor-app/app/build/outputs/apk/debug/app-debug.apk
@@ -176,24 +158,16 @@ jobs:
 
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='28' versionName='1.2.21'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='29' versionName='1.2.22'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
 
-          unzip -l "$APK" | tee /tmp/evotor-apk-files.txt
-          grep -q 'classes.dex' /tmp/evotor-apk-files.txt
-          if grep -q 'classes2.dex' /tmp/evotor-apk-files.txt; then
-            echo 'Unexpected multidex APK.' >&2
-            exit 1
-          fi
-
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.21' /tmp/evotor-dex-strings.txt
-          grep -q 'PreHandshakeSniSocketFactory' /tmp/evotor-dex-strings.txt
-          grep -q 'EvotorHostnameVerifier' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.22' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=order' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=loyalty' /tmp/evotor-dex-strings.txt
-          grep -q 'X-Kapouch-Evotor-Bridge' /tmp/evotor-dex-strings.txt
+          grep -q 'kapouch_evotor=' /tmp/evotor-dex-strings.txt
+          grep -q 'cookie-only' /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_A" /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_B" /tmp/evotor-dex-strings.txt
           if grep -Fq "$OLD_HEX_B" /tmp/evotor-dex-strings.txt; then

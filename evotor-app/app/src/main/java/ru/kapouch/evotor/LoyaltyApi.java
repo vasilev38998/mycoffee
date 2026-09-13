@@ -2,6 +2,7 @@ package ru.kapouch.evotor;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.Base64;
 
 import org.json.JSONObject;
 
@@ -52,7 +53,7 @@ final class LoyaltyApi {
             JSONObject json = response.body.isEmpty() ? new JSONObject() : new JSONObject(response.body);
             if (response.status < 200 || response.status >= 300 || !json.optBoolean("ok", false)) {
                 String fallback = "Kapouch вернул HTTP " + response.status;
-                if (bridgeUsed) fallback = "Kapouch bridge вернул HTTP " + response.status;
+                if (bridgeUsed) fallback = bridgeFailure(response);
                 return Result.error(json.optString("error", fallback));
             }
             String issuedToken = json.optString("terminal_token", "");
@@ -83,7 +84,7 @@ final class LoyaltyApi {
     private static Response postLookup(Context context, URL url, String code, String terminalToken, String bootstrapToken) throws Exception {
         HttpsURLConnection connection = null;
         try {
-            connection = open(context, url);
+            connection = openApi(context, url);
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
@@ -109,24 +110,38 @@ final class LoyaltyApi {
     private static Response bridgeLookup(Context context, String code, String terminalToken, String bootstrapToken) throws Exception {
         HttpsURLConnection connection = null;
         try {
-            connection = open(context, new URL(BRIDGE_URL));
+            connection = openBridge(context, new URL(BRIDGE_URL));
             connection.setRequestMethod("GET");
             connection.setDoOutput(false);
-            connection.setRequestProperty("X-Kapouch-Evotor-Bridge", "1");
-            connection.setRequestProperty("X-Kapouch-Loyalty-Code", code);
-            if (terminalToken != null && !terminalToken.isEmpty()) {
-                connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
-            }
-            if (bootstrapToken != null && !bootstrapToken.isEmpty()) {
-                connection.setRequestProperty("X-Kapouch-Bootstrap-Order-Token", bootstrapToken);
-            }
+
+            JSONObject payload = new JSONObject();
+            payload.put("type", "loyalty");
+            payload.put("code", code);
+            if (terminalToken != null && !terminalToken.isEmpty()) payload.put("terminal_token", terminalToken);
+            if (bootstrapToken != null && !bootstrapToken.isEmpty()) payload.put("bootstrap_token", bootstrapToken);
+            connection.setRequestProperty("Cookie", "kapouch_evotor=" + bridgeCookie(payload));
             return response(connection);
         } finally {
             if (connection != null) connection.disconnect();
         }
     }
 
-    private static HttpsURLConnection open(Context context, URL url) throws Exception {
+    private static HttpsURLConnection openApi(Context context, URL url) throws Exception {
+        HttpsURLConnection connection = openBase(context, url);
+        connection.setRequestProperty("Accept", "application/json");
+        connection.setRequestProperty("Cache-Control", "no-store");
+        connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.22");
+        return connection;
+    }
+
+    private static HttpsURLConnection openBridge(Context context, URL url) throws Exception {
+        HttpsURLConnection connection = openBase(context, url);
+        connection.setRequestProperty("Accept", "*/*");
+        connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+        return connection;
+    }
+
+    private static HttpsURLConnection openBase(Context context, URL url) throws Exception {
         HttpURLConnection raw = (HttpURLConnection) url.openConnection();
         if (!(raw instanceof HttpsURLConnection)) {
             raw.disconnect();
@@ -139,16 +154,36 @@ final class LoyaltyApi {
         connection.setReadTimeout(10000);
         connection.setInstanceFollowRedirects(false);
         connection.setUseCaches(false);
-        connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("Cache-Control", "no-store");
-        connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.21");
         return connection;
+    }
+
+    private static String bridgeCookie(JSONObject payload) {
+        byte[] bytes = payload.toString().getBytes(StandardCharsets.UTF_8);
+        return Base64.encodeToString(bytes, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
     }
 
     private static Response response(HttpURLConnection connection) throws Exception {
         int status = connection.getResponseCode();
         InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
-        return new Response(status, readAll(stream));
+        return new Response(
+                status,
+                readAll(stream),
+                connection.getHeaderField("Server"),
+                connection.getHeaderField("Allow"),
+                connection.getHeaderField("Content-Type"));
+    }
+
+    private static String bridgeFailure(Response response) {
+        StringBuilder out = new StringBuilder("Kapouch bridge вернул HTTP ").append(response.status).append(" (cookie-only)");
+        if (!response.allow.isEmpty()) out.append("; Allow=").append(response.allow);
+        if (!response.server.isEmpty()) out.append("; Server=").append(response.server);
+        if (!response.contentType.isEmpty()) out.append("; Type=").append(response.contentType);
+        String snippet = response.body == null ? "" : response.body.replace('\n', ' ').replace('\r', ' ').trim();
+        if (!snippet.isEmpty()) {
+            if (snippet.length() > 120) snippet = snippet.substring(0, 120);
+            out.append("; body=").append(snippet);
+        }
+        return out.toString();
     }
 
     static String lookupUrlFromActionUrl(String actionUrl) {
@@ -182,10 +217,16 @@ final class LoyaltyApi {
     private static final class Response {
         final int status;
         final String body;
+        final String server;
+        final String allow;
+        final String contentType;
 
-        Response(int status, String body) {
+        Response(int status, String body, String server, String allow, String contentType) {
             this.status = status;
             this.body = body == null ? "" : body;
+            this.server = server == null ? "" : server;
+            this.allow = allow == null ? "" : allow;
+            this.contentType = contentType == null ? "" : contentType;
         }
     }
 
