@@ -6,6 +6,7 @@ import android.util.Base64;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -33,9 +34,29 @@ final class OrderApi {
             URL url = new URL(order.actionUrl);
             if (!allowedActionUrl(url)) return Result.error("В push указан неподдерживаемый адрес Kapouch.");
 
-            Response response = postAction(context, url, order, action);
+            Response response;
             boolean bridgeUsed = false;
-            if (response.status == 405) {
+            String primaryTransportError = "";
+            try {
+                response = postAction(context, url, order, action);
+            } catch (IOException primary) {
+                // With Evotor proxy v2 enabled on old terminals, the intercepted
+                // POST can close while Android is writing the JSON body
+                // (SSLException/SocketException: Broken pipe). That happens before
+                // an HTTP status exists, so 1.2.22 never reached its bridge fallback.
+                // Retry the already-authenticated cookie-only GET bridge, which has
+                // no request body to write through the legacy proxy.
+                bridgeUsed = true;
+                primaryTransportError = transportMessage(primary);
+                try {
+                    response = bridgeAction(context, order, action);
+                } catch (Exception bridge) {
+                    return Result.error("POST оборвался: " + primaryTransportError
+                            + "; bridge: " + transportMessage(bridge));
+                }
+            }
+
+            if (!bridgeUsed && response.status == 405) {
                 bridgeUsed = true;
                 response = bridgeAction(context, order, action);
             }
@@ -43,7 +64,7 @@ final class OrderApi {
             JSONObject json = response.body.isEmpty() ? new JSONObject() : new JSONObject(response.body);
             if (response.status < 200 || response.status >= 300 || !json.optBoolean("ok", false)) {
                 String fallback = "Kapouch вернул HTTP " + response.status;
-                if (bridgeUsed) fallback = bridgeFailure(response);
+                if (bridgeUsed) fallback = bridgeFailure(response, primaryTransportError);
                 return Result.error(json.optString("error", fallback));
             }
             JSONObject orderJson = json.optJSONObject("order");
@@ -52,10 +73,7 @@ final class OrderApi {
             if (newStatus.isEmpty()) return Result.error("Kapouch вернул пустой статус заказа.");
             return Result.success(newStatus, orderJson.optString("status_label", newStatus));
         } catch (Exception e) {
-            String message = e.getMessage();
-            String type = e.getClass().getSimpleName();
-            if (message == null || message.trim().isEmpty()) message = "Нет связи с Kapouch.";
-            return Result.error("Evotor HTTPS " + type + ": " + message);
+            return Result.error("Evotor HTTPS " + transportMessage(e));
         }
     }
 
@@ -107,16 +125,12 @@ final class OrderApi {
         HttpsURLConnection connection = openBase(context, url);
         connection.setRequestProperty("Accept", "application/json");
         connection.setRequestProperty("Cache-Control", "no-store");
-        connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.22");
+        connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.23");
         return connection;
     }
 
     private static HttpsURLConnection openBridge(Context context, URL url) throws Exception {
         HttpsURLConnection connection = openBase(context, url);
-        // Deliberately keep the legacy bridge request browser-like: the physical
-        // Evotor receives HTTP 405 when non-standard X-* / Authorization headers
-        // are present, while the same URL succeeds in a normal browser. All
-        // bridge data therefore travels in one ordinary Cookie header over HTTPS.
         connection.setRequestProperty("Accept", "*/*");
         connection.setRequestProperty("User-Agent", "Mozilla/5.0");
         return connection;
@@ -154,8 +168,11 @@ final class OrderApi {
                 connection.getHeaderField("Content-Type"));
     }
 
-    private static String bridgeFailure(Response response) {
+    private static String bridgeFailure(Response response, String primaryTransportError) {
         StringBuilder out = new StringBuilder("Kapouch bridge вернул HTTP ").append(response.status).append(" (cookie-only)");
+        if (primaryTransportError != null && !primaryTransportError.isEmpty()) {
+            out.append("; POST=").append(primaryTransportError);
+        }
         if (!response.allow.isEmpty()) out.append("; Allow=").append(response.allow);
         if (!response.server.isEmpty()) out.append("; Server=").append(response.server);
         if (!response.contentType.isEmpty()) out.append("; Type=").append(response.contentType);
@@ -165,6 +182,14 @@ final class OrderApi {
             out.append("; body=").append(snippet);
         }
         return out.toString();
+    }
+
+    private static String transportMessage(Throwable error) {
+        if (error == null) return "неизвестная ошибка";
+        String message = error.getMessage();
+        String type = error.getClass().getSimpleName();
+        if (message == null || message.trim().isEmpty()) return type;
+        return type + ": " + message.trim();
     }
 
     static boolean allowedActionUrl(URL url) {
