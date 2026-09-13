@@ -17,6 +17,7 @@ import javax.net.ssl.HttpsURLConnection;
 final class OrderApi {
     private static final String KAPOUCH_HOST = "kapouch.store";
     private static final String ACTION_PATH = "/api/evotor_order_action.php";
+    private static final String BRIDGE_URL = "https://kapouch.store/evotor-bridge?type=order";
 
     private OrderApi() {}
 
@@ -31,15 +32,17 @@ final class OrderApi {
             URL url = new URL(order.actionUrl);
             if (!allowedActionUrl(url)) return Result.error("В push указан неподдерживаемый адрес Kapouch.");
 
-            Response response = request(context, url, order, action, false);
+            Response response = postAction(context, url, order, action);
+            boolean bridgeUsed = false;
             if (response.status == 405) {
-                response = request(context, url, order, action, true);
+                bridgeUsed = true;
+                response = bridgeAction(context, order, action);
             }
 
             JSONObject json = response.body.isEmpty() ? new JSONObject() : new JSONObject(response.body);
             if (response.status < 200 || response.status >= 300 || !json.optBoolean("ok", false)) {
                 String fallback = "Kapouch вернул HTTP " + response.status;
-                if (response.status == 405) fallback += " (legacy transport тоже отклонён)";
+                if (bridgeUsed) fallback = "Kapouch bridge вернул HTTP " + response.status;
                 return Result.error(json.optString("error", fallback));
             }
             JSONObject orderJson = json.optJSONObject("order");
@@ -55,52 +58,71 @@ final class OrderApi {
         }
     }
 
-    private static Response request(Context context, URL url, OrderRecord order, String action, boolean legacyGet) throws Exception {
-        HttpURLConnection connection = null;
+    private static Response postAction(Context context, URL url, OrderRecord order, String action) throws Exception {
+        HttpsURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) url.openConnection();
-            if (!(connection instanceof HttpsURLConnection)) {
-                return new Response(400, "{\"ok\":false,\"error\":\"Kapouch должен быть доступен только по HTTPS.\"}");
-            }
-            HttpsURLConnection secure = (HttpsURLConnection) connection;
-            secure.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
-            secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);
-
-            connection.setRequestMethod(legacyGet ? "GET" : "POST");
-            connection.setConnectTimeout(7000);
-            connection.setReadTimeout(10000);
-            connection.setDoOutput(!legacyGet);
-            connection.setInstanceFollowRedirects(false);
-            connection.setUseCaches(false);
-            connection.setRequestProperty("Accept", "application/json");
+            connection = open(context, url);
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Authorization", "Bearer " + order.actionToken);
             connection.setRequestProperty("X-Kapouch-Order-Token", order.actionToken);
-            connection.setRequestProperty("Cache-Control", "no-store");
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.20");
 
-            if (legacyGet) {
-                connection.setRequestProperty("X-Kapouch-Evotor-Legacy", "1");
-                connection.setRequestProperty("X-Kapouch-Action", action);
-                connection.setRequestProperty("X-Kapouch-Order-Id", order.orderId);
-            } else {
-                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                JSONObject body = new JSONObject();
-                body.put("action", action);
-                body.put("order_id", Integer.parseInt(order.orderId));
-                byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
-                connection.setFixedLengthStreamingMode(payload.length);
-                OutputStream output = connection.getOutputStream();
-                output.write(payload);
-                output.flush();
-                output.close();
-            }
-
-            int status = connection.getResponseCode();
-            InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
-            return new Response(status, readAll(stream));
+            JSONObject body = new JSONObject();
+            body.put("action", action);
+            body.put("order_id", Integer.parseInt(order.orderId));
+            byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
+            connection.setFixedLengthStreamingMode(payload.length);
+            OutputStream output = connection.getOutputStream();
+            output.write(payload);
+            output.flush();
+            output.close();
+            return response(connection);
         } finally {
             if (connection != null) connection.disconnect();
         }
+    }
+
+    private static Response bridgeAction(Context context, OrderRecord order, String action) throws Exception {
+        HttpsURLConnection connection = null;
+        try {
+            connection = open(context, new URL(BRIDGE_URL));
+            connection.setRequestMethod("GET");
+            connection.setDoOutput(false);
+            connection.setRequestProperty("Authorization", "Bearer " + order.actionToken);
+            connection.setRequestProperty("X-Kapouch-Order-Token", order.actionToken);
+            connection.setRequestProperty("X-Kapouch-Action", action);
+            connection.setRequestProperty("X-Kapouch-Order-Id", order.orderId);
+            connection.setRequestProperty("X-Kapouch-Evotor-Bridge", "1");
+            return response(connection);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private static HttpsURLConnection open(Context context, URL url) throws Exception {
+        HttpURLConnection raw = (HttpURLConnection) url.openConnection();
+        if (!(raw instanceof HttpsURLConnection)) {
+            raw.disconnect();
+            throw new IllegalArgumentException("Kapouch должен быть доступен только по HTTPS.");
+        }
+        HttpsURLConnection connection = (HttpsURLConnection) raw;
+        connection.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
+        connection.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);
+        connection.setConnectTimeout(7000);
+        connection.setReadTimeout(10000);
+        connection.setInstanceFollowRedirects(false);
+        connection.setUseCaches(false);
+        connection.setRequestProperty("Accept", "application/json");
+        connection.setRequestProperty("Cache-Control", "no-store");
+        connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.21");
+        return connection;
+    }
+
+    private static Response response(HttpURLConnection connection) throws Exception {
+        int status = connection.getResponseCode();
+        InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
+        return new Response(status, readAll(stream));
     }
 
     static boolean allowedActionUrl(URL url) {

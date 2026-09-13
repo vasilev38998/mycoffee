@@ -20,6 +20,7 @@ final class LoyaltyApi {
     static final String KEY_TERMINAL_TOKEN = "loyalty_terminal_token";
     static final String KEY_BOOTSTRAP_ORDER_TOKEN = "loyalty_bootstrap_order_token";
     private static final String DEFAULT_LOOKUP_URL = "https://kapouch.store/api/evotor_customer_lookup.php";
+    private static final String BRIDGE_URL = "https://kapouch.store/evotor-bridge?type=loyalty";
     private static final String KAPOUCH_HOST = "kapouch.store";
     private static final String LOOKUP_PATH = "/api/evotor_customer_lookup.php";
 
@@ -41,15 +42,17 @@ final class LoyaltyApi {
                 prefs.edit().putString(KEY_LOOKUP_URL, DEFAULT_LOOKUP_URL).apply();
             }
 
-            Response response = request(context, url, code, terminalToken, bootstrapToken, false);
+            Response response = postLookup(context, url, code, terminalToken, bootstrapToken);
+            boolean bridgeUsed = false;
             if (response.status == 405) {
-                response = request(context, url, code, terminalToken, bootstrapToken, true);
+                bridgeUsed = true;
+                response = bridgeLookup(context, code, terminalToken, bootstrapToken);
             }
 
             JSONObject json = response.body.isEmpty() ? new JSONObject() : new JSONObject(response.body);
             if (response.status < 200 || response.status >= 300 || !json.optBoolean("ok", false)) {
                 String fallback = "Kapouch вернул HTTP " + response.status;
-                if (response.status == 405) fallback += " (legacy transport тоже отклонён)";
+                if (bridgeUsed) fallback = "Kapouch bridge вернул HTTP " + response.status;
                 return Result.error(json.optString("error", fallback));
             }
             String issuedToken = json.optString("terminal_token", "");
@@ -77,53 +80,75 @@ final class LoyaltyApi {
         }
     }
 
-    private static Response request(Context context, URL url, String code, String terminalToken, String bootstrapToken, boolean legacyGet) throws Exception {
-        HttpURLConnection connection = null;
+    private static Response postLookup(Context context, URL url, String code, String terminalToken, String bootstrapToken) throws Exception {
+        HttpsURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) url.openConnection();
-            if (!(connection instanceof HttpsURLConnection)) {
-                return new Response(400, "{\"ok\":false,\"error\":\"Kapouch должен быть доступен только по HTTPS.\"}");
-            }
-            HttpsURLConnection secure = (HttpsURLConnection) connection;
-            secure.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
-            secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);
-
-            connection.setRequestMethod(legacyGet ? "GET" : "POST");
-            connection.setConnectTimeout(7000);
-            connection.setReadTimeout(10000);
-            connection.setDoOutput(!legacyGet);
-            connection.setInstanceFollowRedirects(false);
-            connection.setUseCaches(false);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("Cache-Control", "no-store");
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.20");
-            if (terminalToken != null && !terminalToken.isEmpty()) connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
-
-            if (legacyGet) {
-                connection.setRequestProperty("X-Kapouch-Evotor-Legacy", "1");
-                connection.setRequestProperty("X-Kapouch-Loyalty-Code", code);
-                if (bootstrapToken != null && !bootstrapToken.isEmpty()) {
-                    connection.setRequestProperty("X-Kapouch-Bootstrap-Order-Token", bootstrapToken);
-                }
-            } else {
-                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                JSONObject body = new JSONObject();
-                body.put("code", code);
-                if (bootstrapToken != null && !bootstrapToken.isEmpty()) body.put("bootstrap_order_token", bootstrapToken);
-                byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
-                connection.setFixedLengthStreamingMode(payload.length);
-                OutputStream output = connection.getOutputStream();
-                output.write(payload);
-                output.flush();
-                output.close();
+            connection = open(context, url);
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            if (terminalToken != null && !terminalToken.isEmpty()) {
+                connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
             }
 
-            int status = connection.getResponseCode();
-            InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
-            return new Response(status, readAll(stream));
+            JSONObject body = new JSONObject();
+            body.put("code", code);
+            if (bootstrapToken != null && !bootstrapToken.isEmpty()) body.put("bootstrap_order_token", bootstrapToken);
+            byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
+            connection.setFixedLengthStreamingMode(payload.length);
+            OutputStream output = connection.getOutputStream();
+            output.write(payload);
+            output.flush();
+            output.close();
+            return response(connection);
         } finally {
             if (connection != null) connection.disconnect();
         }
+    }
+
+    private static Response bridgeLookup(Context context, String code, String terminalToken, String bootstrapToken) throws Exception {
+        HttpsURLConnection connection = null;
+        try {
+            connection = open(context, new URL(BRIDGE_URL));
+            connection.setRequestMethod("GET");
+            connection.setDoOutput(false);
+            connection.setRequestProperty("X-Kapouch-Evotor-Bridge", "1");
+            connection.setRequestProperty("X-Kapouch-Loyalty-Code", code);
+            if (terminalToken != null && !terminalToken.isEmpty()) {
+                connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
+            }
+            if (bootstrapToken != null && !bootstrapToken.isEmpty()) {
+                connection.setRequestProperty("X-Kapouch-Bootstrap-Order-Token", bootstrapToken);
+            }
+            return response(connection);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private static HttpsURLConnection open(Context context, URL url) throws Exception {
+        HttpURLConnection raw = (HttpURLConnection) url.openConnection();
+        if (!(raw instanceof HttpsURLConnection)) {
+            raw.disconnect();
+            throw new IllegalArgumentException("Kapouch должен быть доступен только по HTTPS.");
+        }
+        HttpsURLConnection connection = (HttpsURLConnection) raw;
+        connection.setSSLSocketFactory(EvotorTls.socketFactory(context.getApplicationContext()));
+        connection.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);
+        connection.setConnectTimeout(7000);
+        connection.setReadTimeout(10000);
+        connection.setInstanceFollowRedirects(false);
+        connection.setUseCaches(false);
+        connection.setRequestProperty("Accept", "application/json");
+        connection.setRequestProperty("Cache-Control", "no-store");
+        connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.21");
+        return connection;
+    }
+
+    private static Response response(HttpURLConnection connection) throws Exception {
+        int status = connection.getResponseCode();
+        InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
+        return new Response(status, readAll(stream));
     }
 
     static String lookupUrlFromActionUrl(String actionUrl) {

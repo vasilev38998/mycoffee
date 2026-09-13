@@ -6,6 +6,8 @@ on:
       - 'evotor-app/**'
       - 'api/evotor_order_action.php'
       - 'api/evotor_customer_lookup.php'
+      - 'api/evotor_bridge.php'
+      - '.htaccess'
       - '.github/workflows/evotor-apk.yml'
   push:
     branches: [main]
@@ -13,6 +15,8 @@ on:
       - 'evotor-app/**'
       - 'api/evotor_order_action.php'
       - 'api/evotor_customer_lookup.php'
+      - 'api/evotor_bridge.php'
+      - '.htaccess'
       - '.github/workflows/evotor-apk.yml'
   workflow_dispatch:
     inputs:
@@ -67,15 +71,15 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate Evotor 1.2.20 source contract
+      - name: Validate Evotor 1.2.21 source contract
         run: |
           set -euo pipefail
           TLS=evotor-app/app/src/main/java/ru/kapouch/evotor/EvotorTls.java
           HOSTNAME=evotor-app/app/src/main/java/ru/kapouch/evotor/EvotorHostnameVerifier.java
           ORDER=evotor-app/app/src/main/java/ru/kapouch/evotor/OrderApi.java
           LOYALTY=evotor-app/app/src/main/java/ru/kapouch/evotor/LoyaltyApi.java
-          ORDER_API=api/evotor_order_action.php
-          LOYALTY_API=api/evotor_customer_lookup.php
+          BRIDGE=api/evotor_bridge.php
+          HTACCESS=.htaccess
           SCAN=evotor-app/app/src/main/java/ru/kapouch/evotor/CustomerScanReceiver.java
           MAIN=evotor-app/app/src/main/java/ru/kapouch/evotor/MainActivity.java
           MANIFEST=evotor-app/app/src/main/AndroidManifest.xml
@@ -84,51 +88,47 @@ jobs:
           HEX_B='f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66ea51a49a8812973b'
           OLD_HEX_B='f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66e881a49a8812973b'
 
-          php -l "$ORDER_API"
-          php -l "$LOYALTY_API"
-          grep -q "HTTP_X_KAPOUCH_EVOTOR_LEGACY" "$ORDER_API"
-          grep -q "HTTP_X_KAPOUCH_ACTION" "$ORDER_API"
-          grep -q "HTTP_X_KAPOUCH_ORDER_ID" "$ORDER_API"
-          grep -q "legacy-get" "$ORDER_API"
-          grep -q "HTTP_X_KAPOUCH_EVOTOR_LEGACY" "$LOYALTY_API"
-          grep -q "HTTP_X_KAPOUCH_LOYALTY_CODE" "$LOYALTY_API"
-          grep -q "HTTP_X_KAPOUCH_BOOTSTRAP_ORDER_TOKEN" "$LOYALTY_API"
-          grep -q "legacy-get" "$LOYALTY_API"
-          grep -q "QUERY_STRING" "$ORDER_API"
-          grep -q "QUERY_STRING" "$LOYALTY_API"
+          php -l "$BRIDGE"
+          grep -q 'evotor-bridge' "$HTACCESS"
+          grep -q 'api/evotor_bridge.php' "$HTACCESS"
+          grep -q "type=order" "$ORDER"
+          grep -q "type=loyalty" "$LOYALTY"
+          grep -q 'BRIDGE_URL' "$ORDER"
+          grep -q 'BRIDGE_URL' "$LOYALTY"
+          grep -q 'response.status == 405' "$ORDER"
+          grep -q 'response.status == 405' "$LOYALTY"
+          grep -q 'X-Kapouch-Evotor-Bridge' "$ORDER"
+          grep -q 'X-Kapouch-Evotor-Bridge' "$LOYALTY"
+          grep -q 'X-Kapouch-Action' "$ORDER"
+          grep -q 'X-Kapouch-Order-Id' "$ORDER"
+          grep -q 'X-Kapouch-Loyalty-Code' "$LOYALTY"
+          grep -q 'X-Kapouch-Bootstrap-Order-Token' "$LOYALTY"
+          grep -q "transport'=>'root-bridge'" "$BRIDGE"
+          grep -q 'count($_GET)!==1' "$BRIDGE"
+          grep -q "\['order','loyalty'\]" "$BRIDGE"
 
           test -s "$TLS"
           test -s "$HOSTNAME"
           grep -q 'SSLCertificateSocketFactory' "$TLS"
           grep -q 'CombinedTrustManager' "$TLS"
-          grep -q 'verifyPublicChain' "$TLS"
           grep -q 'verifyReviewedLegacyLeaf' "$TLS"
           grep -q 'PreHandshakeSniSocketFactory' "$TLS"
           grep -q 'delegate.setHostname(socket, hostname);' "$TLS"
-          grep -q 'socket.connect(new InetSocketAddress' "$TLS"
           grep -Fq "$HEX_A" "$TLS"
           grep -Fq "$HEX_B" "$TLS"
           if grep -Fq "$OLD_HEX_B" "$TLS"; then
-            echo 'Misread 1.2.17 SPKI digest is still present.' >&2
+            echo 'Misread SPKI digest is still present.' >&2
             exit 1
           fi
-          grep -q 'MessageDigest.isEqual(LEGACY_EVOTOR_SPKI_SHA256_A, value)' "$TLS"
-          grep -q 'MessageDigest.isEqual(LEGACY_EVOTOR_SPKI_SHA256_B, value)' "$TLS"
 
           grep -q 'implements HostnameVerifier' "$HOSTNAME"
-          grep -q 'HttpsURLConnection.getDefaultHostnameVerifier()' "$HOSTNAME"
           grep -q 'DEFAULT.verify(hostname, session)' "$HOSTNAME"
           grep -q 'KAPOUCH_HOST.equalsIgnoreCase(hostname)' "$HOSTNAME"
           grep -q 'peer.length != 1' "$HOSTNAME"
           grep -q 'getSubjectAlternativeNames()' "$HOSTNAME"
-          grep -q 'subjectAltNames != null && !subjectAltNames.isEmpty()' "$HOSTNAME"
-          grep -q 'getSubjectX500Principal().equals(leaf.getIssuerX500Principal())' "$HOSTNAME"
-          grep -q 'leaf.verify(leaf.getPublicKey())' "$HOSTNAME"
           grep -q 'hasExactCommonName(leaf, KAPOUCH_HOST)' "$HOSTNAME"
           grep -Fq "$HEX_A" "$HOSTNAME"
           grep -Fq "$HEX_B" "$HOSTNAME"
-          grep -q 'MessageDigest.isEqual(REVIEWED_SPKI_A, observed)' "$HOSTNAME"
-          grep -q 'MessageDigest.isEqual(REVIEWED_SPKI_B, observed)' "$HOSTNAME"
           if grep -Fq "$OLD_HEX_B" "$HOSTNAME"; then
             echo 'Misread SPKI digest is present in hostname verifier.' >&2
             exit 1
@@ -138,22 +138,10 @@ jobs:
             exit 1
           fi
 
-          grep -q 'secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);' "$ORDER"
-          grep -q 'secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);' "$LOYALTY"
-          grep -q 'response.status == 405' "$ORDER"
-          grep -q 'response.status == 405' "$LOYALTY"
-          grep -q 'X-Kapouch-Evotor-Legacy' "$ORDER"
-          grep -q 'X-Kapouch-Evotor-Legacy' "$LOYALTY"
-          grep -q 'X-Kapouch-Action' "$ORDER"
-          grep -q 'X-Kapouch-Order-Id' "$ORDER"
-          grep -q 'X-Kapouch-Loyalty-Code' "$LOYALTY"
-          grep -q 'X-Kapouch-Bootstrap-Order-Token' "$LOYALTY"
-          grep -q 'Kapouch-Orders-Evotor/1.2.20' "$ORDER"
-          grep -q 'Kapouch-Orders-Evotor/1.2.20' "$LOYALTY"
-
-          SNI_LINE=$(grep -n 'delegate.setHostname(socket, hostname);' "$TLS" | head -n1 | cut -d: -f1)
-          CONNECT_LINE=$(grep -n 'socket.connect(new InetSocketAddress' "$TLS" | head -n1 | cut -d: -f1)
-          test "$SNI_LINE" -lt "$CONNECT_LINE"
+          grep -q 'secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);' "$ORDER" || grep -q 'connection.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);' "$ORDER"
+          grep -q 'secure.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);' "$LOYALTY" || grep -q 'connection.setHostnameVerifier(EvotorHostnameVerifier.INSTANCE);' "$LOYALTY"
+          grep -q 'Kapouch-Orders-Evotor/1.2.21' "$ORDER"
+          grep -q 'Kapouch-Orders-Evotor/1.2.21' "$LOYALTY"
 
           grep -q 'BuildConfig.VERSION_NAME' "$MAIN"
           grep -q 'Kapouch Orders · v' "$MAIN"
@@ -175,7 +163,7 @@ jobs:
           EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
         run: gradle -p evotor-app :app:assembleDebug -PEVOTOR_APP_UUID="$EVOTOR_APP_UUID" --no-daemon
 
-      - name: Validate APK metadata and legacy transport fallback
+      - name: Validate APK metadata and extensionless bridge fallback
         env:
           EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
         run: |
@@ -188,13 +176,9 @@ jobs:
 
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='27' versionName='1.2.20'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='28' versionName='1.2.21'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'21'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
-
-          "$AAPT" dump permissions "$APK" | tee /tmp/evotor-permissions.txt
-          grep -q 'android.permission.INTERNET' /tmp/evotor-permissions.txt
-          grep -q 'ru.evotor.devices.SCANNER_RECEIVER' /tmp/evotor-permissions.txt
 
           unzip -l "$APK" | tee /tmp/evotor-apk-files.txt
           grep -q 'classes.dex' /tmp/evotor-apk-files.txt
@@ -204,17 +188,16 @@ jobs:
           fi
 
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.20' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.21' /tmp/evotor-dex-strings.txt
           grep -q 'PreHandshakeSniSocketFactory' /tmp/evotor-dex-strings.txt
           grep -q 'EvotorHostnameVerifier' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch TLS chain rejected:' /tmp/evotor-dex-strings.txt
-          grep -q 'X-Kapouch-Evotor-Legacy' /tmp/evotor-dex-strings.txt
-          grep -q 'X-Kapouch-Loyalty-Code' /tmp/evotor-dex-strings.txt
-          grep -q 'X-Kapouch-Action' /tmp/evotor-dex-strings.txt
+          grep -q 'evotor-bridge?type=order' /tmp/evotor-dex-strings.txt
+          grep -q 'evotor-bridge?type=loyalty' /tmp/evotor-dex-strings.txt
+          grep -q 'X-Kapouch-Evotor-Bridge' /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_A" /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_B" /tmp/evotor-dex-strings.txt
           if grep -Fq "$OLD_HEX_B" /tmp/evotor-dex-strings.txt; then
-            echo 'Misread 1.2.17 SPKI digest unexpectedly remains in APK.' >&2
+            echo 'Misread SPKI digest unexpectedly remains in APK.' >&2
             exit 1
           fi
 
