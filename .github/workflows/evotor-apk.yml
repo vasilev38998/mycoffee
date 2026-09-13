@@ -177,9 +177,9 @@ jobs:
           grep -q 'ru.evotor.permission.SELL_INTEGRATION_SERVICE' /tmp/evotor-permissions.txt
           grep -q 'ru.evotor.devices.SCANNER_RECEIVER' /tmp/evotor-permissions.txt
 
-          "$AAPT" dump xmltree "$APK" AndroidManifest.xml > /tmp/evotor-manifest.txt
-          grep -q 'KapouchSellIntegrationService' /tmp/evotor-manifest.txt
-          grep -q 'ru.evotor.event.sell.BARCODE_RECEIVED' /tmp/evotor-manifest.txt
+          # Source-manifest checks above verify the service/action declaration.
+          # Do not grep aapt's binary XML text here: old aapt versions omit or
+          # normalize component/action strings differently across environments.
 
           unzip -l "$APK" | tee /tmp/evotor-apk-files.txt
           grep -q 'classes.dex' /tmp/evotor-apk-files.txt
