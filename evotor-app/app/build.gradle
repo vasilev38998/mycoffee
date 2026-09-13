@@ -21,7 +21,8 @@ android {
 
 dependencies {
     implementation 'com.github.evotor:push-notifications:v0.2.1'
-    // rc01-v0.4.36 is the last old-terminal-compatible line we need here:
-    // it already contains SellIntegrationService and still supports API 22.
-    implementation 'com.github.evotor:integration-library:rc01-v0.4.36'
+    // rc01-v0.4.40 is the oldest integration-library tag that contains
+    // SellIntegrationService/ReturnPositionsForBarcodeRequestedEvent while
+    // remaining compatible with API 22 Evotor terminals.
+    implementation 'com.github.evotor:integration-library:rc01-v0.4.40'
 }
