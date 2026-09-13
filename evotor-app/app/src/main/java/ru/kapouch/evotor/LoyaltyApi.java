@@ -7,6 +7,7 @@ import android.util.Base64;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -43,9 +44,27 @@ final class LoyaltyApi {
                 prefs.edit().putString(KEY_LOOKUP_URL, DEFAULT_LOOKUP_URL).apply();
             }
 
-            Response response = postLookup(context, url, code, terminalToken, bootstrapToken);
+            Response response;
             boolean bridgeUsed = false;
-            if (response.status == 405) {
+            String primaryTransportError = "";
+            try {
+                response = postLookup(context, url, code, terminalToken, bootstrapToken);
+            } catch (IOException primary) {
+                // Proxy v2 on older Evotor firmware can terminate the intercepted
+                // POST while Android is writing its JSON body. Use the same
+                // cookie-only GET bridge as the HTTP 405 fallback so the retry has
+                // no request body and no custom X-* transport headers.
+                bridgeUsed = true;
+                primaryTransportError = transportMessage(primary);
+                try {
+                    response = bridgeLookup(context, code, terminalToken, bootstrapToken);
+                } catch (Exception bridge) {
+                    return Result.error("POST оборвался: " + primaryTransportError
+                            + "; bridge: " + transportMessage(bridge));
+                }
+            }
+
+            if (!bridgeUsed && response.status == 405) {
                 bridgeUsed = true;
                 response = bridgeLookup(context, code, terminalToken, bootstrapToken);
             }
@@ -53,7 +72,7 @@ final class LoyaltyApi {
             JSONObject json = response.body.isEmpty() ? new JSONObject() : new JSONObject(response.body);
             if (response.status < 200 || response.status >= 300 || !json.optBoolean("ok", false)) {
                 String fallback = "Kapouch вернул HTTP " + response.status;
-                if (bridgeUsed) fallback = bridgeFailure(response);
+                if (bridgeUsed) fallback = bridgeFailure(response, primaryTransportError);
                 return Result.error(json.optString("error", fallback));
             }
             String issuedToken = json.optString("terminal_token", "");
@@ -74,10 +93,7 @@ final class LoyaltyApi {
             double giftCap = drinks != null ? Math.max(0d, drinks.optDouble("gift_cap", 0d)) : 0d;
             return Result.success(name, balance, linked, drinkEnabled, progress, required, availableRewards, giftCap);
         } catch (Exception e) {
-            String message = e.getMessage();
-            String type = e.getClass().getSimpleName();
-            if (message == null || message.trim().isEmpty()) message = "Нет связи с Kapouch.";
-            return Result.error("Evotor HTTPS " + type + ": " + message);
+            return Result.error("Evotor HTTPS " + transportMessage(e));
         }
     }
 
@@ -130,7 +146,7 @@ final class LoyaltyApi {
         HttpsURLConnection connection = openBase(context, url);
         connection.setRequestProperty("Accept", "application/json");
         connection.setRequestProperty("Cache-Control", "no-store");
-        connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.22");
+        connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.23");
         return connection;
     }
 
@@ -173,8 +189,11 @@ final class LoyaltyApi {
                 connection.getHeaderField("Content-Type"));
     }
 
-    private static String bridgeFailure(Response response) {
+    private static String bridgeFailure(Response response, String primaryTransportError) {
         StringBuilder out = new StringBuilder("Kapouch bridge вернул HTTP ").append(response.status).append(" (cookie-only)");
+        if (primaryTransportError != null && !primaryTransportError.isEmpty()) {
+            out.append("; POST=").append(primaryTransportError);
+        }
         if (!response.allow.isEmpty()) out.append("; Allow=").append(response.allow);
         if (!response.server.isEmpty()) out.append("; Server=").append(response.server);
         if (!response.contentType.isEmpty()) out.append("; Type=").append(response.contentType);
@@ -184,6 +203,14 @@ final class LoyaltyApi {
             out.append("; body=").append(snippet);
         }
         return out.toString();
+    }
+
+    private static String transportMessage(Throwable error) {
+        if (error == null) return "неизвестная ошибка";
+        String message = error.getMessage();
+        String type = error.getClass().getSimpleName();
+        if (message == null || message.trim().isEmpty()) return type;
+        return type + ": " + message.trim();
     }
 
     static String lookupUrlFromActionUrl(String actionUrl) {
