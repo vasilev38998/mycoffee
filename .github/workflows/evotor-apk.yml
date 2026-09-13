@@ -100,7 +100,7 @@ jobs:
           grep -q 'setRequestProperty("Cookie", "kapouch_evotor="' "$ORDER"
           grep -q 'setRequestProperty("Cookie", "kapouch_evotor="' "$LOYALTY"
 
-          # v1.2.24 adds the official Evotor sale integration path for QR cards.
+          # v1.2.24 adds the official Evotor Sale integration path for QR cards.
           test -s "$SALE_SCAN"
           grep -q 'extends SellIntegrationService' "$SALE_SCAN"
           grep -q 'ReturnPositionsForBarcodeRequestedEvent' "$SALE_SCAN"
@@ -114,7 +114,7 @@ jobs:
           grep -q 'ru.evotor.event.sell.BARCODE_RECEIVED' "$MANIFEST"
           grep -q 'KapouchSellIntegrationService' "$MANIFEST"
           grep -q 'android.intent.category.EVOTOR' "$MANIFEST"
-          grep -q "integration-library:rc01-v0.4.36" "$APP_GRADLE"
+          grep -q "integration-library:rc01-v0.4.40" "$APP_GRADLE"
           grep -q "minSdkVersion 22" "$APP_GRADLE"
           grep -q "versionCode 31" "$APP_GRADLE"
           grep -q "versionName '1.2.24'" "$APP_GRADLE"
