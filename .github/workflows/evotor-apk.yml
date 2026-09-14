@@ -163,7 +163,16 @@ jobs:
       - name: Build debug APK with Evotor-compatible toolchain
         env:
           EVOTOR_APP_UUID: ${{ github.event.inputs.evotor_app_uuid || 'bc17ef43-f590-49ca-a6f2-e940f57d0a72' }}
-        run: gradle -p evotor-app :app:assembleDebug -PEVOTOR_APP_UUID="$EVOTOR_APP_UUID" --no-daemon
+        run: |
+          set -o pipefail
+          if ! gradle -p evotor-app :app:assembleDebug -PEVOTOR_APP_UUID="$EVOTOR_APP_UUID" --no-daemon > /tmp/evotor-gradle.log 2>&1; then
+            echo '=== Gradle failure summary ==='
+            grep -E 'FAILURE:|What went wrong|Execution failed|Could not|error:|Compilation failed|Caused by:' /tmp/evotor-gradle.log | tail -n 100 || true
+            echo '=== Gradle failure tail ==='
+            tail -n 120 /tmp/evotor-gradle.log
+            exit 1
+          fi
+          tail -n 40 /tmp/evotor-gradle.log
 
       - name: Validate APK metadata and broken-pipe fallback
         run: |
