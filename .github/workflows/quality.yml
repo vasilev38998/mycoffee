@@ -67,6 +67,9 @@ jobs:
           grep -q './index.html#home' customer/payment-return.html
           grep -q './index.html#cart' customer/payment-return.html
 
+      - name: Hosting stability and SBP return contract
+        run: php tests/hosting_stability_payment_return_contract.php
+
       - name: JavaScript syntax
         run: |
           set -euo pipefail

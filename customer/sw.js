@@ -1,5 +1,5 @@
-const CACHE='kapouch-pwa-v35';
-const PREVIOUS_CACHE='kapouch-pwa-v34';
+const CACHE='kapouch-pwa-v36';
+const PREVIOUS_CACHE='kapouch-pwa-v35';
 const DESIGN_CACHE='kapouch-pwa-v32';
 const MIGRATION_CACHE='kapouch-pwa-v31';
 const AUTH_GATE_CACHE='kapouch-pwa-v30';

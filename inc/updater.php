@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const KAPOUCH_APP_VERSION = '2026.09.05';
+const KAPOUCH_APP_VERSION = '2026.09.15';
 const KAPOUCH_LEGACY_BASELINE_MAX = 8;
 
 function kapouch_migrations_dir(): string
@@ -48,6 +48,10 @@ function kapouch_migration_checksum_matches(string $recorded, string $sql): bool
 
 function kapouch_ensure_migration_registry(PDO $pdo): void
 {
+    static $ready=[];
+    $key=spl_object_id($pdo);
+    if(isset($ready[$key]))return;
+    if(kapouch_table_exists($pdo,'schema_migrations')){$ready[$key]=true;return;}
     $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
         migration VARCHAR(190) PRIMARY KEY,
         migration_number INT UNSIGNED NOT NULL,
@@ -60,6 +64,7 @@ function kapouch_ensure_migration_registry(PDO $pdo): void
         KEY idx_schema_migrations_number (migration_number),
         KEY idx_schema_migrations_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $ready[$key]=true;
 }
 
 function kapouch_table_exists(PDO $pdo, string $table): bool
@@ -122,16 +127,41 @@ function kapouch_migration_status(PDO $pdo): array
     return ['current_version'=>$latest,'available_version'=>$available,'pending'=>$pending,'changed'=>$changed,'applied'=>$applied];
 }
 
-function kapouch_apply_pending_migrations(PDO $pdo, bool $baselineLegacy=true): array
+function kapouch_apply_pending_migrations(PDO $pdo, bool $baselineLegacy=true, bool $retryFailed=false): array
 {
-    $lockName='kapouch_schema_migrations';$lock=$pdo->prepare('SELECT GET_LOCK(?,30)');$lock->execute([$lockName]);
-    if((int)$lock->fetchColumn()!==1)throw new RuntimeException('Другая копия Kapouch уже обновляет базу. Повторите запрос через несколько секунд.');
+    // Fast path first: normal web/API requests must never queue behind a global
+    // schema lock when the database is already current.
+    $status = kapouch_migration_status($pdo);
+    if (!$status['pending'] && !$status['changed']) {
+        return ['applied'=>[], 'failed'=>null, 'busy'=>false];
+    }
+    if ($status['changed']) {
+        throw new RuntimeException('Обнаружено изменение уже применённой миграции: ' . $status['changed'][0]['name'] . '. Обновление остановлено для защиты данных.');
+    }
+
+    // A failed migration is never retried by every public request. It remains
+    // visible in Updates and can be retried deliberately by an authenticated
+    // owner after the cause is fixed.
+    $failed=$pdo->query("SELECT migration,error_message FROM schema_migrations WHERE status='failed' ORDER BY migration_number,migration LIMIT 1")->fetch();
+    if($failed&&!$retryFailed){
+        return ['applied'=>[], 'failed'=>['name'=>(string)$failed['migration'],'message'=>(string)($failed['error_message']??'Ошибка миграции')], 'busy'=>false];
+    }
+
+    // Automatic bootstrap migrations are best-effort. One request may perform
+    // the migration, but every other request fails fast instead of waiting up
+    // to 30 seconds and making both kapouch.store and the PWA look offline.
+    $lockName='kapouch_schema_migrations';
+    $lock=$pdo->prepare('SELECT GET_LOCK(?,0)');
+    $lock->execute([$lockName]);
+    if((int)$lock->fetchColumn()!==1){
+        return ['applied'=>[], 'failed'=>null, 'busy'=>true];
+    }
     try{
         kapouch_ensure_migration_registry($pdo);
         if ($baselineLegacy) kapouch_baseline_legacy_migrations($pdo);
         $status = kapouch_migration_status($pdo);
         if ($status['changed']) throw new RuntimeException('Обнаружено изменение уже применённой миграции: ' . $status['changed'][0]['name'] . '. Обновление остановлено для защиты данных.');
-        $result = ['applied'=>[], 'failed'=>null];
+        $result = ['applied'=>[], 'failed'=>null, 'busy'=>false];
         foreach ($status['pending'] as $migration) {
             $sql = file_get_contents($migration['file']);
             if ($sql === false) throw new RuntimeException('Не удалось прочитать миграцию ' . $migration['name']);

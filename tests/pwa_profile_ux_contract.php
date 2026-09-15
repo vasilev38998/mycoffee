@@ -23,7 +23,7 @@ $checks=[
     'fresh QR asset loaded'=>str_contains($config,'assets/loyalty-card.js?v=5'),
     'light contrast layer loaded'=>str_contains($config,'assets/contrast-fix.css?v=1'),
     'light tokens locked against legacy theme'=>str_contains($contrast,'--text:#251812!important')&&str_contains($contrast,'--surface:#fffaf4!important'),
-    'service worker cache bumped'=>str_contains($sw,"kapouch-pwa-v34")&&str_contains($sw,'./assets/contrast-fix.css?v=1')&&str_contains($sw,'./assets/status-once.js?v=1'),
+    'service worker cache bumped'=>str_contains($sw,"kapouch-pwa-v36")&&str_contains($sw,'./assets/contrast-fix.css?v=1')&&str_contains($sw,'./assets/status-once.js?v=1'),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"PWA profile UX contract failed: {$label}\n");exit(1);}}
 echo "PWA profile UX contract passed\n";

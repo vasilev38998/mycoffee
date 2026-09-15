@@ -8,7 +8,7 @@ $manualResult=null;$manualError=null;
 if($_SERVER['REQUEST_METHOD']==='POST'){
     verify_csrf();
     try{
-        $manualResult=kapouch_apply_pending_migrations(db(),true);
+        $manualResult=kapouch_apply_pending_migrations(db(),true,true);
         flash('success',$manualResult['applied']?'Обновление выполнено. Применено миграций: '.count($manualResult['applied']).'.':'База данных уже актуальна.');
     }catch(Throwable $e){flash('danger','Обновление остановлено: '.$e->getMessage());}
     redirect('updates.php');

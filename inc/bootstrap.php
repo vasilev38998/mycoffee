@@ -27,9 +27,18 @@ if($needsSession&&session_status()===PHP_SESSION_NONE){
 }
 
 require_once __DIR__.'/updater.php';
-$GLOBALS['kapouch_update_result']=['applied'=>[],'failed'=>null];
+$GLOBALS['kapouch_update_result']=['applied'=>[],'failed'=>null,'busy'=>false];
 $GLOBALS['kapouch_update_error']=null;
-try{$GLOBALS['kapouch_update_result']=kapouch_apply_pending_migrations(db(),true);}catch(Throwable $e){$GLOBALS['kapouch_update_error']=$e->getMessage();}
+try{
+    $GLOBALS['kapouch_update_result']=kapouch_apply_pending_migrations(db(),true);
+    if(!empty($GLOBALS['kapouch_update_result']['failed'])){
+        $failed=$GLOBALS['kapouch_update_result']['failed'];
+        $GLOBALS['kapouch_update_error']='Миграция '.(string)($failed['name']??'').' требует ручного повтора: '.(string)($failed['message']??'Ошибка миграции');
+    }
+}catch(Throwable $e){
+    $GLOBALS['kapouch_update_error']=$e->getMessage();
+    error_log('[Kapouch migration bootstrap] '.$e->getMessage());
+}
 
 require_once __DIR__.'/settings.php';
 ensure_settings_tables();
