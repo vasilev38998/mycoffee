@@ -127,7 +127,7 @@ function kapouch_migration_status(PDO $pdo): array
     return ['current_version'=>$latest,'available_version'=>$available,'pending'=>$pending,'changed'=>$changed,'applied'=>$applied];
 }
 
-function kapouch_apply_pending_migrations(PDO $pdo, bool $baselineLegacy=true): array
+function kapouch_apply_pending_migrations(PDO $pdo, bool $baselineLegacy=true, bool $retryFailed=false): array
 {
     // Fast path first: normal web/API requests must never queue behind a global
     // schema lock when the database is already current.
@@ -137,6 +137,14 @@ function kapouch_apply_pending_migrations(PDO $pdo, bool $baselineLegacy=true): 
     }
     if ($status['changed']) {
         throw new RuntimeException('Обнаружено изменение уже применённой миграции: ' . $status['changed'][0]['name'] . '. Обновление остановлено для защиты данных.');
+    }
+
+    // A failed migration is never retried by every public request. It remains
+    // visible in Updates and can be retried deliberately by an authenticated
+    // owner after the cause is fixed.
+    $failed=$pdo->query("SELECT migration,error_message FROM schema_migrations WHERE status='failed' ORDER BY migration_number,migration LIMIT 1")->fetch();
+    if($failed&&!$retryFailed){
+        return ['applied'=>[], 'failed'=>['name'=>(string)$failed['migration'],'message'=>(string)($failed['error_message']??'Ошибка миграции')], 'busy'=>false];
     }
 
     // Automatic bootstrap migrations are best-effort. One request may perform
