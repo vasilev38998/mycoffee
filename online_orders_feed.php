@@ -12,6 +12,8 @@ if(session_status()===PHP_SESSION_NONE){
     ini_set('session.use_only_cookies','1');
     ini_set('session.cookie_httponly','1');
     ini_set('session.cookie_samesite','Lax');
+    $secure=!empty($_SERVER['HTTPS'])&&strtolower((string)$_SERVER['HTTPS'])!=='off';
+    session_set_cookie_params(['lifetime'=>0,'path'=>'/','domain'=>'','secure'=>$secure,'httponly'=>true,'samesite'=>'Lax']);
     session_start();
 }
 $sessionUserId=(int)($_SESSION['user_id']??0);
