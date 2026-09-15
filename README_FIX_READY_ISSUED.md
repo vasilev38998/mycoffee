@@ -1,1 +1,0 @@
-Temporary implementation note for PR review: ready PWA orders remain on the Evotor screen with their signed action token and expose a final `ВЫДАН` action. The server maps `complete` to the existing `ready -> completed` transition, preserving loyalty completion hooks and idempotency.
