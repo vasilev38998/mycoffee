@@ -34,7 +34,8 @@ public final class KapouchDiscountService extends IntegrationService {
         processors.put(ReceiptDiscountEvent.NAME_SELL_RECEIPT, new ActionProcessor() {
             @Override
             public void process(@NonNull String action, @Nullable Bundle bundle, @NonNull Callback callback) throws RemoteException {
-                if (bundle == null) {
+                ReceiptDiscountEvent discountEvent = ReceiptDiscountEvent.create(bundle);
+                if (bundle == null || discountEvent == null) {
                     callback.skip();
                     return;
                 }
@@ -59,7 +60,7 @@ public final class KapouchDiscountService extends IntegrationService {
                     callback.skip();
                     return;
                 }
-                String requestedReceiptUuid = bundle.getString("receiptUuid", "");
+                String requestedReceiptUuid = discountEvent.getReceiptUuid();
                 if (requestedReceiptUuid != null && !requestedReceiptUuid.isEmpty()
                         && !requestedReceiptUuid.equals(receipt.getHeader().getUuid())) {
                     callback.skip();
@@ -72,23 +73,34 @@ public final class KapouchDiscountService extends IntegrationService {
                     callback.skip();
                     return;
                 }
+
+                BigDecimal currentDiscount = discountEvent.getDiscount() == null
+                        ? BigDecimal.ZERO
+                        : discountEvent.getDiscount().max(BigDecimal.ZERO);
                 if (!quote.gift || quote.discount <= 0d) {
-                    callback.onResult(new ReceiptDiscountEventResult(BigDecimal.ZERO, null, Collections.emptyList()));
+                    // Never erase a discount that may already have been applied by
+                    // another integration before Kapouch was asked to calculate.
+                    callback.onResult(new ReceiptDiscountEventResult(currentDiscount, null, Collections.emptyList()));
                     return;
                 }
 
-                BigDecimal discount = BigDecimal.valueOf(quote.discount).setScale(2, BigDecimal.ROUND_HALF_UP);
-                String detail = "Подарок Kapouch: −" + discount.toPlainString() + " ₽";
+                BigDecimal giftDiscount = BigDecimal.valueOf(quote.discount).setScale(2, BigDecimal.ROUND_HALF_UP);
+                BigDecimal resultingDiscount = quote.alreadyApplied
+                        ? currentDiscount.max(giftDiscount)
+                        : currentDiscount.add(giftDiscount);
+                String detail = "Подарок Kapouch: −" + giftDiscount.toPlainString() + " ₽";
                 if (quote.sameOrderUnlock) detail += " · заработан этим чеком";
                 saveLast("Скидка применена", detail);
 
                 // Once Evotor accepts the result bundle, mark the quoted reward as
                 // applied on the server. The eventual imported sale finalizes the
                 // reward and removes one stamp for the gifted drink.
-                callback.onResult(new ReceiptDiscountEventResult(discount, null, Collections.emptyList()));
-                final String receiptUuid = receipt.getHeader().getUuid();
-                final Context app = getApplicationContext();
-                new Thread(() -> LoyaltyDiscountApi.confirm(app, receiptUuid), "kapouch-discount-confirm").start();
+                callback.onResult(new ReceiptDiscountEventResult(resultingDiscount, null, Collections.emptyList()));
+                if (!quote.alreadyApplied) {
+                    final String receiptUuid = receipt.getHeader().getUuid();
+                    final Context app = getApplicationContext();
+                    new Thread(() -> LoyaltyDiscountApi.confirm(app, receiptUuid), "kapouch-discount-confirm").start();
+                }
             }
         });
         return processors;
