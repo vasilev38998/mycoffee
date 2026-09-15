@@ -91,7 +91,7 @@ page_header('Онлайн-заказы');
 (function(){
 const board=document.getElementById('orderBoard'),filter=<?=json_encode($filter)?>,csrf=<?=json_encode(csrf_token(),JSON_UNESCAPED_UNICODE)?>,canRefund=<?=json_encode($canManage)?>,initialOrders=<?=json_encode($orders,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>;
 let lastNewId=0,sound=false,firstLoad=true,pollTimer=null,polling=false;
-function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[m]));}
+function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 function qty(v){const n=Number(v||0);return Number.isInteger(n)?String(n):n.toLocaleString('ru-RU',{maximumFractionDigits:3});}
 function age(sec){sec=Math.max(0,Number(sec||0));if(sec<60)return 'только что';const min=Math.floor(sec/60);if(min<60)return min+' мин назад';const h=Math.floor(min/60);return h+' ч '+(min%60)+' мин назад';}
 function actionButton(o,status,label,primary){return '<form method="post"><input type="hidden" name="csrf" value="'+esc(csrf)+'"><input type="hidden" name="action" value="status"><input type="hidden" name="id" value="'+Number(o.id)+'"><input type="hidden" name="status" value="'+esc(status)+'"><button class="btn '+(primary?'primary':'ghost')+'">'+esc(label)+'</button></form>';}
