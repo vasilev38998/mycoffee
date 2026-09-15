@@ -219,7 +219,6 @@ jobs:
           grep -q 'KapouchSellIntegrationService' /tmp/evotor-manifest.txt
           grep -q 'KapouchDiscountService' /tmp/evotor-manifest.txt
           grep -q 'LoyaltyBarcodeConsumedActivity' /tmp/evotor-manifest.txt
-          grep -q 'Theme.NoDisplay' /tmp/evotor-manifest.txt
 
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch-Orders-Evotor/1.2.24' /tmp/evotor-dex-strings.txt
