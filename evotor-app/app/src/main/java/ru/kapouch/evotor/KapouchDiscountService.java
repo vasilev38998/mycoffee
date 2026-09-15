@@ -81,7 +81,14 @@ public final class KapouchDiscountService extends IntegrationService {
                 String detail = "Подарок Kapouch: −" + discount.toPlainString() + " ₽";
                 if (quote.sameOrderUnlock) detail += " · заработан этим чеком";
                 saveLast("Скидка применена", detail);
+
+                // Once Evotor accepts the result bundle, mark the quoted reward as
+                // applied on the server. The eventual imported sale finalizes the
+                // reward and removes one stamp for the gifted drink.
                 callback.onResult(new ReceiptDiscountEventResult(discount, null, Collections.emptyList()));
+                final String receiptUuid = receipt.getHeader().getUuid();
+                final Context app = getApplicationContext();
+                new Thread(() -> LoyaltyDiscountApi.confirm(app, receiptUuid), "kapouch-discount-confirm").start();
             }
         });
         return processors;
