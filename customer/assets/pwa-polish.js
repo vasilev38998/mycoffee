@@ -14,11 +14,11 @@ function installNavIcons(){
   });
   const cart=$('headerCart');if(cart){const holder=cart.querySelector('span');if(holder&&holder.dataset.svgReady!=='1'){holder.innerHTML=svg.cart;holder.dataset.svgReady='1';}}
 }
-function ensureHeroImage(){
-  const art=document.querySelector('.hero-art');if(!art)return null;
-  let img=$('heroDrinkImage');if(img)return img;
-  art.innerHTML='<div class="hero-drink-frame"><img id="heroDrinkImage" class="hero-drink-image" alt="Кофе Kapouch" hidden></div>';
-  return $('heroDrinkImage');
+function installHeroCup(){
+  const art=document.querySelector('.hero-art');if(!art)return;
+  if(art.dataset.heroSvgReady==='1')return;
+  art.innerHTML='<div class="hero-drink-frame"><img id="heroDrinkImage" class="hero-drink-image" src="assets/hero-cup.svg?v=1" alt="Стакан кофе Kapouch" width="320" height="360" decoding="async"></div>';
+  art.dataset.heroSvgReady='1';
 }
 function normalizePickupLabels(){
   const select=$('pickupDelay');if(!select)return;
@@ -30,18 +30,12 @@ function normalizePickupLabels(){
     if(next&&option.textContent!==next)option.textContent=next;
   }
 }
-function bestCoffeeImage(){
-  const cards=[...document.querySelectorAll('#popularList .product-card,#menuGrid .product-card')];
-  const preferred=cards.find(card=>/капуч|латт|раф|коф|эспресс|американ/u.test((card.textContent||'').toLowerCase())&&card.querySelector('img.product-photo'));
-  return (preferred||cards.find(card=>card.querySelector('img.product-photo')))?.querySelector('img.product-photo')?.getAttribute('src')||'';
-}
-function updateHeroImage(){const img=ensureHeroImage();if(!img)return;const src=bestCoffeeImage();if(src&&img.getAttribute('src')!==src){img.src=src;img.hidden=false;}}
+function refresh(){installHeroCup();normalizePickupLabels();installNavIcons();}
 function observe(){
-  ensureHeroImage();const menu=$('menuGrid'),popular=$('popularList');
-  const refresh=()=>{normalizePickupLabels();updateHeroImage();installNavIcons();};
-  [menu,popular].filter(Boolean).forEach(el=>new MutationObserver(refresh).observe(el,{childList:true,subtree:true}));
-  new MutationObserver(()=>normalizePickupLabels()).observe(document.body,{childList:true,subtree:true,characterData:true});
-  refresh();setTimeout(refresh,250);setTimeout(refresh,1200);
+  refresh();
+  const pickup=$('pickupDelay');
+  if(pickup)new MutationObserver(normalizePickupLabels).observe(pickup,{childList:true,subtree:true,characterData:true});
+  setTimeout(refresh,250);setTimeout(refresh,1200);
 }
 installNavIcons();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observe,{once:true});else observe();
 })();
