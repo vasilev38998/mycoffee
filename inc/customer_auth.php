@@ -40,12 +40,18 @@ function customer_auth_send_smsru(string $phone,string $code): void
     if($encrypted==='')throw new RuntimeException('SMS.ru ещё не настроен в Kapouch.');
     $apiId=customer_auth_decrypt($encrypted);
     $digits=preg_replace('/\D+/','',$phone)??'';
-    $params=['api_id'=>$apiId,'to'=>$digits,'msg'=>'Код входа Kapouch: '.$code.'. Никому не сообщайте этот код.','json'=>1,'ip'=>customer_auth_client_ip()];
     $sender=trim((string)app_setting('smsru_sender',''));
+    $testMode=(string)app_setting('smsru_test_mode','0')==='1';
+    $params=['api_id'=>$apiId,'to'=>$digits,'msg'=>'Код входа Kapouch: '.$code.'. Никому не сообщайте этот код.','json'=>1,'ip'=>customer_auth_client_ip()];
     if($sender!=='')$params['from']=$sender;
-    if((string)app_setting('smsru_test_mode','0')==='1')$params['test']=1;
+    if($testMode)$params['test']=1;
+
+    // SMS.ru is an external network hop and may legitimately take several
+    // seconds. Do not reserve one of the hosting account's scarce MySQL
+    // connections while cURL is waiting for the provider.
+    db_disconnect();
     $ch=curl_init('https://sms.ru/sms/send');
-    curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>http_build_query($params),CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>12,CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded']]);
+    curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>http_build_query($params),CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>4,CURLOPT_TIMEOUT=>9,CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded']]);
     $body=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
     if($body===false||$error!=='')throw new RuntimeException('Не удалось связаться с SMS.ru.');
     if($http<200||$http>=300)throw new RuntimeException('SMS.ru вернул HTTP '.$http.'.');
@@ -65,7 +71,13 @@ function customer_auth_request_code(string $rawPhone): array
     if($ip!==''){$stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE request_ip=? AND created_at>=DATE_SUB(NOW(),INTERVAL 1 HOUR)');$stmt->execute([$ip]);if((int)$stmt->fetchColumn()>=20)throw new RuntimeException('Слишком много запросов. Попробуйте позже.');}
     $testMode=(string)app_setting('smsru_test_mode','0')==='1';
     $code=$testMode?'999999':(string)random_int(100000,999999);
+
+    // Drop the local PDO reference as well as the global one before the slow
+    // provider request; otherwise the object would keep the socket alive.
+    $pdo=null;db_disconnect();
     customer_auth_send_smsru($phone,$code);
+
+    $pdo=db();
     $stmt=$pdo->prepare('INSERT INTO customer_auth_codes(phone,code_hash,request_ip,expires_at) VALUES(?,?,?,DATE_ADD(NOW(),INTERVAL 5 MINUTE))');
     $stmt->execute([$phone,customer_auth_code_hash($phone,$code),$ip?:null]);
     $result=['phone'=>$phone,'expires_in'=>300,'resend_in'=>60];
@@ -107,9 +119,6 @@ function customer_auth_current(): ?array
     $token=customer_auth_bearer_token();if(!preg_match('/^[a-f0-9]{64}$/',$token))return null;
     $stmt=db()->prepare('SELECT s.id session_id,s.customer_id,s.last_seen_at,c.phone,c.name,c.loyalty_balance FROM customer_sessions s JOIN customer_accounts c ON c.id=s.customer_id WHERE s.token_hash=? AND s.expires_at>NOW() LIMIT 1');
     $stmt->execute([hash('sha256',$token)]);$row=$stmt->fetch();if(!$row)return null;
-    // Sliding sessions used to UPDATE on every authenticated API request. With
-    // PWA polling that turns harmless reads into write contention. Touch the
-    // session at most once every five minutes; 180-day expiry remains intact.
     $lastSeen=strtotime((string)($row['last_seen_at']??''));
     if($lastSeen===false||$lastSeen<time()-300){
         $days=customer_auth_session_days();
