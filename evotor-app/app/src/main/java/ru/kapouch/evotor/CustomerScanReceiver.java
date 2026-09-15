@@ -24,6 +24,7 @@ public class CustomerScanReceiver extends BroadcastReceiver {
     static final String KAPOUCH_PREFIX = "KAPOUCH:LOYALTY:";
     static final String KEY_ACTIVE_CUSTOMER_NAME = "active_customer_name";
     static final String KEY_ACTIVE_CUSTOMER_BALANCE = "active_customer_balance";
+    static final String KEY_ACTIVE_CUSTOMER_CODE = "active_customer_code";
     static final String KEY_ACTIVE_CUSTOMER_AT = "active_customer_at";
 
     interface Listener {
@@ -74,14 +75,21 @@ public class CustomerScanReceiver extends BroadcastReceiver {
                     prefs.edit()
                             .putString(KEY_ACTIVE_CUSTOMER_NAME, result.name)
                             .putString(KEY_ACTIVE_CUSTOMER_BALANCE, balance)
+                            .putString(KEY_ACTIVE_CUSTOMER_CODE, code)
                             .putLong(KEY_ACTIVE_CUSTOMER_AT, System.currentTimeMillis())
                             .putString(MainActivity.KEY_LAST_TITLE, "Клиент Kapouch определён")
                             .putString(MainActivity.KEY_LAST_DESCRIPTION, message)
                             .putLong(MainActivity.KEY_LAST_AT, System.currentTimeMillis())
                             .apply();
+
+                    // If a SELL receipt is already open, Evotor receives the
+                    // Kapouch discount request immediately. No manual tap on the
+                    // discount icon is required.
+                    ReceiptDiscountTrigger.trigger(appContext, code, null);
                 } else {
                     message = "Kapouch: " + result.error;
                     prefs.edit()
+                            .remove(KEY_ACTIVE_CUSTOMER_CODE)
                             .putString(MainActivity.KEY_LAST_TITLE, "QR-карта Kapouch")
                             .putString(MainActivity.KEY_LAST_DESCRIPTION, result.error)
                             .putLong(MainActivity.KEY_LAST_AT, System.currentTimeMillis())
