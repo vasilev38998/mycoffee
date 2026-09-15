@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
+require_once dirname(__DIR__).'/inc/evotor_order_terminal_actions.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -56,9 +57,9 @@ try{
         $orderId=(int)($data['order_id']??$claims['order_id']);
     }
     if($orderId!==(int)$claims['order_id'])evotor_order_action_response(403,['ok'=>false,'error'=>'Ключ выпущен для другого заказа.']);
-    if(!in_array($action,['accept','ready'],true))throw new RuntimeException('Допустимые действия: accept или ready.');
+    if(!in_array($action,['accept','ready','complete'],true))throw new RuntimeException('Допустимые действия: accept, ready или complete.');
 
-    $order=evotor_order_action_apply($orderId,$action);
+    $order=evotor_order_terminal_action_apply($orderId,$action);
     evotor_order_action_response(200,['ok'=>true,'action'=>$action,'order'=>$order,'transport'=>$legacyTransport?'legacy-get':'post']);
 }catch(JsonException $e){
     evotor_order_action_response(400,['ok'=>false,'error'=>'Некорректный JSON.']);

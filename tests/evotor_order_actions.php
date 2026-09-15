@@ -4,6 +4,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/online_orders.php';
 require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
+require_once dirname(__DIR__).'/inc/evotor_order_terminal_actions.php';
 
 function action_ok(bool $condition,string $message): void
 {
@@ -45,17 +46,22 @@ action_ok(is_array($claims)&&(int)$claims['connection_id']===$connectionId&&(int
 action_ok(evotor_order_action_claims($token.'x')===null,'tampered action token is rejected');
 action_ok(evotor_order_action_claims(evotor_order_action_token($connectionId,$orderId,time()-120))===null,'expired action token is rejected');
 
-$accepted=evotor_order_action_apply($orderId,'accept');
+$accepted=evotor_order_terminal_action_apply($orderId,'accept');
 action_ok($accepted['status']==='preparing','accept moves new order to preparing');
-$acceptedAgain=evotor_order_action_apply($orderId,'accept');
+$acceptedAgain=evotor_order_terminal_action_apply($orderId,'accept');
 action_ok($acceptedAgain['status']==='preparing','accept action is idempotent');
-$ready=evotor_order_action_apply($orderId,'ready');
+$ready=evotor_order_terminal_action_apply($orderId,'ready');
 action_ok($ready['status']==='ready','ready action moves preparing order to ready');
-$readyAgain=evotor_order_action_apply($orderId,'ready');
+$readyAgain=evotor_order_terminal_action_apply($orderId,'ready');
 action_ok($readyAgain['status']==='ready','ready action is idempotent');
+$completed=evotor_order_terminal_action_apply($orderId,'complete');
+action_ok($completed['status']==='completed','complete action moves ready order to completed');
+$completedAgain=evotor_order_terminal_action_apply($orderId,'complete');
+action_ok($completedAgain['status']==='completed','complete action is idempotent');
 
 $newOrder=$makeOrder('ACT-2');
-action_throws(fn()=>evotor_order_action_apply($newOrder,'ready'),'new order cannot skip accept step');
+action_throws(fn()=>evotor_order_terminal_action_apply($newOrder,'ready'),'new order cannot skip accept step');
+action_throws(fn()=>evotor_order_terminal_action_apply($newOrder,'complete'),'new order cannot be issued before ready');
 
 $_SERVER['HTTP_HOST']='kapouch.test';
 action_ok(evotor_order_action_public_url()==='https://kapouch.store/api/evotor_order_action.php','action URL is canonical HTTPS endpoint accepted by Evotor client');

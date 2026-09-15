@@ -7,6 +7,7 @@ require_once dirname(__DIR__).'/inc/customer_loyalty_card.php';
 require_once dirname(__DIR__).'/inc/customer_drink_loyalty.php';
 require_once dirname(__DIR__).'/inc/evotor_customer_loyalty.php';
 require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
+require_once dirname(__DIR__).'/inc/evotor_order_terminal_actions.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -91,12 +92,12 @@ if($type==='order'){
     if($orderId!==(int)$claims['order_id']){
         evotor_bridge_reply(403,['ok'=>false,'error'=>'Ключ выпущен для другого заказа.']);
     }
-    if(!in_array($action,['accept','ready'],true)){
-        evotor_bridge_reply(400,['ok'=>false,'error'=>'Допустимые действия: accept или ready.']);
+    if(!in_array($action,['accept','ready','complete'],true)){
+        evotor_bridge_reply(400,['ok'=>false,'error'=>'Допустимые действия: accept, ready или complete.']);
     }
 
     try{
-        $order=evotor_order_action_apply($orderId,$action);
+        $order=evotor_order_terminal_action_apply($orderId,$action);
         evotor_bridge_reply(200,[
             'ok'=>true,
             'action'=>$action,

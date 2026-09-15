@@ -51,7 +51,7 @@ public class MainActivity extends Activity {
         root.addView(title, matchWrap());
 
         TextView intro = new TextView(this);
-        intro.setText("Рабочий экран бариста: новые PWA-заказы, принятие, готовность и карта клиента.");
+        intro.setText("Рабочий экран бариста: новые PWA-заказы, принятие, готовность, выдача и карта клиента.");
         intro.setTextSize(16);
         intro.setTextColor(Color.DKGRAY);
         intro.setPadding(0, 0, 0, dp(18));
@@ -77,7 +77,7 @@ public class MainActivity extends Activity {
         root.addView(enabled, matchWrap());
 
         TextView note = new TextView(this);
-        note.setText("Новый заказ звучит сразу и напоминает ещё до трёх раз, пока его не примут. После «Заказ готов» статус меняется в Kapouch, а клиент получает уведомление, если подписан на push.");
+        note.setText("Новый заказ звучит сразу и напоминает ещё до трёх раз, пока его не примут. После «Заказ готов» клиент получает новый статус. После выдачи нажмите «ВЫДАН» — заказ перейдёт в завершённые.");
         note.setTextSize(14);
         note.setTextColor(Color.GRAY);
         note.setPadding(0, dp(6), 0, dp(26));
@@ -305,7 +305,9 @@ public class MainActivity extends Activity {
             if (actionable) card.addView(actionButton(order, "ready", "ЗАКАЗ ГОТОВ", Color.rgb(219, 137, 28)));
             else card.addView(infoText("Ключ действия недоступен. Измените статус заказа в веб-панели Kapouch."));
         } else if ("ready".equals(order.status)) {
-            card.addView(infoText("✓ Готов. Клиент видит новый статус; push отправлен в очередь уведомлений."));
+            card.addView(infoText("✓ Готов. Клиент видит новый статус; после передачи заказа нажмите «ВЫДАН»."));
+            if (actionable) card.addView(actionButton(order, "complete", "ВЫДАН", Color.rgb(38, 128, 72)));
+            else card.addView(infoText("Для этого старого заказа ключ действия уже потерян. Отметьте его выданным в веб-панели; новые заказы будут иметь кнопку «ВЫДАН»."));
         } else if ("completed".equals(order.status)) {
             card.addView(infoText("✓ Заказ выдан."));
         } else if ("cancelled".equals(order.status)) {

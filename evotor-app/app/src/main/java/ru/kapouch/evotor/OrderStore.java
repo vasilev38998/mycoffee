@@ -61,7 +61,10 @@ final class OrderStore {
             if (!record.orderId.equals(orderId)) continue;
             record.status = status == null || status.isEmpty() ? record.status : status;
             record.lastError = "";
-            if ("ready".equals(record.status) || "completed".equals(record.status) || "cancelled".equals(record.status)) {
+            // The same signed order token is required for the final "Выдан"
+            // action. Keep it while the order is ready; clear it only after the
+            // terminal flow is actually finished.
+            if ("completed".equals(record.status) || "cancelled".equals(record.status)) {
                 record.actionToken = "";
             }
             found = record;
@@ -109,8 +112,11 @@ final class OrderStore {
                 if (o == null) continue;
                 OrderRecord record = fromJson(o);
                 if (record.orderId.isEmpty()) continue;
-                boolean finished = "ready".equals(record.status) || "completed".equals(record.status) || "cancelled".equals(record.status);
-                if (finished && record.receivedAt > 0 && now - record.receivedAt > 12L * 60L * 60L * 1000L) continue;
+                // Completed/cancelled orders are no longer active. Ready orders
+                // stay visible so the barista can explicitly mark them issued.
+                if ("completed".equals(record.status) || "cancelled".equals(record.status)) continue;
+                if ("ready".equals(record.status) && record.receivedAt > 0
+                        && now - record.receivedAt > 12L * 60L * 60L * 1000L) continue;
                 result.add(record);
             }
         } catch (Exception ignored) {
