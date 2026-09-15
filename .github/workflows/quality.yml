@@ -73,6 +73,9 @@ jobs:
       - name: Online order SBP cancel/refund contract
         run: php tests/online_order_sbp_cancel_refund_contract.php
 
+      - name: PWA hero and scanner-probe hardening contract
+        run: php tests/pwa_hero_probe_hardening_contract.php
+
       - name: JavaScript syntax
         run: |
           set -euo pipefail
