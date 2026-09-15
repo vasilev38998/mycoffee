@@ -36,7 +36,7 @@ $checks=[
   'PWA cashback copy uses amount due'=>str_contains($checkoutJs,'loyalty_expected')&&str_contains($checkoutJs,'% от суммы к оплате'),
   'QR card listens for completed order'=>str_contains($cardJs,'kapouch-order-status')&&str_contains($cardJs,"status==='completed'"),
   'PWA loads refreshed sixth drink checkout'=>str_contains($config,'assets/sixth-drink-checkout.js?v=2'),
-  'service worker v32 includes refreshed gift asset'=>str_contains($sw,'kapouch-pwa-v32')&&str_contains($sw,'./assets/sixth-drink-checkout.js?v=2'),
+  'service worker refreshes polish and gift assets'=>str_contains($sw,"kapouch-pwa-v35")&&str_contains($sw,'./assets/sixth-drink-checkout.js?v=2')&&str_contains($sw,'./assets/pwa-polish.js?v=1')&&str_contains($sw,'./assets/pwa-polish.css?v=1'),
   'YooKassa returns to canonical app domain'=>str_contains($payments,"customer_public_app_url('payment-return.html')"),
   'public QR uses canonical app URL'=>str_contains($qr,'return customer_public_app_url();'),
   'final migration pins app and API origins'=>str_contains($migration,"https://app.kapouch.store/")&&str_contains($migration,"https://kapouch.store/api/"),
