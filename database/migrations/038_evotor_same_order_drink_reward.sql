@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS customer_evotor_reward_pending (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    connection_id INT UNSIGNED NOT NULL,
+    receipt_uuid VARCHAR(200) NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
+    product_id INT UNSIGNED DEFAULT NULL,
+    reward_value DECIMAL(12,2) NOT NULL DEFAULT 0,
+    status ENUM('quoted','applied','finalized','expired','cancelled') NOT NULL DEFAULT 'quoted',
+    quoted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    applied_at DATETIME DEFAULT NULL,
+    finalized_at DATETIME DEFAULT NULL,
+    expires_at DATETIME NOT NULL,
+    sale_id INT UNSIGNED DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_customer_evotor_reward_connection FOREIGN KEY (connection_id) REFERENCES evotor_connections(id) ON DELETE CASCADE,
+    CONSTRAINT fk_customer_evotor_reward_customer FOREIGN KEY (customer_id) REFERENCES customer_accounts(id) ON DELETE CASCADE,
+    CONSTRAINT fk_customer_evotor_reward_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL,
+    CONSTRAINT fk_customer_evotor_reward_sale FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE SET NULL,
+    UNIQUE KEY uniq_customer_evotor_reward_receipt (connection_id,receipt_uuid),
+    KEY idx_customer_evotor_reward_finalize (connection_id,customer_id,status,quoted_at),
+    KEY idx_customer_evotor_reward_expiry (status,expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
