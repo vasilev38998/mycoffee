@@ -58,18 +58,39 @@ function customer_loyalty_apply_order_spend(int $orderId,int $customerId,mixed $
         $lock=$pdo->prepare('SELECT loyalty_balance FROM customer_accounts WHERE id=? FOR UPDATE');$lock->execute([$customerId]);$row=$lock->fetch();
         if(!$row)throw new RuntimeException('Профиль покупателя не найден.');
         $existing=customer_loyalty_order_spend($orderId,$pdo);
-        if($existing>0){$pdo->commit();return ['applied'=>$existing,'balance'=>customer_loyalty_balance($customerId)];}
+        if($existing>0){$balance=round(max(0,(float)$row['loyalty_balance']),2);$pdo->commit();return ['applied'=>$existing,'balance'=>$balance];}
         $order=$pdo->prepare("SELECT total_amount,status,source FROM online_orders WHERE id=? FOR UPDATE");$order->execute([$orderId]);$orderRow=$order->fetch();
         if(!$orderRow)throw new RuntimeException('Заказ не найден.');
         if((string)$orderRow['source']!=='customer-web')throw new RuntimeException('Списание бонусов доступно только в приложении Kapouch.');
         if(!in_array((string)$orderRow['status'],['new','awaiting_payment'],true))throw new RuntimeException('Для этого заказа бонусы уже нельзя списать.');
-        $balance=round(max(0,(float)$row['loyalty_balance']),2);$due=round(max(0,(float)$orderRow['total_amount']),2);$amount=round(min($wanted,$balance,$due),2);
-        if($amount<=0){$pdo->commit();return ['applied'=>0.0,'balance'=>$balance];}
-        $pdo->prepare("INSERT INTO customer_loyalty_ledger(customer_id,order_id,amount,operation_type,note) VALUES(?,?,?,'spend',?)")->execute([$customerId,$orderId,-$amount,'Списание бонусов в приложении Kapouch']);
-        $pdo->prepare('UPDATE customer_accounts SET loyalty_balance=GREATEST(0,ROUND(loyalty_balance-?,2)) WHERE id=?')->execute([$amount,$customerId]);
-        $pdo->prepare('UPDATE online_orders SET total_amount=GREATEST(0,ROUND(total_amount-?,2)) WHERE id=?')->execute([$amount,$orderId]);
+        $balance=round(max(0,(float)$row['loyalty_balance']),2);$due=round(max(0,(float)$orderRow['total_amount']),2);$target=round(min($wanted,$balance,$due),2);
+        if($target<=0){$pdo->commit();return ['applied'=>0.0,'balance'=>$balance];}
+
+        // Keep fiscal item prices consistent with the discounted order total.
+        // A line with quantity > 1 cannot represent every arbitrary cent after
+        // division, so we round its unit price upward and continue applying any
+        // remaining cents to the next line. We never spend more points than the
+        // customer requested.
+        $items=$pdo->prepare('SELECT id,quantity,unit_price,line_total,item_comment FROM online_order_items WHERE order_id=? AND quantity>0 AND line_total>0 ORDER BY id DESC FOR UPDATE');
+        $items->execute([$orderId]);$remaining=$target;$applied=0.0;
+        foreach($items->fetchAll() as $item){
+            if($remaining<0.01)break;
+            $qty=(float)$item['quantity'];$oldLine=round(max(0,(float)$item['line_total']),2);if($qty<=0||$oldLine<=0)continue;
+            $take=round(min($remaining,$oldLine),2);$targetLine=round(max(0,$oldLine-$take),2);
+            $newUnit=$targetLine<=0?0.0:ceil(($targetLine/$qty)*100-0.000001)/100;
+            $newLine=round(max(0,min($oldLine,$newUnit*$qty)),2);
+            $actual=round(max(0,$oldLine-$newLine),2);if($actual<=0)continue;
+            $existingComment=trim((string)($item['item_comment']??''));$note='Бонусы −'.number_format($actual,2,'.','').' ₽';$comment=mb_substr($existingComment!==''?$existingComment.' · '.$note:$note,0,500);
+            $upd=$pdo->prepare('UPDATE online_order_items SET unit_price=?,line_total=?,item_comment=? WHERE id=? AND order_id=?');$upd->execute([$newUnit,$newLine,$comment,(int)$item['id'],$orderId]);
+            if($upd->rowCount()!==1)throw new RuntimeException('Не удалось применить бонусы к позиции заказа.');
+            $applied=round($applied+$actual,2);$remaining=round(max(0,$target-$applied),2);
+        }
+        if($applied<=0){$pdo->commit();return ['applied'=>0.0,'balance'=>$balance];}
+        $pdo->prepare("INSERT INTO customer_loyalty_ledger(customer_id,order_id,amount,operation_type,note) VALUES(?,?,?,'spend',?)")->execute([$customerId,$orderId,-$applied,'Списание бонусов в приложении Kapouch']);
+        $pdo->prepare('UPDATE customer_accounts SET loyalty_balance=GREATEST(0,ROUND(loyalty_balance-?,2)) WHERE id=?')->execute([$applied,$customerId]);
+        $pdo->prepare('UPDATE online_orders SET total_amount=GREATEST(0,ROUND(total_amount-?,2)) WHERE id=?')->execute([$applied,$orderId]);
         $pdo->commit();
-        return ['applied'=>$amount,'balance'=>round($balance-$amount,2)];
+        return ['applied'=>$applied,'balance'=>round($balance-$applied,2)];
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 
@@ -160,12 +181,15 @@ function customer_loyalty_refresh_completed(int $limit=100): array
 
 function customer_loyalty_refresh_customer(int $customerId,int $limit=30): array
 {
-    if($customerId<=0)return ['orders'=>0,'amount'=>0.0,'drink_stamps'=>0];
+    if($customerId<=0)return ['orders'=>0,'amount'=>0.0,'drink_stamps'=>0,'restored_spend'=>0.0];
     $limit=max(1,min(100,$limit));
     $stmt=db()->prepare("SELECT a.order_id FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.customer_id=? AND o.status='completed' AND a.loyalty_earned_at IS NULL ORDER BY o.completed_at,a.order_id LIMIT {$limit}");
     $stmt->execute([$customerId]);
     $orders=0;$amount=0.0;
     foreach($stmt->fetchAll() as $row){$amount+=customer_loyalty_on_order_completed((int)$row['order_id']);$orders++;}
+    $restored=0.0;
+    $cancelled=db()->prepare("SELECT a.order_id FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.customer_id=? AND (o.status='cancelled' OR o.payment_status='refunded') ORDER BY o.updated_at DESC,o.id DESC LIMIT {$limit}");
+    $cancelled->execute([$customerId]);foreach($cancelled->fetchAll() as $row){try{$restored+=customer_loyalty_restore_order_spend((int)$row['order_id'],'отменённый или возвращённый заказ');}catch(Throwable $e){error_log('[Kapouch loyalty spend refresh] '.$e->getMessage());}}
     $drink=['stamps'=>0];try{$drink=customer_drink_loyalty_refresh_customer($customerId,$limit);}catch(Throwable $e){error_log('[Kapouch drink loyalty refresh] '.$e->getMessage());}
-    return ['orders'=>$orders,'amount'=>round($amount,2),'drink_stamps'=>(int)($drink['stamps']??0)];
+    return ['orders'=>$orders,'amount'=>round($amount,2),'drink_stamps'=>(int)($drink['stamps']??0),'restored_spend'=>round($restored,2)];
 }
