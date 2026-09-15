@@ -21,13 +21,15 @@ if(!$order)customer_api_reply(404,['ok'=>false,'error'=>'Заказ не най�
 if(preg_match('/^[a-f0-9]{64}$/',$token)){
     $stmt=db()->prepare('SELECT o.id,o.promised_at,o.status,o.payment_status,a.customer_id,a.loyalty_earned_at FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.tracking_token=? LIMIT 1');
     $stmt->execute([$token]);$row=$stmt->fetch()?:[];
-    $orderId=(int)($row['id']??0);$status=(string)($row['status']??'');$paymentStatus=(string)($row['payment_status']??'');
+    $orderId=(int)($row['id']??0);$status=(string)($row['status']??'');$paymentStatus=(string)($row['payment_status']??'');$customerId=(int)($row['customer_id']??0);
     if($orderId>0&&$status==='completed'){
         if(empty($row['loyalty_earned_at']))customer_loyalty_on_order_completed($orderId);
-        customer_drink_loyalty_credit_online_order($orderId,(int)($row['customer_id']??0));
+        customer_drink_loyalty_credit_online_order($orderId,$customerId);
     }
     if($orderId>0&&($status==='cancelled'||$paymentStatus==='refunded')){
+        try{customer_loyalty_restore_order_spend($orderId,$paymentStatus==='refunded'?'оплата возвращена':'заказ отменён');}catch(Throwable $restoreError){error_log('[Kapouch loyalty spend restore] '.$restoreError->getMessage());}
         try{customer_drink_loyalty_restore_online_order_reward($orderId,$paymentStatus==='refunded'?'Оплата возвращена, подарок восстановлен':'Заказ отменён, подарок восстановлен');}catch(Throwable $restoreError){error_log('[Kapouch sixth drink restore] '.$restoreError->getMessage());}
+        if($customerId>0)$order['loyalty_balance']=customer_loyalty_balance($customerId);
     }
     $promised=trim((string)($row['promised_at']??''));$order['promised_at']=$promised;$order['promised_display']=$promised!==''?date('H:i',strtotime($promised)):'';
     if($orderId>0&&$status==='new'){

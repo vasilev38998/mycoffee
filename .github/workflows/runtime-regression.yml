@@ -52,6 +52,9 @@ jobs:
       - name: Sixth-drink loyalty runtime
         run: php tests/sixth_drink_runtime.php
 
+      - name: Loyalty point spend runtime
+        run: php tests/loyalty_spend_runtime.php
+
       - name: Seed staff login
         run: |
           HASH=$(php -r 'echo password_hash("RegressionPass123!", PASSWORD_DEFAULT);')

@@ -51,7 +51,7 @@ window.addEventListener('DOMContentLoaded',function(){
 
   var giftStyle=document.createElement('link');
   giftStyle.rel='stylesheet';
-  giftStyle.href='assets/sixth-drink-checkout.css?v=1';
+  giftStyle.href='assets/sixth-drink-checkout.css?v=2';
   document.head.appendChild(giftStyle);
 
   var contrastStyle=document.createElement('link');
@@ -75,7 +75,7 @@ window.addEventListener('DOMContentLoaded',function(){
   document.body.appendChild(authRequired);
 
   var giftCheckout=document.createElement('script');
-  giftCheckout.src='assets/sixth-drink-checkout.js?v=2';
+  giftCheckout.src='assets/sixth-drink-checkout.js?v=3';
   giftCheckout.defer=true;
   document.body.appendChild(giftCheckout);
 
