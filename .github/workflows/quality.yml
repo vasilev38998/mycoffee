@@ -76,6 +76,9 @@ jobs:
       - name: PWA hero and scanner-probe hardening contract
         run: php tests/pwa_hero_probe_hardening_contract.php
 
+      - name: Database connection pressure contract
+        run: php tests/database_connection_pressure_contract.php
+
       - name: JavaScript syntax
         run: |
           set -euo pipefail
