@@ -120,7 +120,13 @@ function customer_payment_create_sbp(int $orderId,string $orderNumber,float $amo
     $connection=customer_payment_connection('yookassa_sbp');if(!$connection||empty($connection['enabled']))throw new RuntimeException('Оплата по СБП сейчас недоступна.');
     if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new RuntimeException('Для оплаты по СБП укажите электронную почту в профиле Kapouch.');
     $amount=round($amount,2);if($amount<1)throw new RuntimeException('Минимальная сумма оплаты по СБП — 1 ₽.');
-    $returnUrl=customer_public_app_url('payment-return.html');
+    $trackingToken='';
+    $access=db()->prepare('SELECT tracking_token FROM customer_order_access WHERE order_id=? LIMIT 1');
+    $access->execute([$orderId]);
+    $candidate=trim((string)($access->fetchColumn()?:''));
+    if(preg_match('/^[a-f0-9]{64}$/',$candidate))$trackingToken=$candidate;
+    $returnPath='payment-return.html'.($trackingToken!==''?'?token='.rawurlencode($trackingToken):'');
+    $returnUrl=customer_public_app_url($returnPath);
     $checkoutMethod=customer_payment_yookassa_checkout_method($connection);
     $payload=[
         'amount'=>['value'=>number_format($amount,2,'.',''),'currency'=>'RUB'],
