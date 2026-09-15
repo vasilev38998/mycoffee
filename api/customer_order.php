@@ -7,6 +7,7 @@ require_once dirname(__DIR__).'/inc/customer_legal.php';
 require_once dirname(__DIR__).'/inc/customer_operations.php';
 require_once dirname(__DIR__).'/inc/customer_phone.php';
 require_once dirname(__DIR__).'/inc/customer_urls.php';
+require_once dirname(__DIR__).'/inc/customer_same_order_gift.php';
 require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
 
 customer_api_headers();
@@ -37,7 +38,7 @@ try{
     if($delay<0||$delay>720)throw new RuntimeException('Выберите доступное время получения.');
 
     if($existingId>0){
-        $order=customer_order_create($data,$customer);
+        $order=customer_same_order_gift_create($data,$customer);
     }else{
         $requested=trim((string)($data['pickup_at']??''));
         if($requested==='')$requested=customer_operations_legacy_slot($delay);
@@ -47,7 +48,7 @@ try{
         try{
             if($externalId!==''){$existing=db()->prepare('SELECT id FROM online_orders WHERE external_id=? LIMIT 1');$existing->execute([$externalId]);$existingId=(int)($existing->fetchColumn()?:0);}
             if($existingId<=0)customer_operations_validate_slot($requested);
-            $order=customer_order_create($data,$customer);
+            $order=customer_same_order_gift_create($data,$customer);
             customer_legal_record_acceptance((int)($order['order_id']??0),$acceptance);
             if(!empty($order['order_id'])){
                 $stmt=db()->prepare("UPDATE online_orders SET promised_at=? WHERE id=? AND promised_at IS NULL AND status IN ('new','awaiting_payment')");$stmt->execute([$requested,(int)$order['order_id']]);
@@ -60,24 +61,11 @@ try{
         if($saved!==''){$order['promised_at']=$saved;$order['promised_display']=date('H:i',strtotime($saved));}
         try{
             $push=evotor_order_notify_new((int)$order['order_id']);
-            // Beget installations do not always expose fastcgi_finish_request().
-            // The old deferred helper silently returned in that case, leaving a
-            // perfectly queued notification unsent until an external cron happened
-            // to retry it. Send the just-created rows immediately; delivery errors
-            // remain isolated from checkout because dispatch_log records and returns
-            // false instead of failing the order.
-            foreach((array)($push['log_ids']??[]) as $pushLogId){
-                evotor_order_push_dispatch_log((int)$pushLogId);
-            }
+            foreach((array)($push['log_ids']??[]) as $pushLogId){evotor_order_push_dispatch_log((int)$pushLogId);}
         }catch(Throwable $pushError){error_log('[Kapouch Evotor push enqueue] '.$pushError->getMessage());}
     }
-    if($requestedPaymentMethod==='sbp'&&(string)($order['payment_method']??'')!=='sbp'&&(float)($order['total_amount']??0)<1&&empty($order['payment_url'])){
-        $order['payment_url']=customer_public_app_url('payment-return.html?gift=1');
-    }
+    if($requestedPaymentMethod==='sbp'&&(string)($order['payment_method']??'')!=='sbp'&&(float)($order['total_amount']??0)<1&&empty($order['payment_url'])){$order['payment_url']=customer_public_app_url('payment-return.html?gift=1');}
     customer_api_reply(201,['ok'=>true,'order'=>$order]);
 }catch(JsonException $e){customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);}
 catch(RuntimeException $e){customer_api_reply(422,['ok'=>false,'error'=>$e->getMessage()]);}
-catch(Throwable $e){
-    error_log('[Kapouch customer order] '.$e->getMessage());
-    customer_api_reply(500,['ok'=>false,'error'=>'Не удалось оформить заказ. Попробуйте ещё раз.']);
-}
+catch(Throwable $e){error_log('[Kapouch customer order] '.$e->getMessage());customer_api_reply(500,['ok'=>false,'error'=>'Не удалось оформить заказ. Попробуйте ещё раз.']);}
