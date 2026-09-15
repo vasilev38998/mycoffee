@@ -1,13 +1,37 @@
 <?php
 declare(strict_types=1);
 
+function kapouch_settings_missing_table(Throwable $e): bool
+{
+    return $e instanceof PDOException && (int)($e->errorInfo[1]??0)===1146;
+}
+
+function kapouch_settings_apply_legacy_migration(string $file): void
+{
+    $migration=file_get_contents(__DIR__.'/../database/migrations/'.$file);
+    if($migration===false)throw new RuntimeException('Не удалось прочитать служебную миграцию '.$file.'.');
+    db()->exec($migration);
+}
+
 function ensure_settings_tables(): void
 {
     static $ready=false;if($ready)return;
-    try{db()->query('SELECT setting_key FROM app_settings LIMIT 1');db()->query('SELECT meta_key FROM system_meta LIMIT 1');}
-    catch(Throwable $e){$migration=file_get_contents(__DIR__.'/../database/migrations/005_settings.sql');if($migration!==false)db()->exec($migration);}
-    try{db()->query('SELECT id FROM notification_settings LIMIT 1');}
-    catch(Throwable $e){$migration=file_get_contents(__DIR__.'/../database/migrations/006_kapouch_intelligence.sql');if($migration!==false)db()->exec($migration);}
+    try{
+        db()->query('SELECT setting_key FROM app_settings LIMIT 1');
+        db()->query('SELECT meta_key FROM system_meta LIMIT 1');
+    }catch(Throwable $e){
+        // A lost/deadlocked database connection must never be mistaken for a
+        // missing table: running DDL during a transient failure can amplify an
+        // outage. Legacy bootstrap SQL is allowed only for MySQL error 1146.
+        if(!kapouch_settings_missing_table($e))throw $e;
+        kapouch_settings_apply_legacy_migration('005_settings.sql');
+    }
+    try{
+        db()->query('SELECT id FROM notification_settings LIMIT 1');
+    }catch(Throwable $e){
+        if(!kapouch_settings_missing_table($e))throw $e;
+        kapouch_settings_apply_legacy_migration('006_kapouch_intelligence.sql');
+    }
     $ready=true;
 }
 
@@ -45,9 +69,20 @@ function set_system_meta(string $key,string $value): void
 
 function migrate_evotor_times_to_irkutsk_once(): int
 {
-    ensure_settings_tables();$pdo=db();$lockName='kapouch_evotor_time_rebase';$lock=$pdo->prepare('SELECT GET_LOCK(?,10)');$lock->execute([$lockName]);
-    if((int)$lock->fetchColumn()!==1)throw new RuntimeException('Не удалось получить блокировку миграции времени Эвотор.');
+    static $checked=false;
+    if($checked)return 0;
+    $checked=true;
+    ensure_settings_tables();
+    // Almost every request reaches bootstrap. Check the one-time marker before
+    // taking any advisory lock, otherwise concurrent requests can queue behind
+    // a migration that finished long ago.
+    if(system_meta('evotor_time_rebased_to_irkutsk')==='1')return 0;
+
+    $pdo=db();$lockName='kapouch_evotor_time_rebase';$lock=$pdo->prepare('SELECT GET_LOCK(?,0)');$lock->execute([$lockName]);
+    if((int)$lock->fetchColumn()!==1)return 0;
     try{
+        // Another request may have completed the migration before we acquired
+        // the lock, so verify the marker again.
         if(system_meta('evotor_time_rebased_to_irkutsk')==='1')return 0;
         $pdo->beginTransaction();
         try{

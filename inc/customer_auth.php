@@ -45,7 +45,7 @@ function customer_auth_send_smsru(string $phone,string $code): void
     if($sender!=='')$params['from']=$sender;
     if((string)app_setting('smsru_test_mode','0')==='1')$params['test']=1;
     $ch=curl_init('https://sms.ru/sms/send');
-    curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>http_build_query($params),CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>20,CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded']]);
+    curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>http_build_query($params),CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>12,CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded']]);
     $body=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
     if($body===false||$error!=='')throw new RuntimeException('Не удалось связаться с SMS.ru.');
     if($http<200||$http>=300)throw new RuntimeException('SMS.ru вернул HTTP '.$http.'.');
@@ -105,10 +105,16 @@ function customer_auth_bearer_token(): string
 function customer_auth_current(): ?array
 {
     $token=customer_auth_bearer_token();if(!preg_match('/^[a-f0-9]{64}$/',$token))return null;
-    $stmt=db()->prepare('SELECT s.id session_id,s.customer_id,c.phone,c.name,c.loyalty_balance FROM customer_sessions s JOIN customer_accounts c ON c.id=s.customer_id WHERE s.token_hash=? AND s.expires_at>NOW() LIMIT 1');
+    $stmt=db()->prepare('SELECT s.id session_id,s.customer_id,s.last_seen_at,c.phone,c.name,c.loyalty_balance FROM customer_sessions s JOIN customer_accounts c ON c.id=s.customer_id WHERE s.token_hash=? AND s.expires_at>NOW() LIMIT 1');
     $stmt->execute([hash('sha256',$token)]);$row=$stmt->fetch();if(!$row)return null;
-    $days=customer_auth_session_days();
-    db()->prepare("UPDATE customer_sessions SET last_seen_at=NOW(),expires_at=DATE_ADD(NOW(),INTERVAL {$days} DAY) WHERE id=?")->execute([(int)$row['session_id']]);
+    // Sliding sessions used to UPDATE on every authenticated API request. With
+    // PWA polling that turns harmless reads into write contention. Touch the
+    // session at most once every five minutes; 180-day expiry remains intact.
+    $lastSeen=strtotime((string)($row['last_seen_at']??''));
+    if($lastSeen===false||$lastSeen<time()-300){
+        $days=customer_auth_session_days();
+        db()->prepare("UPDATE customer_sessions SET last_seen_at=NOW(),expires_at=DATE_ADD(NOW(),INTERVAL {$days} DAY) WHERE id=?")->execute([(int)$row['session_id']]);
+    }
     return ['session_id'=>(int)$row['session_id'],'id'=>(int)$row['customer_id'],'phone'=>(string)$row['phone'],'name'=>(string)($row['name']??''),'loyalty_balance'=>(float)$row['loyalty_balance']];
 }
 function customer_auth_require(): array{$customer=customer_auth_current();if(!$customer)throw new RuntimeException('AUTH_REQUIRED');return $customer;}

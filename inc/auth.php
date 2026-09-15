@@ -3,12 +3,16 @@ declare(strict_types=1);
 
 function current_user(): ?array
 {
-    if (empty($_SESSION['user_id'])) return null;
+    $userId=(int)($_SESSION['user_id']??0);
+    if($userId<=0)return null;
+    static $cachedId=0,$cachedUser=null;
+    if($cachedId===$userId)return $cachedUser;
     $stmt = db()->prepare('SELECT id, name, email, role, active FROM users WHERE id = ?');
-    $stmt->execute([(int)$_SESSION['user_id']]);
+    $stmt->execute([$userId]);
     $user = $stmt->fetch();
-    if(!$user || !(int)$user['active']) return null;
-    return $user;
+    $cachedId=$userId;
+    $cachedUser=(!$user || !(int)$user['active'])?null:$user;
+    return $cachedUser;
 }
 
 function require_auth(): void

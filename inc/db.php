@@ -22,6 +22,9 @@ function db(): PDO
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
+        // Do not let a saturated/unreachable MySQL server consume every PHP
+        // worker indefinitely. The request can fail and recover on retry.
+        PDO::ATTR_TIMEOUT => 5,
     ]);
 
     return $pdo;
