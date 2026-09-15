@@ -28,7 +28,7 @@ final class OrderApi {
         if (order == null) return Result.error("Заказ не найден на терминале.");
         if (order.actionUrl == null || order.actionUrl.trim().isEmpty()) return Result.error("В push нет адреса Kapouch.");
         if (order.actionToken == null || order.actionToken.isEmpty()) return Result.error("Ключ действия заказа отсутствует или уже истёк.");
-        if (!"accept".equals(action) && !"ready".equals(action)) return Result.error("Неизвестное действие заказа.");
+        if (!"accept".equals(action) && !"ready".equals(action) && !"complete".equals(action)) return Result.error("Неизвестное действие заказа.");
 
         try {
             URL url = new URL(order.actionUrl);
