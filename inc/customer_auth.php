@@ -46,9 +46,6 @@ function customer_auth_send_smsru(string $phone,string $code): void
     if($sender!=='')$params['from']=$sender;
     if($testMode)$params['test']=1;
 
-    // SMS.ru is an external network hop and may legitimately take several
-    // seconds. Do not reserve one of the hosting account's scarce MySQL
-    // connections while cURL is waiting for the provider.
     db_disconnect();
     $ch=curl_init('https://sms.ru/sms/send');
     curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>http_build_query($params),CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>4,CURLOPT_TIMEOUT=>9,CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded']]);
@@ -72,9 +69,10 @@ function customer_auth_request_code(string $rawPhone): array
     $testMode=(string)app_setting('smsru_test_mode','0')==='1';
     $code=$testMode?'999999':(string)random_int(100000,999999);
 
-    // Drop the local PDO reference as well as the global one before the slow
-    // provider request; otherwise the object would keep the socket alive.
-    $pdo=null;db_disconnect();
+    // PDOStatement keeps its owning connection alive, so release both local
+    // references before the external SMS request and then reconnect only when
+    // the code must be persisted.
+    $stmt=null;$pdo=null;db_disconnect();
     customer_auth_send_smsru($phone,$code);
 
     $pdo=db();
