@@ -4,6 +4,11 @@ DirectoryIndex index.php index.html
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
+  # Cheaply reject the most common automated reconnaissance targets before
+  # they reach PHP or the PWA rewrite. These names are not Kapouch routes.
+  RewriteRule ^(?:phpinfo|info|php-info|phpversion|old_phpinfo|server-info|server-status|debug|test|php|pi|p|i)(?:\.php)?(?:\.(?:bak|old|save|orig|swp))?/?$ - [F,L,NC]
+  RewriteRule ^(?:\.env(?:\..*)?|\.git(?:/|$)|\.svn(?:/|$)|composer\.(?:json|lock)|vendor/phpunit(?:/|$)|wp-login\.php|wp-admin(?:/|$)) - [F,L,NC]
+
   # Physical Evotor OS 4.x can reach kapouch.store over the reviewed legacy TLS
   # path but the hosting edge rejects direct /api/*.php requests with HTTP 405.
   # Keep the compatibility endpoint extensionless so the edge treats it as a
@@ -25,6 +30,9 @@ DirectoryIndex index.php index.html
   Require all denied
 </FilesMatch>
 <FilesMatch "\.(?:sql|md)$">
+  Require all denied
+</FilesMatch>
+<FilesMatch "(?i)(?:^\.|\.(?:bak|old|orig|save|swp)$|~$)">
   Require all denied
 </FilesMatch>
 
