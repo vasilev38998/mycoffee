@@ -28,6 +28,16 @@ window.addEventListener('DOMContentLoaded',function(){
   contrastStyle.href='assets/contrast-fix.css?v=1';
   document.head.appendChild(contrastStyle);
 
+  var polishStyle=document.createElement('link');
+  polishStyle.rel='stylesheet';
+  polishStyle.href='assets/pwa-polish.css?v=1';
+  document.head.appendChild(polishStyle);
+
+  var polish=document.createElement('script');
+  polish.src='assets/pwa-polish.js?v=1';
+  polish.defer=true;
+  document.body.appendChild(polish);
+
   var authRequired=document.createElement('script');
   authRequired.src='assets/auth-required.js?v=1';
   authRequired.defer=true;
