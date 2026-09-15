@@ -17,7 +17,7 @@ function installNavIcons(){
 function installHeroCup(){
   const art=document.querySelector('.hero-art');if(!art)return;
   if(art.dataset.heroSvgReady==='1')return;
-  art.innerHTML='<div class="hero-drink-frame"><img id="heroDrinkImage" class="hero-drink-image" src="assets/hero-cup.svg?v=1" alt="Стакан кофе Kapouch" width="320" height="360" decoding="async"></div>';
+  art.innerHTML='<div class="hero-drink-frame"><img id="heroDrinkImage" class="hero-drink-image" src="assets/hero-cup.svg?v=2" alt="Стакан кофе Kapouch" width="360" height="420" decoding="async"></div>';
   art.dataset.heroSvgReady='1';
 }
 function normalizePickupLabels(){
