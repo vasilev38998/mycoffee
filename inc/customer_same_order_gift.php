@@ -59,7 +59,14 @@ function customer_same_order_gift_quote(int $customerId,array $items): array
 function customer_same_order_gift_create(array $data,array $customer): array
 {
     $customerId=(int)($customer['id']??0);$items=$data['items']??[];
-    if($customerId<=0||!is_array($items)||!customer_same_order_gift_should_unlock($customerId,$items))return customer_order_create($data,$customer);
+    if($customerId<=0||!is_array($items))return customer_order_create($data,$customer);
+
+    // Checkout must not rely on a quote having run just before it. Bring any
+    // completed online/Evotor purchases into the stamp ledger first, then make
+    // the same-order decision again while holding a per-customer advisory lock.
+    customer_drink_loyalty_refresh_customer($customerId,100);
+    if(!customer_same_order_gift_should_unlock($customerId,$items))return customer_order_create($data,$customer);
+
     $lockName='customer_same_order_gift:'.$customerId;
     $locked=function_exists('kapouch_advisory_lock')?kapouch_advisory_lock($lockName,4):true;
     if(!$locked)throw new RuntimeException('Бонусная программа сейчас обновляется. Повторите оформление через пару секунд.');
@@ -69,6 +76,9 @@ function customer_same_order_gift_create(array $data,array $customer): array
     $cleanup=static function()use($pdo,$customerId,$key,&$inserted): void{if(!$inserted)return;try{customer_same_order_gift_remove_provisional($pdo,$customerId,$key);$inserted=false;}catch(Throwable $e){error_log('[Kapouch same-order gift cleanup] '.$e->getMessage());}};
     register_shutdown_function($cleanup);
     try{
+        customer_drink_loyalty_refresh_customer($customerId,100);
+        if(!customer_same_order_gift_should_unlock($customerId,$items))return customer_order_create($data,$customer);
+
         // A committed +1 lets the existing atomic redemption path treat the
         // just-earned gift exactly like an already-earned reward. The row is
         // removed immediately after order creation; the resulting -1 redemption
