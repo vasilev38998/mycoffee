@@ -48,13 +48,13 @@ final class ReceiptDiscountTrigger {
             return;
         }
         if (receipt == null || receipt.getHeader() == null || receipt.getPositions() == null || receipt.getPositions().isEmpty()) {
-            finish(listener, false, "Открытый чек пуст — скидка применится после добавления напитков");
+            finish(listener, false, "Открытый чек пуст — скидка применится при переходе к оплате");
             return;
         }
 
         List<ResolveInfo> services = app.getPackageManager().queryIntentServices(new Intent(ACTION_TRIGGER), 0);
         if (services == null || services.isEmpty()) {
-            finish(listener, false, "Эта версия Эвотора не поддерживает автоприменение скидки");
+            finish(listener, false, "Скидка применится при переходе к оплате");
             return;
         }
         ResolveInfo target = services.get(0);
@@ -77,7 +77,9 @@ final class ReceiptDiscountTrigger {
                 IntegrationManagerFuture.Result result = future == null ? null : future.getResult();
                 if (result != null && result.getError() == null) {
                     ok = true;
-                    LoyaltyDiscountApi.confirm(app, receipt.getHeader().getUuid());
+                    // KapouchDiscountService confirms the exact quoted reward after
+                    // it hands Evotor the discount result. Keep this main-thread
+                    // integration callback free of network I/O.
                     message = "Скидка Kapouch рассчитана автоматически";
                 } else if (result != null && result.getError() != null && result.getError().getMessage() != null) {
                     message = result.getError().getMessage();
