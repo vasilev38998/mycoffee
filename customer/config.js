@@ -6,10 +6,41 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
 (function(){
   var apiBase=String(window.KAPOUCH_CUSTOMER_CONFIG.apiBase||'').replace(/\/$/,'');
   var nativeFetch=window.fetch.bind(window);
+  var profileFailures=0;
+  var profileBlockedUntil=0;
+
+  function requestUrl(input){
+    if(typeof input==='string')return input;
+    if(input instanceof URL)return input.href;
+    if(input&&typeof input.url==='string')return input.url;
+    return '';
+  }
+  function isProfileRequest(input){return requestUrl(input).indexOf('/customer_profile.php')!==-1;}
+  function profileFailure(){
+    profileFailures=Math.min(6,profileFailures+1);
+    var delays=[0,10000,20000,40000,60000,120000,120000];
+    profileBlockedUntil=Date.now()+delays[profileFailures];
+  }
+  function profileSuccess(){profileFailures=0;profileBlockedUntil=0;}
+
   window.fetch=function(input,init){
     if(typeof input==='string'&&input.indexOf('../api/')===0)input=apiBase+'/'+input.slice('../api/'.length);
     else if(input instanceof URL&&input.href.indexOf(new URL('../api/',window.location.href).href)===0)input=new URL(apiBase+'/'+input.href.slice(new URL('../api/',window.location.href).href.length));
-    return nativeFetch(input,init);
+
+    var profile=isProfileRequest(input);
+    if(profile&&Date.now()<profileBlockedUntil){
+      return Promise.reject(new TypeError('Kapouch profile endpoint is cooling down after a server error'));
+    }
+    return nativeFetch(input,init).then(function(response){
+      if(profile){
+        if(response.ok||((response.status>=400&&response.status<500)&&response.status!==429))profileSuccess();
+        else profileFailure();
+      }
+      return response;
+    },function(error){
+      if(profile)profileFailure();
+      throw error;
+    });
   };
 })();
 window.addEventListener('DOMContentLoaded',function(){
