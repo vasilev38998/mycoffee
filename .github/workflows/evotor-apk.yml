@@ -66,7 +66,7 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate Evotor 1.2.24 source contract
+      - name: Validate Evotor 1.2.25 source contract
         run: |
           set -euo pipefail
           BUILD=evotor-app/app/build.gradle
@@ -74,6 +74,9 @@ jobs:
           HOSTNAME=evotor-app/app/src/main/java/ru/kapouch/evotor/EvotorHostnameVerifier.java
           ORDER=evotor-app/app/src/main/java/ru/kapouch/evotor/OrderApi.java
           LOYALTY=evotor-app/app/src/main/java/ru/kapouch/evotor/LoyaltyApi.java
+          LOYALTY_DISCOUNT=evotor-app/app/src/main/java/ru/kapouch/evotor/LoyaltyDiscountApi.java
+          DISCOUNT_SERVICE=evotor-app/app/src/main/java/ru/kapouch/evotor/KapouchDiscountService.java
+          DISCOUNT_TRIGGER=evotor-app/app/src/main/java/ru/kapouch/evotor/ReceiptDiscountTrigger.java
           BRIDGE=api/evotor_bridge.php
           HTACCESS=.htaccess
           MAIN=evotor-app/app/src/main/java/ru/kapouch/evotor/MainActivity.java
@@ -86,8 +89,8 @@ jobs:
           OLD_HEX_B='f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66e881a49a8812973b'
 
           grep -q "minSdkVersion 22" "$BUILD"
-          grep -q "versionCode 31" "$BUILD"
-          grep -q "versionName '1.2.24'" "$BUILD"
+          grep -q "versionCode 32" "$BUILD"
+          grep -q "versionName '1.2.25'" "$BUILD"
           grep -q "integration-library:v0.4.36" "$BUILD"
 
           php -l "$BRIDGE"
@@ -115,6 +118,7 @@ jobs:
           grep -q 'Base64.URL_SAFE' "$LOYALTY"
           grep -q 'Kapouch-Orders-Evotor/1.2.24' "$ORDER"
           grep -q 'Kapouch-Orders-Evotor/1.2.24' "$LOYALTY"
+          grep -q 'Kapouch-Orders-Evotor/1.2.25' "$LOYALTY_DISCOUNT"
 
           grep -q 'SSLCertificateSocketFactory' "$TLS"
           grep -q 'CombinedTrustManager' "$TLS"
@@ -132,7 +136,7 @@ jobs:
           grep -q 'KAPOUCH_HOST.equalsIgnoreCase(hostname)' "$HOSTNAME"
           grep -Fq "$HEX_A" "$HOSTNAME"
           grep -Fq "$HEX_B" "$HOSTNAME"
-          if grep -Eq 'TrustAll|ALLOW_ALL_HOSTNAME_VERIFIER' "$TLS" "$HOSTNAME" "$ORDER" "$LOYALTY"; then
+          if grep -Eq 'TrustAll|ALLOW_ALL_HOSTNAME_VERIFIER' "$TLS" "$HOSTNAME" "$ORDER" "$LOYALTY" "$LOYALTY_DISCOUNT"; then
             echo 'TLS trust or hostname verification is too broad.' >&2
             exit 1
           fi
@@ -146,14 +150,24 @@ jobs:
           fi
 
           grep -q 'ru.evotor.permission.SELL_INTEGRATION_SERVICE' "$MANIFEST"
+          grep -q 'ru.evotor.permission.TRIGGER_RECEIPT_DISCOUNT_EVENT' "$MANIFEST"
           grep -q 'ru.evotor.event.sell.BARCODE_RECEIVED' "$MANIFEST"
+          grep -q 'evo.v2.receipt.sell.receiptDiscount' "$MANIFEST"
           grep -q 'KapouchSellIntegrationService' "$MANIFEST"
+          grep -q 'KapouchDiscountService' "$MANIFEST"
           grep -q 'CustomerLinkService' "$MANIFEST"
           grep -q 'extends SellIntegrationService' "$SELL"
           grep -q 'CustomerScanReceiver.KAPOUCH_PREFIX' "$SELL"
           grep -q 'Collections.emptyList()' "$SELL"
           grep -q 'extends IntentService' "$LINK"
           grep -q 'LoyaltyApi.lookup' "$LINK"
+          grep -q 'ReceiptDiscountTrigger.trigger' "$LINK"
+          grep -q 'extends IntegrationService' "$DISCOUNT_SERVICE"
+          grep -q 'ReceiptDiscountEventResult' "$DISCOUNT_SERVICE"
+          grep -q 'LoyaltyDiscountApi.quote' "$DISCOUNT_SERVICE"
+          grep -q 'ACTION_TRIGGER_RECEIPT_DISCOUNT_EVENT' "$DISCOUNT_TRIGGER"
+          grep -q 'KEY_LOYALTY_CARD_ID' "$DISCOUNT_TRIGGER"
+          grep -q 'LoyaltyDiscountApi.confirm' "$DISCOUNT_TRIGGER"
 
           for cert in isrg_root_x1 isrg_root_x2 isrg_root_ye isrg_root_yr digicert_global_root_ca; do
             test -s "$RAW/$cert.pem"
@@ -185,19 +199,25 @@ jobs:
 
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='31' versionName='1.2.24'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='32' versionName='1.2.25'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'22'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
 
           "$AAPT" dump xmltree "$APK" AndroidManifest.xml > /tmp/evotor-manifest.txt
           grep -q 'ru.evotor.event.sell.BARCODE_RECEIVED' /tmp/evotor-manifest.txt
+          grep -q 'ru.evotor.permission.TRIGGER_RECEIPT_DISCOUNT_EVENT' /tmp/evotor-manifest.txt
+          grep -q 'evo.v2.receipt.sell.receiptDiscount' /tmp/evotor-manifest.txt
           grep -q 'KapouchSellIntegrationService' /tmp/evotor-manifest.txt
+          grep -q 'KapouchDiscountService' /tmp/evotor-manifest.txt
 
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch-Orders-Evotor/1.2.24' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.25' /tmp/evotor-dex-strings.txt
           grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=order' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=loyalty' /tmp/evotor-dex-strings.txt
+          grep -q 'evotor.intent.action.ACTION_TRIGGER_RECEIPT_DISCOUNT_EVENT' /tmp/evotor-dex-strings.txt
+          grep -q 'evotor_loyalty_discount.php' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch_evotor=' /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_A" /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_B" /tmp/evotor-dex-strings.txt
