@@ -107,7 +107,7 @@ public class MainActivity extends Activity {
         root.addView(customerScanButton);
 
         TextView scanHint = new TextView(this);
-        scanHint.setText("Для карты клиента сначала откройте Kapouch и нажмите эту кнопку, затем сканируйте QR. Не сканируйте QR клиента на экране «Продажа» — Эвотор считает любой QR там штрихкодом товара.");
+        scanHint.setText("На экране «Продажа» просто отсканируйте QR-карту Kapouch — клиент привяжется к следующей продаже. Кнопка ниже остаётся резервным способом, если сканирование в «Продажа» недоступно.");
         scanHint.setTextSize(13);
         scanHint.setTextColor(Color.GRAY);
         scanHint.setPadding(0, dp(8), 0, dp(26));
@@ -229,7 +229,7 @@ public class MainActivity extends Activity {
         String balance = prefs.getString(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_BALANCE, "");
         long at = prefs.getLong(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_AT, 0L);
         if (name == null || name.trim().isEmpty()) {
-            customerStatus.setText("Клиент не выбран. Нажмите кнопку ниже перед сканированием QR-карты.");
+            customerStatus.setText("Клиент не выбран. Отсканируйте QR-карту на экране «Продажа» или используйте резервную кнопку ниже.");
             return;
         }
         String when = at > 0

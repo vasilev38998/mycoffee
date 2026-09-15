@@ -146,7 +146,7 @@ final class LoyaltyApi {
         HttpsURLConnection connection = openBase(context, url);
         connection.setRequestProperty("Accept", "application/json");
         connection.setRequestProperty("Cache-Control", "no-store");
-        connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.23");
+        connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.24");
         return connection;
     }
 
