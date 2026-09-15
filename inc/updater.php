@@ -69,6 +69,10 @@ function kapouch_ensure_migration_registry(PDO $pdo): void
         return;
     }catch(Throwable $e){
         if(!kapouch_migration_missing_table($e))throw $e;
+        // Another request may have created the registry between the failed
+        // SELECT and this branch. Keep the old race guard, but only on the rare
+        // missing-table path so normal traffic avoids information_schema.
+        if(kapouch_table_exists($pdo,'schema_migrations')){$ready[$key]=true;return;}
     }
     $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
         migration VARCHAR(190) PRIMARY KEY,
