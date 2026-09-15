@@ -77,9 +77,9 @@ final class ReceiptDiscountTrigger {
                 IntegrationManagerFuture.Result result = future == null ? null : future.getResult();
                 if (result != null && result.getError() == null) {
                     ok = true;
-                    // KapouchDiscountService confirms the exact quoted reward after
-                    // it hands Evotor the discount result. Keep this main-thread
-                    // integration callback free of network I/O.
+                    // KapouchDiscountService owns server confirmation and calls
+                    // LoyaltyDiscountApi.confirm after Evotor accepts its result.
+                    // Keep this main-thread integration callback free of network I/O.
                     message = "Скидка Kapouch рассчитана автоматически";
                 } else if (result != null && result.getError() != null && result.getError().getMessage() != null) {
                     message = result.getError().getMessage();
