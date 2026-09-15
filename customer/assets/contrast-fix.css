@@ -1,0 +1,115 @@
+/*
+ * Light-theme compatibility layer.
+ *
+ * The customer catalog can still return legacy dark theme tokens and several
+ * older feature modules inject dark component styles at runtime. The v3 PWA
+ * is intentionally light, so lock the structural tokens here and normalize
+ * those legacy surfaces. Keep --accent configurable, but never let old
+ * background/text settings make content unreadable.
+ */
+:root{
+  --bg:#f4eee7!important;
+  --surface:#fffaf4!important;
+  --surface2:#f0e3d7!important;
+  --text:#251812!important;
+  --muted:#74645a!important;
+  --line:rgba(69,42,27,.12)!important;
+  --danger:#b83f36!important;
+}
+
+html,body,.pwa-app{background:#f4eee7!important;color:#251812!important}
+body{background:linear-gradient(180deg,#fbf7f1 0,#f4eee7 48%,#efe5dc 100%)!important}
+.app-header{background:rgba(250,246,240,.94)!important;border-bottom-color:rgba(69,42,27,.08)!important}
+.location-button{color:#2b1a13!important}.location-button b{color:#806b5d!important}
+
+/* High-contrast typography on light surfaces. */
+.page-head h1,.section-title h2,.product-card h3,.cart-item h3,.profile-card h2,.checkout-line.total span,.checkout-line.total strong{color:#2b1a13!important}
+.page-head p,.product-meta,.cart-item small,.profile-card p,.auth-hint,.checkout-line,.payment-online-note,.modifier-group-head span,.variant-picker-title span{color:#74645a!important}
+.eyebrow-client,.section-kicker{color:#9a4d25!important}
+.hero-v2 .eyebrow-client{color:#ffdca7!important}
+.about-card .eyebrow-client{color:#713716!important}
+.empty-state{color:#74645a!important}.empty-state strong{color:#2b1a13!important}
+
+/* Product and menu cards must stay light even if the shop still stores the old dark surface token. */
+.product-card{background:#fffaf4!important;border-color:rgba(69,42,27,.10)!important;color:#251812!important;box-shadow:0 12px 32px rgba(74,44,27,.08)!important}
+.product-card .product-card-body{background:#fffaf4!important}
+.product-card .bottom strong{color:#2b1a13!important}
+.product-card .variant-hint{color:#a65328!important}
+.category-tab{background:#fffaf4!important;color:#67564b!important;border-color:rgba(69,42,27,.12)!important}
+.category-tab.active{background:#3b2216!important;color:#fff8ee!important;border-color:#3b2216!important}
+.search-toggle{background:#fffaf4!important;color:#2b1a13!important}
+
+/* Forms and checkout. */
+.search-box input,.checkout-form input,.checkout-form textarea,.auth-form input,.profile-compact-details .auth-form input{
+  background:#fffdf9!important;color:#251812!important;border-color:rgba(69,42,27,.14)!important;
+}
+.search-box input::placeholder,.checkout-form input::placeholder,.checkout-form textarea::placeholder,.auth-form input::placeholder{color:#9a8c82!important;opacity:1!important}
+.checkout-card,.cart-item,.profile-card,.links-card,.profile-row{background:#fffaf4!important;color:#251812!important;border-color:rgba(69,42,27,.10)!important}
+.checkout-line strong{color:#2b1a13!important}
+.loyalty-preview{background:#fff0dc!important;color:#8b4926!important}
+.payment-methods-title{color:#2b1a13!important}
+.payment-method{background:#fffaf4!important;color:#251812!important;border-color:rgba(69,42,27,.14)!important}
+.payment-method:has(input:checked){background:#fff1df!important;border-color:#d98a42!important}
+.payment-method-copy strong{color:#2b1a13!important}.payment-method-copy span{color:#74645a!important}
+.legal-consent{background:#f7efe6!important;color:#5f5046!important;border-color:rgba(69,42,27,.12)!important}
+.legal-consent a{color:#9a4d25!important}
+.checkout-auth-required,.sixth-drink-checkout{background:#fff0dc!important;color:#4d3020!important;border-color:rgba(193,112,47,.26)!important}
+.sixth-drink-checkout-row span{color:#4d3020!important}.sixth-drink-checkout small{color:#74645a!important}
+
+/* Product sheet options: old modules hard-coded near-black backgrounds. */
+.product-sheet{background:#fbf7f2!important;color:#251812!important}
+.product-detail h2,.product-detail strong,.modifier-group-head strong{color:#2b1a13!important}
+.product-detail p{color:#74645a!important}
+.variant-option,.modifier-option{background:#fffaf4!important;color:#251812!important;border-color:rgba(69,42,27,.13)!important}
+.variant-option span{color:#74645a!important}.variant-option.active,.modifier-option.active{background:#fff0dc!important;border-color:#cf7834!important}
+.modifier-option .check{border-color:rgba(69,42,27,.25)!important}
+.cart-modifier{background:#f7e5d3!important;color:#8b4926!important}.cart-line-price{color:#74645a!important}
+.qty-control button{background:#f7efe6!important;color:#2b1a13!important;border-color:rgba(69,42,27,.12)!important}
+
+/* Profile modules injected after page load. */
+.profile-fold{background:#fffaf4!important;border-color:rgba(69,42,27,.10)!important;box-shadow:0 8px 24px rgba(70,42,24,.06)!important}
+.profile-fold-summary strong{color:#2b1a13!important}.profile-fold-summary span{color:#74645a!important}
+.profile-stat,.loyalty-summary{background:#f7efe6!important;border-color:rgba(69,42,27,.08)!important;color:#251812!important}
+.profile-stat span,.loyalty-summary span,.profile-edit-note{color:#74645a!important}
+.profile-stat strong{color:#2b1a13!important}
+.links-card a{background:#f3e7dc!important;color:#3c261b!important}
+.order-tools button{background:#fffaf4!important;color:#67564b!important;border-color:rgba(69,42,27,.12)!important}
+.order-tools button.active{background:#3b2216!important;color:#fff8ee!important;border-color:#3b2216!important}
+.order-detail-btn,.repeat-order-btn{background:#3b2216!important;color:#fff8ee!important;border-color:#3b2216!important}
+
+/* Home personalization and active-order modules. */
+.quick-repeat-card,.growth-promo,.personal-offer,.level-card,.current-order-card{
+  background:#fffaf4!important;color:#251812!important;border-color:rgba(69,42,27,.11)!important;box-shadow:0 12px 30px rgba(70,42,24,.08)!important;
+}
+.quick-repeat-card strong,.growth-promo h3,.personal-offer h3,.level-card strong,.current-order-head h3{color:#2b1a13!important}
+.quick-repeat-card span,.growth-promo p,.personal-offer p,.level-card span,.current-order-head p{color:#74645a!important}
+.current-order-dismiss{background:#f3e7dc!important;color:#5d493d!important;border-color:rgba(69,42,27,.11)!important}
+.order-step{color:#8c7a6d!important}.order-step.done,.order-step.active{color:#6d3b21!important}
+.order-step:before,.order-step:after{background:#d8c9bd!important;border-color:#c9b7a9!important}
+.current-order-body{border-top-color:rgba(69,42,27,.09)!important}
+.current-order-meta div{background:#f7efe6!important}.current-order-meta span{color:#74645a!important}.current-order-meta strong{color:#2b1a13!important}
+.current-order-line span{color:#4e3d33!important}.current-order-line b{color:#2b1a13!important}
+.current-order-actions button{background:#f3e7dc!important;color:#3b281d!important;border-color:rgba(69,42,27,.12)!important}
+.current-order-actions .primary{background:var(--accent)!important;color:#2b1a13!important}
+
+/* Scheduled pickup and order-detail sheet. */
+.pickup-time-field span{color:#6f5d51!important}.pickup-time-field select{background:#fffaf4!important;color:#251812!important;border-color:rgba(69,42,27,.14)!important}
+.growth-backdrop{background:rgba(46,30,20,.55)!important}
+.growth-sheet{background:#fbf7f2!important;color:#251812!important}
+.growth-sheet-head button{background:#f0e3d7!important;color:#3b281d!important}
+.detail-meta div{background:#f3e7dc!important}.detail-meta span{color:#74645a!important}.detail-meta strong{color:#2b1a13!important}
+.detail-line{border-bottom-color:rgba(69,42,27,.10)!important;color:#3b281d!important}
+
+/* Legal information on the home/profile screens, not the standalone legal page. */
+.home-legal-footer{border-top-color:rgba(69,42,27,.10)!important;color:#74645a!important}
+.home-legal-footer-title{color:#3b281d!important}.home-legal-footer-seller,.home-legal-footer-contact{color:#74645a!important}
+.home-legal-footer a,.view .pwa-legal-links a{color:#9a4d25!important}
+
+/* Preserve intentional dark brand cards. */
+.hero-v2,.balance-card,.profile-balance{color:#fff9f2!important}
+.balance-card .balance-copy>span,.balance-card .balance-copy>em,.profile-balance span,.profile-balance em{color:#d3c0b1!important}
+.balance-card strong,.profile-balance strong{color:#fff9f2!important}
+
+@media(max-width:480px){
+  .product-card .product-card-body{min-height:132px}
+}
