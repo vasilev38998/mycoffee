@@ -2,6 +2,8 @@
 require __DIR__.'/inc/bootstrap.php';
 require_auth();
 require_once __DIR__.'/inc/online_orders.php';
+require_once __DIR__.'/inc/customer_payments.php';
+require_once __DIR__.'/inc/customer_loyalty.php';
 
 $filter=(string)($_GET['filter']??'active');
 if(!in_array($filter,['active','done','all'],true))$filter='active';
@@ -14,6 +16,25 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
         if($action==='status'){
             online_orders_transition((int)($_POST['id']??0),(string)($_POST['status']??''));
             flash('success','Статус заказа обновлён.');
+        }elseif($action==='cancel_refund'){
+            if(!$canManage)throw new RuntimeException('Недостаточно прав для возврата оплаты.');
+            $orderId=(int)($_POST['id']??0);
+            if($orderId<=0)throw new RuntimeException('Заказ не найден.');
+            $stmt=db()->prepare('SELECT id,order_number,status,payment_status,payment_provider,total_amount FROM online_orders WHERE id=? LIMIT 1');
+            $stmt->execute([$orderId]);$order=$stmt->fetch();
+            if(!$order)throw new RuntimeException('Заказ не найден.');
+            if(!in_array((string)$order['status'],['new','preparing','ready'],true))throw new RuntimeException('Отменить можно только активный заказ.');
+            if((string)$order['payment_status']!=='paid'||(string)$order['payment_provider']!=='yookassa_sbp')throw new RuntimeException('Автоматический возврат доступен только для оплаченного СБП-заказа.');
+            $result=customer_payment_yookassa_refund_full($orderId);
+            $state=(string)($result['status']??'');
+            if($state==='succeeded'){
+                $reversed=customer_loyalty_reverse_order($orderId);
+                flash('success','Заказ #'.(string)$order['order_number'].' отменён. '.number_format((float)$order['total_amount'],2,',',' ').' ₽ отправлены покупателю через ЮKassa.'.($reversed>0?' Начисленные бонусы отменены.':''));
+            }elseif($state==='pending'){
+                flash('warning','Возврат для заказа #'.(string)$order['order_number'].' отправлен в ЮKassa. Заказ отменится автоматически после подтверждения возврата.');
+            }else{
+                throw new RuntimeException('ЮKassa не выполнила возврат. Статус: '.($state!==''?$state:'неизвестно').'.');
+            }
         }elseif($action==='test'){
             $id=online_orders_create_test();
             flash('success','Тестовый заказ #'.$id.' создан тем же обработчиком, что используется для реальных заказов.');
@@ -59,7 +80,7 @@ page_header('Онлайн-заказы');
 <div id="orderBoard"></div>
 
 <?php if($canManage):?>
-<div class="card section"><div class="chart-head"><div><h2>Тестирование</h2><p>Тестовый заказ теперь создаётся через тот же обработчик JSON, что и реальный заказ с сайта.</p></div></div><div class="actions"><form method="post"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="test"><button class="btn primary">Создать тестовый заказ</button></form><form method="post" onsubmit="return confirm('Удалить все тестовые заказы Kapouch?')"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="clear_tests"><button class="btn ghost">Удалить тестовые</button></form></div></div>
+<div class="card section"><div class="chart-head"><div><h2>Тестирование</h2><p>Тестовый заказ теперь создаётся через тот же обработчик JSON, что используется для реальных заказов.</p></div></div><div class="actions"><form method="post"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="test"><button class="btn primary">Создать тестовый заказ</button></form><form method="post" onsubmit="return confirm('Удалить все тестовые заказы Kapouch?')"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="clear_tests"><button class="btn ghost">Удалить тестовые</button></form></div></div>
 
 <div class="card section"><div class="chart-head"><div><h2>Получение заказов с отдельного сайта</h2><p>Основной push API работает мгновенно. Дополнительно cron раз в минуту может сам забирать список заказов с указанного URL — это резервный или самостоятельный способ интеграции.</p></div></div><form method="post" class="stack"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="pull_settings"><label>URL JSON-ленты заказов<input type="url" name="pull_url" value="<?=e($pullUrl)?>" placeholder="https://site.ru/api/kapouch/orders"></label><label>Bearer-токен сайта-источника <span class="muted"><?=$pullTokenSet?'токен уже сохранён — оставьте пустым, чтобы не менять':''?></span><input type="password" name="pull_token" autocomplete="new-password" placeholder="Необязательно"></label><?php if($pullTokenSet):?><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="clear_pull_token" value="1" style="width:auto"> Удалить сохранённый токен источника</label><?php endif;?><div><button class="btn primary">Сохранить настройки cron</button></div></form><div class="actions" style="margin-top:12px"><form method="post"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="pull_now"><button class="btn ghost">Проверить синхронизацию сейчас</button></form></div><div class="muted" style="font-size:12px;margin-top:10px">Последний успешный запуск: <?=e($lastPull?:'ещё не было')?><?=$lastPullError?' · последняя ошибка: '.e($lastPullError):''?></div></div>
 
@@ -68,13 +89,15 @@ page_header('Онлайн-заказы');
 
 <script>
 (function(){
-const board=document.getElementById('orderBoard'),filter=<?=json_encode($filter)?>,csrf=<?=json_encode(csrf_token(),JSON_UNESCAPED_UNICODE)?>,initialOrders=<?=json_encode($orders,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>;
+const board=document.getElementById('orderBoard'),filter=<?=json_encode($filter)?>,csrf=<?=json_encode(csrf_token(),JSON_UNESCAPED_UNICODE)?>,canRefund=<?=json_encode($canManage)?>,initialOrders=<?=json_encode($orders,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?>;
 let lastNewId=0,sound=false,firstLoad=true,pollTimer=null,polling=false;
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 function qty(v){const n=Number(v||0);return Number.isInteger(n)?String(n):n.toLocaleString('ru-RU',{maximumFractionDigits:3});}
 function age(sec){sec=Math.max(0,Number(sec||0));if(sec<60)return 'только что';const min=Math.floor(sec/60);if(min<60)return min+' мин назад';const h=Math.floor(min/60);return h+' ч '+(min%60)+' мин назад';}
 function actionButton(o,status,label,primary){return '<form method="post"><input type="hidden" name="csrf" value="'+esc(csrf)+'"><input type="hidden" name="action" value="status"><input type="hidden" name="id" value="'+Number(o.id)+'"><input type="hidden" name="status" value="'+esc(status)+'"><button class="btn '+(primary?'primary':'ghost')+'">'+esc(label)+'</button></form>';}
-function card(o){let items=(o.items||[]).map(i=>'<div class="order-item"><div class="order-item-name">'+esc(i.product_name)+(i.variant_name?'<small>'+esc(i.variant_name)+'</small>':'')+(i.item_comment?'<small>💬 '+esc(i.item_comment)+'</small>':'')+'</div><div class="order-qty">× '+qty(i.quantity)+'</div></div>').join('');let actions='';if(o.status==='new')actions=actionButton(o,'preparing','Начать готовить',true)+actionButton(o,'ready','Готов',false)+actionButton(o,'cancelled','Отменить',false);if(o.status==='preparing')actions=actionButton(o,'ready','Готов',true)+actionButton(o,'cancelled','Отменить',false);if(o.status==='ready')actions=actionButton(o,'completed','Выдать',true)+actionButton(o,'preparing','Вернуть в готовку',false);return '<article class="order-card" data-status="'+esc(o.status)+'"><div class="order-head"><div><div class="order-number">#'+esc(o.order_number)+'</div><div class="order-age">'+age(o.age_seconds)+' · '+esc(o.created_display||'')+'</div></div><div class="order-status">'+esc(o.status_label)+'</div></div><div class="order-meta">'+(o.customer_name?'<span>👤 '+esc(o.customer_name)+'</span>':'')+'<span>'+(o.fulfillment_type==='delivery'?'🚚':'☕')+' '+esc(o.fulfillment_display||'Самовывоз')+'</span>'+(o.promised_display?'<span>⏱ к '+esc(o.promised_display)+'</span>':'')+(o.payment_status?'<span>💳 '+esc(o.payment_label)+'</span>':'')+'</div><div class="order-items">'+items+'</div>'+(o.customer_comment?'<div class="order-comment">💬 '+esc(o.customer_comment)+'</div>':'')+'<div class="order-total">'+Number(o.total_amount||0).toLocaleString('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:2})+' ₽</div><div class="order-actions">'+actions+'</div></article>';}
+function paidSbp(o){return o.payment_status==='paid'&&o.payment_provider==='yookassa_sbp';}
+function cancelButton(o){if(!paidSbp(o))return actionButton(o,'cancelled','Отменить',false);if(!canRefund)return '';return '<form method="post" onsubmit="return confirm(\'Отменить заказ и вернуть покупателю всю оплаченную сумму через ЮKassa?\')"><input type="hidden" name="csrf" value="'+esc(csrf)+'"><input type="hidden" name="action" value="cancel_refund"><input type="hidden" name="id" value="'+Number(o.id)+'"><button class="btn danger">Отменить и вернуть деньги</button></form>';}
+function card(o){let items=(o.items||[]).map(i=>'<div class="order-item"><div class="order-item-name">'+esc(i.product_name)+(i.variant_name?'<small>'+esc(i.variant_name)+'</small>':'')+(i.item_comment?'<small>💬 '+esc(i.item_comment)+'</small>':'')+'</div><div class="order-qty">× '+qty(i.quantity)+'</div></div>').join('');let actions='';if(o.status==='new')actions=actionButton(o,'preparing','Начать готовить',true)+actionButton(o,'ready','Готов',false)+cancelButton(o);if(o.status==='preparing')actions=actionButton(o,'ready','Готов',true)+cancelButton(o);if(o.status==='ready')actions=actionButton(o,'completed','Выдать',true)+actionButton(o,'preparing','Вернуть в готовку',false);return '<article class="order-card" data-status="'+esc(o.status)+'"><div class="order-head"><div><div class="order-number">#'+esc(o.order_number)+'</div><div class="order-age">'+age(o.age_seconds)+' · '+esc(o.created_display||'')+'</div></div><div class="order-status">'+esc(o.status_label)+'</div></div><div class="order-meta">'+(o.customer_name?'<span>👤 '+esc(o.customer_name)+'</span>':'')+'<span>'+(o.fulfillment_type==='delivery'?'🚚':'☕')+' '+esc(o.fulfillment_display||'Самовывоз')+'</span>'+(o.promised_display?'<span>⏱ к '+esc(o.promised_display)+'</span>':'')+(o.payment_status?'<span>💳 '+esc(o.payment_label)+'</span>':'')+'</div><div class="order-items">'+items+'</div>'+(o.customer_comment?'<div class="order-comment">💬 '+esc(o.customer_comment)+'</div>':'')+'<div class="order-total">'+Number(o.total_amount||0).toLocaleString('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:2})+' ₽</div><div class="order-actions">'+actions+'</div></article>';}
 function lane(status,label,orders){const rows=orders.filter(o=>o.status===status);return '<section class="order-lane"><div class="lane-head"><h2>'+esc(label)+'</h2><span class="lane-count">'+rows.length+'</span></div><div class="lane-cards">'+(rows.length?rows.map(card).join(''):'<div class="lane-empty">Нет заказов</div>')+'</div></section>';}
 function render(orders){const definitions=filter==='active'?[['new','Новые'],['preparing','Готовятся'],['ready','Готовы']]:filter==='done'?[['completed','Выданы'],['cancelled','Отменены']]:[['new','Новые'],['preparing','Готовятся'],['ready','Готовы'],['completed','Выданы'],['cancelled','Отменены']];board.innerHTML='<div class="order-lanes">'+definitions.map(d=>lane(d[0],d[1],orders)).join('')+'</div>';}
 function beep(){if(!sound)return;try{const C=window.AudioContext||window.webkitAudioContext,ctx=new C(),osc=ctx.createOscillator(),gain=ctx.createGain();osc.connect(gain);gain.connect(ctx.destination);osc.frequency.value=880;gain.gain.value=.12;osc.start();setTimeout(()=>{osc.stop();ctx.close();},180);}catch(e){}}

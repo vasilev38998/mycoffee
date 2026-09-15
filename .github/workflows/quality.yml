@@ -70,6 +70,9 @@ jobs:
       - name: Hosting stability and SBP return contract
         run: php tests/hosting_stability_payment_return_contract.php
 
+      - name: Online order SBP cancel/refund contract
+        run: php tests/online_order_sbp_cancel_refund_contract.php
+
       - name: JavaScript syntax
         run: |
           set -euo pipefail
