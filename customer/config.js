@@ -61,11 +61,11 @@ window.addEventListener('DOMContentLoaded',function(){
 
   var polishStyle=document.createElement('link');
   polishStyle.rel='stylesheet';
-  polishStyle.href='assets/pwa-polish.css?v=1';
+  polishStyle.href='assets/pwa-polish.css?v=2';
   document.head.appendChild(polishStyle);
 
   var polish=document.createElement('script');
-  polish.src='assets/pwa-polish.js?v=1';
+  polish.src='assets/pwa-polish.js?v=2';
   polish.defer=true;
   document.body.appendChild(polish);
 
