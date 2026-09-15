@@ -20,7 +20,7 @@ $checks=[
     'payment return accepts token from query'=>str_contains($return,"params.get('token')")&&str_contains($return,"localStorage.setItem('kapouch_tracking_token',queryToken)"),
     'payment return scrubs token from address bar'=>str_contains($return,'history.replaceState'),
     'profile fetch circuit breaker is enabled'=>str_contains($config,'profileBlockedUntil')&&str_contains($config,'customer_profile.php'),
-    'PWA shell cache bumped'=>str_contains($sw,"kapouch-pwa-v36"),
+    'PWA shell cache bumped'=>str_contains($sw,"kapouch-pwa-v37"),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"Hosting/SBP contract failed: {$label}\n");exit(1);}}
 echo "HOSTING STABILITY / SBP RETURN CONTRACT PASSED\n";
