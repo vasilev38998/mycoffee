@@ -48,6 +48,10 @@ function kapouch_migration_checksum_matches(string $recorded, string $sql): bool
 
 function kapouch_ensure_migration_registry(PDO $pdo): void
 {
+    static $ready=[];
+    $key=spl_object_id($pdo);
+    if(isset($ready[$key]))return;
+    if(kapouch_table_exists($pdo,'schema_migrations')){$ready[$key]=true;return;}
     $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
         migration VARCHAR(190) PRIMARY KEY,
         migration_number INT UNSIGNED NOT NULL,
@@ -60,6 +64,7 @@ function kapouch_ensure_migration_registry(PDO $pdo): void
         KEY idx_schema_migrations_number (migration_number),
         KEY idx_schema_migrations_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $ready[$key]=true;
 }
 
 function kapouch_table_exists(PDO $pdo, string $table): bool
