@@ -6,6 +6,8 @@
     <uses-permission android:name="ru.evotor.pushnotifications.PUSH_RECEIVE" />
     <uses-permission android:name="ru.evotor.devices.SCANNER_RECEIVER" />
     <uses-permission android:name="ru.evotor.permission.SELL_INTEGRATION_SERVICE" />
+    <uses-permission android:name="ru.evotor.permission.TRIGGER_RECEIPT_DISCOUNT_EVENT" />
+    <uses-permission android:name="ru.evotor.permission.RECEIPT_DISCOUNT_REQUIRED_EVENT" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" />
 
@@ -40,6 +42,26 @@
             android:permission="ru.evotor.permission.SELL_INTEGRATION_SERVICE">
             <intent-filter>
                 <action android:name="ru.evotor.event.sell.BARCODE_RECEIVED" />
+                <category android:name="android.intent.category.EVOTOR" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".KapouchDiscountRequiredService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="evo.v2.receipt.sell.receiptDiscountRequiredEvent" />
+                <category android:name="android.intent.category.EVOTOR" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".KapouchDiscountService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="evo.v2.receipt.sell.receiptDiscount" />
                 <category android:name="android.intent.category.EVOTOR" />
             </intent-filter>
         </service>

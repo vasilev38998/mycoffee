@@ -35,9 +35,11 @@ public final class CustomerLinkService extends IntentService {
         if (code == null || !code.startsWith(CustomerScanReceiver.KAPOUCH_PREFIX)) return;
 
         String message;
+        boolean linked = false;
         try {
             LoyaltyApi.Result result = LoyaltyApi.lookup(getApplicationContext(), code);
-            message = saveResult(result);
+            linked = result != null && result.ok;
+            message = saveResult(result, code);
         } catch (RuntimeException e) {
             String detail = e.getMessage();
             if (detail == null || detail.trim().isEmpty()) detail = e.getClass().getSimpleName();
@@ -48,15 +50,26 @@ public final class CustomerLinkService extends IntentService {
         final String toastMessage = message;
         new Handler(Looper.getMainLooper()).post(() ->
                 Toast.makeText(getApplicationContext(), toastMessage, Toast.LENGTH_LONG).show());
+
+        if (linked) {
+            ReceiptDiscountTrigger.trigger(getApplicationContext(), code, (applied, detail) -> {
+                if (!applied || detail == null || detail.trim().isEmpty()) return;
+                Toast.makeText(getApplicationContext(), detail, Toast.LENGTH_SHORT).show();
+            });
+        }
     }
 
-    private String saveResult(LoyaltyApi.Result result) {
+    private String saveResult(LoyaltyApi.Result result, String code) {
         if (result == null) {
             saveLastMessage("QR-карта Kapouch", "Kapouch не вернул результат проверки клиента.");
             return "Kapouch: не удалось проверить клиента";
         }
 
         if (!result.ok) {
+            getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .remove(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_CODE)
+                    .apply();
             String error = result.error == null || result.error.trim().isEmpty()
                     ? "Не удалось проверить клиента."
                     : result.error;
@@ -82,6 +95,7 @@ public final class CustomerLinkService extends IntentService {
         prefs.edit()
                 .putString(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_NAME, result.name)
                 .putString(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_BALANCE, balance)
+                .putString(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_CODE, code)
                 .putLong(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_AT, now)
                 .putString(MainActivity.KEY_LAST_TITLE, "Клиент Kapouch определён")
                 .putString(MainActivity.KEY_LAST_DESCRIPTION, message)

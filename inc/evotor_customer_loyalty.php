@@ -36,15 +36,32 @@ function evotor_customer_loyalty_register_scan(int $connectionId,int $customerId
     try{
         $customer=$pdo->prepare('SELECT id,name,loyalty_balance FROM customer_accounts WHERE id=? FOR UPDATE');$customer->execute([$customerId]);$row=$customer->fetch();
         if(!$row)throw new RuntimeException('Клиент не найден.');
-        // A terminal can have only one customer waiting for the next receipt. Without
-        // this supersession, customer A could remain pending after customer B scanned
-        // and be attached to a later unrelated sale after B's scan was consumed.
         $pdo->prepare("UPDATE evotor_customer_scans SET status=CASE WHEN expires_at_unix<? THEN 'expired' ELSE 'cancelled' END WHERE connection_id=? AND status='pending'")->execute([$now,$connectionId]);
         $stmt=$pdo->prepare("INSERT INTO evotor_customer_scans(connection_id,customer_id,card_version,device_uuid,status,scanned_at,scanned_at_unix,expires_at,expires_at_unix) VALUES(?,?,1,?,'pending',NOW(),?,DATE_ADD(NOW(),INTERVAL 30 MINUTE),?)");
         $stmt->execute([$connectionId,$customerId,$deviceUuid!==null&&trim($deviceUuid)!==''?mb_substr(trim($deviceUuid),0,200):null,$now,$expires]);
         $scanId=(int)$pdo->lastInsertId();$pdo->commit();
         return ['scan_id'=>$scanId,'customer'=>['id'=>$customerId,'name'=>trim((string)($row['name']??'')),'loyalty_balance'=>round((float)$row['loyalty_balance'],2)],'expires_at'=>$expires];
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+}
+
+function evotor_customer_loyalty_finalize_drink_reward(PDO $pdo,int $connectionId,int $customerId,string $documentId,int $saleId,int $scanId,int $creditedStamps): ?array
+{
+    if($connectionId<=0||$customerId<=0||$saleId<=0)return null;
+    $pending=$pdo->prepare("SELECT * FROM customer_evotor_reward_pending WHERE connection_id=? AND customer_id=? AND receipt_uuid=? AND status='applied' AND expires_at>=NOW() ORDER BY id DESC LIMIT 1 FOR UPDATE");
+    $pending->execute([$connectionId,$customerId,$documentId]);$row=$pending->fetch();
+    if(!$row&&$scanId>0){
+        $fallback=$pdo->prepare("SELECT p.* FROM customer_evotor_reward_pending p JOIN evotor_customer_scans s ON s.id=? AND s.connection_id=p.connection_id AND s.customer_id=p.customer_id WHERE p.connection_id=? AND p.customer_id=? AND p.status='applied' AND p.expires_at>=NOW() AND p.quoted_at>=DATE_SUB(s.scanned_at,INTERVAL 2 MINUTE) ORDER BY p.quoted_at DESC,p.id DESC LIMIT 1 FOR UPDATE");
+        $fallback->execute([$scanId,$connectionId,$customerId]);$row=$fallback->fetch();
+    }
+    if(!$row)return null;
+    $operation='redeem:evotor_sale:'.$saleId;$exists=$pdo->prepare('SELECT id FROM customer_drink_loyalty_ledger WHERE operation_key=? LIMIT 1');$exists->execute([$operation]);
+    if(!$exists->fetchColumn()){
+        $stampDelta=$creditedStamps>0?-1:0;
+        $stmt=$pdo->prepare('INSERT INTO customer_drink_loyalty_ledger(customer_id,operation_key,source_type,source_id,source_line_id,product_id,stamp_delta,reward_delta,reward_value,note) VALUES(?,?,?,?,?,?,?,?,?,?)');
+        $stmt->execute([$customerId,$operation,'evotor_sale',(string)$saleId,'gift',(int)($row['product_id']??0)?:null,$stampDelta,-1,(float)$row['reward_value'],'Автоматически применён подарок «6-й напиток» на Эвоторе']);
+    }
+    $upd=$pdo->prepare("UPDATE customer_evotor_reward_pending SET status='finalized',finalized_at=NOW(),sale_id=? WHERE id=? AND status='applied'");$upd->execute([$saleId,(int)$row['id']]);
+    return ['discount'=>(float)$row['reward_value'],'product_id'=>(int)($row['product_id']??0),'stamp_adjustment'=>$creditedStamps>0?-1:0];
 }
 
 function evotor_customer_loyalty_attach_sale(PDO $pdo,array $connection,array $document,?int $saleId): ?array
@@ -69,8 +86,10 @@ function evotor_customer_loyalty_attach_sale(PDO $pdo,array $connection,array $d
         $pdo->prepare('UPDATE customer_accounts SET loyalty_balance=loyalty_balance+? WHERE id=?')->execute([$earned,$customerId]);
     }
     $drinkStamps=customer_drink_loyalty_credit_sale($pdo,$customerId,$saleId,$documentId);
+    $drinkGift=evotor_customer_loyalty_finalize_drink_reward($pdo,$connectionId,$customerId,$documentId,$saleId,(int)$row['id'],$drinkStamps);
+    if($drinkGift!==null)$drinkStamps=max(0,$drinkStamps+(int)$drinkGift['stamp_adjustment']);
     $pdo->prepare("UPDATE evotor_customer_scans SET status='consumed',consumed_at=NOW(),consumed_document_id=? WHERE id=?")->execute([$documentId,(int)$row['id']]);
-    return ['customer_id'=>$customerId,'scan_id'=>(int)$row['id'],'gross_amount'=>$gross,'loyalty_earned'=>$earned,'drink_stamps'=>$drinkStamps];
+    return ['customer_id'=>$customerId,'scan_id'=>(int)$row['id'],'gross_amount'=>$gross,'loyalty_earned'=>$earned,'drink_stamps'=>$drinkStamps,'drink_gift'=>$drinkGift];
 }
 
 function evotor_customer_loyalty_attach_synced_sales(array $connection,int $limit=100): array
@@ -89,5 +108,6 @@ function evotor_customer_loyalty_attach_synced_sales(array $connection,int $limi
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
     }
     $pdo->prepare("UPDATE evotor_customer_scans SET status='expired' WHERE connection_id=? AND status='pending' AND expires_at_unix<?")->execute([$connectionId,time()]);
+    $pdo->prepare("UPDATE customer_evotor_reward_pending SET status='expired' WHERE connection_id=? AND status IN ('quoted','applied') AND expires_at<NOW()")->execute([$connectionId]);
     return ['processed'=>count($rows),'linked'=>$linked,'earned'=>round($earned,2),'drink_stamps'=>$drinkStamps];
 }

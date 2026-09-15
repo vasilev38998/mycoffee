@@ -2,6 +2,7 @@
 declare(strict_types=1);
 $root=dirname(__DIR__);
 $drink=file_get_contents($root.'/inc/customer_drink_loyalty.php');
+$sameOrder=file_get_contents($root.'/inc/customer_same_order_gift.php');
 $loyalty=file_get_contents($root.'/inc/customer_loyalty.php');
 $orders=file_get_contents($root.'/inc/customer_orders.php');
 $status=file_get_contents($root.'/api/customer_order_status.php');
@@ -25,14 +26,17 @@ $checks=[
   'order polling credits sixth drink live'=>str_contains($status,'customer_drink_loyalty_credit_online_order'),
   'profile refreshes sixth drink'=>str_contains($profile,'customer_drink_loyalty_refresh_customer($customerId)'),
   'QR card refreshes sixth drink'=>str_contains($cardApi,'customer_drink_loyalty_refresh_customer($customerId)'),
-  'quote API requires auth and quotes cart'=>str_contains($quote,'customer_auth_current()')&&str_contains($quote,'customer_drink_loyalty_quote_cart'),
+  'quote API requires auth and quotes same-order gift'=>str_contains($quote,'customer_auth_current()')&&str_contains($quote,'customer_same_order_gift_quote'),
+  'checkout can unlock gift inside current order'=>str_contains($sameOrder,'customer_same_order_gift_should_unlock')&&str_contains($sameOrder,'customer_same_order_gift_insert_provisional'),
+  'actual checkout refreshes stamps before same-order decision'=>str_contains($sameOrder,'customer_drink_loyalty_refresh_customer($customerId,100)')&&str_contains($orderApi,'customer_same_order_gift_create'),
+  'same-order gift requires a subsequent eligible drink'=>str_contains($sameOrder,'customer_same_order_gift_eligible_units($items)>$needed'),
   'quote cashback uses discounted amount due'=>str_contains($quote,"customer_loyalty_preview((float)(\$quote['total']??0))")&&str_contains($quote,"\$quote['loyalty_expected']"),
   'actual cashback uses final order total'=>str_contains($loyalty,"customer_loyalty_preview((float)\$row['total_amount'])"),
   'PWA renders live gift quote'=>str_contains($checkoutJs,'customer_order_quote.php')&&str_contains($checkoutJs,'Подарок «6-й напиток»'),
   'PWA cashback copy uses amount due'=>str_contains($checkoutJs,'loyalty_expected')&&str_contains($checkoutJs,'% от суммы к оплате'),
   'QR card listens for completed order'=>str_contains($cardJs,'kapouch-order-status')&&str_contains($cardJs,"status==='completed'"),
   'PWA loads refreshed sixth drink checkout'=>str_contains($config,'assets/sixth-drink-checkout.js?v=2'),
-  'service worker v32 includes refreshed gift asset'=>str_contains($sw,'kapouch-pwa-v32')&&str_contains($sw,'./assets/sixth-drink-checkout.js?v=2'),
+  'service worker refreshes polish and gift assets'=>str_contains($sw,"kapouch-pwa-v35")&&str_contains($sw,'./assets/sixth-drink-checkout.js?v=2')&&str_contains($sw,'./assets/pwa-polish.js?v=1')&&str_contains($sw,'./assets/pwa-polish.css?v=1'),
   'YooKassa returns to canonical app domain'=>str_contains($payments,"customer_public_app_url('payment-return.html')"),
   'public QR uses canonical app URL'=>str_contains($qr,'return customer_public_app_url();'),
   'final migration pins app and API origins'=>str_contains($migration,"https://app.kapouch.store/")&&str_contains($migration,"https://kapouch.store/api/"),
