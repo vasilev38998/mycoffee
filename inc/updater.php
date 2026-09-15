@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const KAPOUCH_APP_VERSION = '2026.09.05';
+const KAPOUCH_APP_VERSION = '2026.09.15';
 const KAPOUCH_LEGACY_BASELINE_MAX = 8;
 
 function kapouch_migrations_dir(): string
@@ -124,14 +124,31 @@ function kapouch_migration_status(PDO $pdo): array
 
 function kapouch_apply_pending_migrations(PDO $pdo, bool $baselineLegacy=true): array
 {
-    $lockName='kapouch_schema_migrations';$lock=$pdo->prepare('SELECT GET_LOCK(?,30)');$lock->execute([$lockName]);
-    if((int)$lock->fetchColumn()!==1)throw new RuntimeException('Другая копия Kapouch уже обновляет базу. Повторите запрос через несколько секунд.');
+    // Fast path first: normal web/API requests must never queue behind a global
+    // schema lock when the database is already current.
+    $status = kapouch_migration_status($pdo);
+    if (!$status['pending'] && !$status['changed']) {
+        return ['applied'=>[], 'failed'=>null, 'busy'=>false];
+    }
+    if ($status['changed']) {
+        throw new RuntimeException('Обнаружено изменение уже применённой миграции: ' . $status['changed'][0]['name'] . '. Обновление остановлено для защиты данных.');
+    }
+
+    // Automatic bootstrap migrations are best-effort. One request may perform
+    // the migration, but every other request fails fast instead of waiting up
+    // to 30 seconds and making both kapouch.store and the PWA look offline.
+    $lockName='kapouch_schema_migrations';
+    $lock=$pdo->prepare('SELECT GET_LOCK(?,0)');
+    $lock->execute([$lockName]);
+    if((int)$lock->fetchColumn()!==1){
+        return ['applied'=>[], 'failed'=>null, 'busy'=>true];
+    }
     try{
         kapouch_ensure_migration_registry($pdo);
         if ($baselineLegacy) kapouch_baseline_legacy_migrations($pdo);
         $status = kapouch_migration_status($pdo);
         if ($status['changed']) throw new RuntimeException('Обнаружено изменение уже применённой миграции: ' . $status['changed'][0]['name'] . '. Обновление остановлено для защиты данных.');
-        $result = ['applied'=>[], 'failed'=>null];
+        $result = ['applied'=>[], 'failed'=>null, 'busy'=>false];
         foreach ($status['pending'] as $migration) {
             $sql = file_get_contents($migration['file']);
             if ($sql === false) throw new RuntimeException('Не удалось прочитать миграцию ' . $migration['name']);
