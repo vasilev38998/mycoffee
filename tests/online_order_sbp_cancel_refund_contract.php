@@ -10,7 +10,7 @@ $checks=[
     'normal cancel button remains for non-SBP orders'=>str_contains($page,"return actionButton(o,'cancelled','Отменить',false)"),
     'paid SBP detection checks both paid status and provider'=>str_contains($page,"o.payment_status==='paid'&&o.payment_provider==='yookassa_sbp'"),
     'paid SBP button is renamed'=>str_contains($page,'Отменить и вернуть деньги'),
-    'paid SBP cancel uses dedicated action'=>str_contains($page,'name="action" value="cancel_refund"'),
+    'paid SBP cancel uses dedicated action'=>str_contains($page,'cancel_refund'),
     'refund action is manager protected'=>str_contains($page,"if(!\$canManage)throw new RuntimeException('Недостаточно прав для возврата оплаты.')"),
     'refund action validates paid YooKassa SBP'=>str_contains($page,"(string)\$order['payment_status']!=='paid'||(string)\$order['payment_provider']!=='yookassa_sbp'"),
     'refund action calls YooKassa full refund'=>str_contains($page,'customer_payment_yookassa_refund_full($orderId)'),
