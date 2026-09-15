@@ -5,6 +5,7 @@ require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty.php';
 require_once dirname(__DIR__).'/inc/customer_drink_loyalty.php';
+require_once dirname(__DIR__).'/inc/customer_same_order_gift.php';
 
 customer_api_headers();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))==='OPTIONS'){http_response_code(204);exit;}
@@ -14,7 +15,7 @@ try{
     $customer=customer_auth_current();if(!$customer)customer_api_reply(401,['ok'=>false,'error'=>'Войдите в профиль, чтобы рассчитать подарок.']);
     $data=customer_api_json();$items=$data['items']??[];if(!is_array($items))throw new RuntimeException('Некорректная корзина.');
     $customerId=(int)$customer['id'];customer_drink_loyalty_refresh_customer($customerId,100);
-    $quote=customer_drink_loyalty_quote_cart($customerId,$items);
+    $quote=customer_same_order_gift_quote($customerId,$items);
     $quote['loyalty_percent']=customer_loyalty_rate();
     $quote['loyalty_expected']=customer_loyalty_preview((float)($quote['total']??0));
     customer_api_reply(200,['ok'=>true,'quote'=>$quote]);
