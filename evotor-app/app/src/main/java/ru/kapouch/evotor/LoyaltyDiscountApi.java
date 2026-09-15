@@ -91,7 +91,7 @@ final class LoyaltyDiscountApi {
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Cache-Control", "no-store");
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.26");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.27");
             connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
             byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
             connection.setFixedLengthStreamingMode(payload.length);
