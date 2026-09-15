@@ -23,8 +23,10 @@ try{
         $customer['name']=$name;
     }
     $customerId=(int)$customer['id'];
+    // customer_loyalty_refresh_customer() already refreshes the drink program.
+    // Calling customer_drink_loyalty_refresh_customer() again doubled DB work on
+    // every profile load and was especially expensive immediately after signup.
     customer_loyalty_refresh_customer($customerId);
-    customer_drink_loyalty_refresh_customer($customerId);
     $profile=customer_auth_profile($customer);
     $stmt=db()->prepare('SELECT email,name FROM customer_accounts WHERE id=? LIMIT 1');$stmt->execute([$customerId]);$account=$stmt->fetch()?:[];
     $profile['customer']['email']=trim((string)($account['email']??''));
@@ -43,4 +45,7 @@ try{
 }catch(RuntimeException $e){
     if($e->getMessage()==='AUTH_REQUIRED')customer_api_reply(401,['ok'=>false,'error'=>'Требуется вход.']);
     customer_api_reply(422,['ok'=>false,'error'=>$e->getMessage()]);
-}catch(Throwable $e){customer_api_reply(500,['ok'=>false,'error'=>'Не удалось загрузить профиль.']);}
+}catch(Throwable $e){
+    error_log('[Kapouch customer profile] '.$e->getMessage());
+    customer_api_reply(500,['ok'=>false,'error'=>'Не удалось загрузить профиль.']);
+}
