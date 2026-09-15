@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360" role="img" aria-labelledby="title desc">
+  <title id="title">Стакан кофе Kapouch</title>
+  <desc id="desc">Тёплая иллюстрация кофейного стакана с крышкой, паром и кофейными зёрнами.</desc>
+  <defs>
+    <linearGradient id="cup" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff7ec"/>
+      <stop offset=".58" stop-color="#f5e5d1"/>
+      <stop offset="1" stop-color="#d9baa0"/>
+    </linearGradient>
+    <linearGradient id="sleeve" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d9a06f"/>
+      <stop offset=".5" stop-color="#b96f42"/>
+      <stop offset="1" stop-color="#8f4327"/>
+    </linearGradient>
+    <linearGradient id="lid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#34231f"/>
+      <stop offset="1" stop-color="#120d0b"/>
+    </linearGradient>
+    <radialGradient id="bean" cx="35%" cy="28%" r="70%">
+      <stop offset="0" stop-color="#b56331"/>
+      <stop offset=".58" stop-color="#70331e"/>
+      <stop offset="1" stop-color="#3c1a12"/>
+    </radialGradient>
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="220%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.2"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="170" cy="319" rx="102" ry="22" fill="#2a100b" opacity=".22" filter="url(#shadow)"/>
+
+  <g fill="none" stroke="#f8d6b6" stroke-width="8" stroke-linecap="round" opacity=".82">
+    <path d="M125 73c-18-23 16-32 1-53"/>
+    <path d="M164 67c-18-19 16-30 3-50" opacity=".72"/>
+    <path d="M201 76c-14-19 14-28 4-46" opacity=".56"/>
+  </g>
+
+  <g transform="translate(61 68)">
+    <path d="M24 56h173l-8 30H33z" fill="url(#lid)"/>
+    <path d="M41 44h139c10 0 17 6 19 14H22c2-8 9-14 19-14z" fill="#251814"/>
+    <path d="M51 50h119c8 0 12 3 15 8H36c3-5 7-8 15-8z" fill="#5e4037" opacity=".68"/>
+    <ellipse cx="110" cy="55" rx="64" ry="8" fill="#0d0908"/>
+    <ellipse cx="110" cy="55" rx="55" ry="5" fill="#3c241b" opacity=".7"/>
+
+    <path d="M35 82h150l-19 205c-1 15-14 27-29 27H83c-15 0-28-12-29-27z" fill="url(#cup)" stroke="#f4e1cf" stroke-width="3"/>
+    <path d="M45 92h130l-3 28H48z" fill="#fff" opacity=".22"/>
+    <path d="M46 161h128l-9 89H55z" fill="url(#sleeve)"/>
+    <path d="M57 169h107" stroke="#f7c89f" stroke-width="2" opacity=".24"/>
+    <path d="M59 241h103" stroke="#4b2419" stroke-width="2" opacity=".28"/>
+
+    <g transform="translate(86 184)">
+      <path d="M22 13c-9 8-7 16 0 21 8-5 10-13 0-21z" fill="#2a160f"/>
+      <path d="M38 7c-10 9-8 19 0 25 9-6 11-16 0-25z" fill="#2a160f"/>
+      <path d="M30 29c-8 8-6 16 1 21 8-5 9-13-1-21z" fill="#2a160f"/>
+    </g>
+    <path d="M80 249h61" stroke="#2b1710" stroke-width="4" stroke-linecap="round" opacity=".85"/>
+    <path d="M73 264h75" stroke="#5d2a1a" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+
+    <path d="M59 92l10 0-12 187c-1 12 6 22 14 27-11-4-18-12-19-23z" fill="#fff" opacity=".18"/>
+    <path d="M165 95l-13 175c-1 14-11 26-25 31 20-2 35-15 37-31l16-175z" fill="#8e5b44" opacity=".1"/>
+  </g>
+
+  <g transform="translate(36 270) rotate(-20)">
+    <ellipse cx="28" cy="20" rx="24" ry="16" fill="url(#bean)"/>
+    <path d="M28 6c5 9 4 19-1 28" fill="none" stroke="#e6a36b" stroke-width="3.2" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(242 252) rotate(18)">
+    <ellipse cx="25" cy="20" rx="22" ry="15" fill="url(#bean)"/>
+    <path d="M25 7c-6 8-5 18 0 26" fill="none" stroke="#e6a36b" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(252 111) rotate(29) scale(.72)">
+    <ellipse cx="24" cy="18" rx="21" ry="14" fill="url(#bean)"/>
+    <path d="M24 6c5 7 4 16 0 24" fill="none" stroke="#e6a36b" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <circle cx="260" cy="58" r="36" fill="#f6c46c" opacity=".08" filter="url(#soft)"/>
+</svg>
