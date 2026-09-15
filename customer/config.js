@@ -1,7 +1,7 @@
 window.KAPOUCH_CUSTOMER_CONFIG = {
   apiBase: 'https://kapouch.store/api',
   appBase: 'https://app.kapouch.store/',
-  pollIntervalMs: 3000
+  pollIntervalMs: 10000
 };
 (function(){
   var apiBase=String(window.KAPOUCH_CUSTOMER_CONFIG.apiBase||'').replace(/\/$/,'');

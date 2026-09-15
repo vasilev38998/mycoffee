@@ -49,6 +49,20 @@ function kapouch_rate_limit_reset(string $scope,string $identity): void
     try{$stmt=db()->prepare('DELETE FROM request_rate_limits WHERE scope=? AND identity_hash=?');$stmt->execute([$scope,kapouch_rate_limit_identity($identity!==''?$identity:'unknown')]);}catch(Throwable $e){}
 }
 
+function kapouch_local_lock(string $purpose)
+{
+    $path=sys_get_temp_dir().'/kapouch_'.substr(hash('sha256',$purpose),0,48).'.lock';
+    $handle=@fopen($path,'c');
+    if(!$handle)return null;
+    if(!@flock($handle,LOCK_EX|LOCK_NB)){@fclose($handle);return null;}
+    return $handle;
+}
+function kapouch_local_unlock($handle): void
+{
+    if(!is_resource($handle))return;
+    @flock($handle,LOCK_UN);@fclose($handle);
+}
+
 function kapouch_ip_is_public(string $ip): bool
 {
     return filter_var($ip,FILTER_VALIDATE_IP,FILTER_FLAG_NO_PRIV_RANGE|FILTER_FLAG_NO_RES_RANGE)!==false;
