@@ -1,6 +1,24 @@
 <?php
 declare(strict_types=1);
 
+// Shared hosting often hides PHP fatals unless log_errors is explicitly on.
+// Keep a minimal shutdown logger registered before database/bootstrap work so
+// the next incident leaves a useful trace without exposing it to visitors.
+@ini_set('log_errors','1');
+if(empty($GLOBALS['kapouch_fatal_logger_registered'])){
+    $GLOBALS['kapouch_fatal_logger_registered']=true;
+    register_shutdown_function(static function(): void {
+        $error=error_get_last();
+        if(!$error||!in_array((int)($error['type']??0),[E_ERROR,E_PARSE,E_CORE_ERROR,E_COMPILE_ERROR,E_USER_ERROR],true))return;
+        $uri=(string)($_SERVER['REQUEST_URI']??'');
+        $path=(string)(parse_url($uri,PHP_URL_PATH)??'');
+        $message=mb_substr((string)($error['message']??'fatal error'),0,1200);
+        $file=basename((string)($error['file']??''));
+        $line=(int)($error['line']??0);
+        error_log('[Kapouch fatal] '.$message.' · '.$file.':'.$line.($path!==''?' · '.$path:''));
+    });
+}
+
 $configFile=__DIR__.'/../config.php';
 if(!file_exists($configFile)){
     if(basename($_SERVER['SCRIPT_NAME']??'')!=='install.php'){header('Location: install.php');exit;}
