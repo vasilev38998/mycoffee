@@ -1,9 +1,6 @@
 <?php
 declare(strict_types=1);
 
-// Shared hosting often hides PHP fatals unless log_errors is explicitly on.
-// Keep a minimal shutdown logger registered before database/bootstrap work so
-// the next incident leaves a useful trace without exposing it to visitors.
 @ini_set('log_errors','1');
 if(empty($GLOBALS['kapouch_fatal_logger_registered'])){
     $GLOBALS['kapouch_fatal_logger_registered']=true;
@@ -31,6 +28,33 @@ require_once __DIR__.'/db.php';
 require_once __DIR__.'/access.php';
 require_once __DIR__.'/security.php';
 
+if(empty($GLOBALS['kapouch_exception_handler_registered'])){
+    $GLOBALS['kapouch_exception_handler_registered']=true;
+    set_exception_handler(static function(Throwable $e): void {
+        if(function_exists('db_capacity_error')&&db_capacity_error($e)){
+            error_log('[Kapouch DB capacity uncaught] '.$e->getMessage());
+            if(!headers_sent()){
+                http_response_code(503);
+                header('Retry-After: 20');
+                header('Cache-Control: no-store');
+            }
+            $uri=(string)($_SERVER['REQUEST_URI']??'');
+            $accept=(string)($_SERVER['HTTP_ACCEPT']??'');
+            $json=str_contains($uri,'/api/')||str_contains($uri,'online_orders_feed.php')||str_contains(strtolower($accept),'application/json');
+            if($json){
+                if(!headers_sent())header('Content-Type: application/json; charset=UTF-8');
+                echo json_encode(['ok'=>false,'error'=>'Сервис временно перегружен. Повторите через несколько секунд.','retry_after'=>20],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            }else{
+                if(!headers_sent())header('Content-Type: text/html; charset=UTF-8');
+                echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kapouch</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#f6efe7;color:#2d1c15;display:grid;place-items:center;min-height:100vh;margin:0}.box{max-width:520px;padding:32px;text-align:center}.box h1{font-size:28px;margin:0 0 10px}.box p{line-height:1.55;color:#765e52}.box button{margin-top:12px;border:0;border-radius:14px;padding:13px 18px;background:#2d1c15;color:#fff;font-weight:700}</style><div class="box"><h1>Kapouch временно занят</h1><p>Сервер базы данных достиг лимита одновременных подключений. Подождите несколько секунд и повторите.</p><button onclick="location.reload()">Повторить</button></div>';
+            }
+            return;
+        }
+        restore_exception_handler();
+        throw $e;
+    });
+}
+
 $page=basename($_SERVER['SCRIPT_NAME']??'');
 $needsSession=PHP_SAPI!=='cli'&&!in_array($page,kapouch_sessionless_pages(),true);
 if($needsSession&&session_status()===PHP_SESSION_NONE){
@@ -54,6 +78,7 @@ try{
         $GLOBALS['kapouch_update_error']='Миграция '.(string)($failed['name']??'').' требует ручного повтора: '.(string)($failed['message']??'Ошибка миграции');
     }
 }catch(Throwable $e){
+    if(db_capacity_error($e))throw $e;
     $GLOBALS['kapouch_update_error']=$e->getMessage();
     error_log('[Kapouch migration bootstrap] '.$e->getMessage());
 }
