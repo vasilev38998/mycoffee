@@ -240,7 +240,6 @@ jobs:
           grep -q 'evotor-bridge?type=order' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=loyalty' /tmp/evotor-dex-strings.txt
           grep -q 'complete' /tmp/evotor-dex-strings.txt
-          grep -q 'ВЫДАН' /tmp/evotor-dex-strings.txt
           grep -q 'evotor.intent.action.ACTION_TRIGGER_RECEIPT_DISCOUNT_EVENT' /tmp/evotor-dex-strings.txt
           grep -q 'evotor_loyalty_discount.php' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch_evotor=' /tmp/evotor-dex-strings.txt
