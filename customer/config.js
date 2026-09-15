@@ -23,6 +23,11 @@ window.addEventListener('DOMContentLoaded',function(){
   giftStyle.href='assets/sixth-drink-checkout.css?v=1';
   document.head.appendChild(giftStyle);
 
+  var contrastStyle=document.createElement('link');
+  contrastStyle.rel='stylesheet';
+  contrastStyle.href='assets/contrast-fix.css?v=1';
+  document.head.appendChild(contrastStyle);
+
   var authRequired=document.createElement('script');
   authRequired.src='assets/auth-required.js?v=1';
   authRequired.defer=true;
