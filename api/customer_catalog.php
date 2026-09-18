@@ -14,7 +14,7 @@ customer_api_guard_origin();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))!=='GET')customer_api_reply(405,['ok'=>false,'error'=>'Method not allowed']);
 try{
     $catalog=customer_pwa_catalog();
-    // Serve uploaded product photos through a dedicated PHP endpoint on the API origin.
+    // Serve uploaded PWA images through a dedicated PHP endpoint on the API origin.
     // It accepts every legacy local image-path representation but never proxies an
     // arbitrary external URL. This avoids Beget static-file rewrite differences.
     $stableImage=static function(?string $value): ?string {
@@ -28,6 +28,7 @@ try{
         $product['image']=$stableImage($product['image']??null);
         if(isset($product['variants'])&&is_array($product['variants']))foreach($product['variants'] as &$variant)$variant['image']=$stableImage($variant['image']??null);unset($variant);
     }unset($product);
+    $heroImage=$stableImage((string)app_setting('customer_hero_image',''));
     $promoEnabled=(string)app_setting('customer_promo_enabled','0')==='1';
     $promoStart=trim((string)app_setting('customer_promo_start',''));
     $promoEnd=trim((string)app_setting('customer_promo_end',''));
@@ -47,7 +48,7 @@ try{
         'loyalty_levels_enabled'=>(string)app_setting('customer_loyalty_levels_enabled','1')==='1',
     ];
     $operations=customer_operations_public_state();
-    customer_api_reply(200,['ok'=>true,'shop'=>array_merge($catalog['settings'],['currency'=>app_currency(),'loyalty_percent'=>customer_loyalty_rate(),'growth'=>$growth,'operations'=>$operations]),'categories'=>$catalog['categories'],'products'=>$catalog['products']]);
+    customer_api_reply(200,['ok'=>true,'shop'=>array_merge($catalog['settings'],['currency'=>app_currency(),'loyalty_percent'=>customer_loyalty_rate(),'loyalty_spend_percent'=>customer_loyalty_spend_percent(),'hero_image'=>$heroImage,'growth'=>$growth,'operations'=>$operations]),'categories'=>$catalog['categories'],'products'=>$catalog['products']]);
 }catch(Throwable $e){
     error_log('[Kapouch customer catalog] '.$e->getMessage());
     customer_api_reply(500,['ok'=>false,'error'=>'Не удалось загрузить каталог.']);
