@@ -22,6 +22,7 @@ try{
     $quote['loyalty_balance']=$points['balance'];
     $quote['loyalty_spend_max']=$points['max_spend'];
     $quote['loyalty_spend']=$points['spend'];
+    $quote['loyalty_spend_percent']=$points['spend_percent'];
     $quote['total']=$points['total'];
     $quote['loyalty_percent']=customer_loyalty_rate();
     $quote['loyalty_expected']=customer_loyalty_preview((float)$quote['total']);
