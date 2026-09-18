@@ -123,7 +123,7 @@ function customer_push_process_queue(int $limit=20): array{
         try{
             $rows=$pdo->query("SELECT * FROM customer_push_queue WHERE status IN ('pending','failed') AND attempts<3 AND (next_attempt_at IS NULL OR next_attempt_at<=NOW()) ORDER BY id LIMIT {$limit} FOR UPDATE")->fetchAll();
             $ids=array_map(static fn($r)=>(int)$r['id'],$rows);
-            if($ids)$pdo->exec("UPDATE customer_push_queue SET status='processing' WHERE id IN (".implode(',',$ids).')");
+            if($ids)$pdo->exec('UPDATE customer_push_queue SET status="processing" WHERE id IN ('.implode(',',$ids).')');
             $pdo->commit();
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 
