@@ -33,7 +33,7 @@ $checks=[
   'PWA offers capped point controls'=>str_contains($ui,'loyaltySpendInput')&&str_contains($ui,'Списать максимум')&&str_contains($ui,'loyalty_spend_percent')&&str_contains($ui,'1 бонус = 1 ₽'),
   'PWA quote sends point spend and mode'=>str_contains($ui,'loyalty_spend:requestedSpend()')&&str_contains($ui,'loyalty_mode:loyaltyMode()'),
   'checkout still submits requested point amount'=>str_contains($checkout,'loyalty_spend:loyaltySpend()'),
-  'fetch wrapper injects explicit loyalty mode into checkout'=>str_contains($config,'payload.loyalty_mode=loyaltyMode()')&&str_contains($config,"isOrderRequest(input)&&")===false&&str_contains($config,"isOrderRequest(input)||")===false&&str_contains($config,'if(!isOrderRequest(input)'),
+  'fetch wrapper injects explicit loyalty mode into checkout'=>str_contains($config,'function attachLoyaltyMode')&&str_contains($config,'payload.loyalty_mode=loyaltyMode()')&&str_contains($config,'init=attachLoyaltyMode(input,init)'),
   'checkout handles zero due without demanding SBP URL'=>str_contains($checkout,"finalMethod=String(order.payment_method||method)")&&str_contains($checkout,"if(finalMethod==='sbp')"),
   'choice and point controls have styles'=>str_contains($uiCss,'.loyalty-choice-option')&&str_contains($uiCss,'.loyalty-spend-controls')&&str_contains($uiCss,'.loyalty-spend-head'),
   'fresh checkout assets are loaded'=>str_contains($config,'sixth-drink-checkout.js?v=5')&&str_contains($config,'sixth-drink-checkout.css?v=3')&&str_contains($index,'config.js?v=12')&&str_contains($index,'payments.js?v=8'),
