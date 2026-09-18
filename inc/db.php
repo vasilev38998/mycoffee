@@ -42,6 +42,16 @@ function db_capacity_error(Throwable $e): bool
     return in_array($driverCode,[1040,1203],true)||in_array($sqlState,['08004','HY000'],true)&&preg_match('/too many connections|max_user_connections/i',$e->getMessage())===1;
 }
 
+function db_missing_table_error(Throwable $e): bool
+{
+    return $e instanceof PDOException && (int)($e->errorInfo[1]??0)===1146;
+}
+
+function db_missing_column_error(Throwable $e): bool
+{
+    return $e instanceof PDOException && (int)($e->errorInfo[1]??0)===1054;
+}
+
 function db(): PDO
 {
     global $config;
