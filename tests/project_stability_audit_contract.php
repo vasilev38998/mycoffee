@@ -41,7 +41,7 @@ $checks=[
     'YooKassa requests release DB before HTTP'=>substr_count($payments,'db_disconnect();')>=3,
     'Evotor push releases DB before HTTP'=>str_contains($evotorPush,'Do not occupy a MySQL slot while the Evotor cloud request is in flight')&&str_contains($evotorPush,'db_disconnect();'),
     'Telegram releases DB before HTTP'=>str_contains($telegram,'Do not hold MySQL while Telegram is slow or unreachable')&&str_contains($telegram,'db_disconnect();')&&str_contains($telegram,'CURLOPT_TIMEOUT=>15'),
-    'receipt proxy releases DB before external provider'=>str_contains($receiptProxy,"db_disconnect())db_disconnect()")&&str_contains($receiptProxy,'CURLOPT_CONNECTTIMEOUT=>5')&&str_contains($receiptProxy,'CURLOPT_TIMEOUT=>20'),
+    'receipt proxy releases DB before external provider'=>str_contains($receiptProxy,"if(function_exists('db_disconnect'))db_disconnect();")&&str_contains($receiptProxy,'CURLOPT_CONNECTTIMEOUT=>5')&&str_contains($receiptProxy,'CURLOPT_TIMEOUT=>20'),
     'automatic expenses no longer replay migration every call'=>str_contains($automatic,"SELECT id FROM automatic_expense_rules LIMIT 1")&&str_contains($automatic,'db_missing_table_error($e)'),
     'inventory no longer replays migration every call'=>str_contains($inventory,"SELECT id FROM inventory_movements LIMIT 1")&&str_contains($inventory,'db_missing_table_error($e)'),
     'settings are batch-loaded once per request'=>str_contains($settings,'function kapouch_load_app_settings')&&str_contains($settings,"SELECT setting_key,setting_value FROM app_settings")&&str_contains($settings,'function kapouch_load_system_meta'),
