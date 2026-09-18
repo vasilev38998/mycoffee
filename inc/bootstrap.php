@@ -38,11 +38,14 @@ if(PHP_SAPI!=='cli'&&empty($GLOBALS['kapouch_exception_handler_registered'])){
         $capacity=function_exists('db_capacity_error')&&db_capacity_error($e);
         error_log(($capacity?'[Kapouch DB capacity uncaught] ':'[Kapouch uncaught] ').mb_substr($e->getMessage(),0,1200));
 
-        $status=$capacity?503:500;
         if(!headers_sent()){
-            http_response_code($status);
+            if($capacity){
+                http_response_code(503);
+                header('Retry-After: 20');
+            }else{
+                http_response_code(500);
+            }
             header('Cache-Control: no-store');
-            if($capacity)header('Retry-After: 20');
         }
         $uri=(string)($_SERVER['REQUEST_URI']??'');
         $accept=(string)($_SERVER['HTTP_ACCEPT']??'');
