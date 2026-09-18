@@ -5,6 +5,7 @@ on:
     paths:
       - 'evotor-app/**'
       - 'api/evotor_bridge.php'
+      - 'api/evotor_loyalty_discount.php'
       - '.htaccess'
       - '.github/workflows/evotor-apk.yml'
   push:
@@ -12,6 +13,7 @@ on:
     paths:
       - 'evotor-app/**'
       - 'api/evotor_bridge.php'
+      - 'api/evotor_loyalty_discount.php'
       - '.htaccess'
       - '.github/workflows/evotor-apk.yml'
   workflow_dispatch:
@@ -66,7 +68,7 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate Evotor 1.2.27 source contract
+      - name: Validate Evotor 1.2.28 source contract
         run: |
           set -euo pipefail
           BUILD=evotor-app/app/build.gradle
@@ -91,13 +93,15 @@ jobs:
           OLD_HEX_B='f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66e881a49a8812973b'
 
           grep -q "minSdkVersion 22" "$BUILD"
-          grep -q "versionCode 34" "$BUILD"
-          grep -q "versionName '1.2.27'" "$BUILD"
+          grep -q "versionCode 35" "$BUILD"
+          grep -q "versionName '1.2.28'" "$BUILD"
           grep -q "integration-library:v0.4.36" "$BUILD"
 
           php -l "$BRIDGE"
           grep -q 'evotor-bridge' "$HTACCESS"
           grep -q 'api/evotor_bridge.php' "$HTACCESS"
+          grep -q 'evotor-loyalty-discount' "$HTACCESS"
+          grep -q 'api/evotor_loyalty_discount.php' "$HTACCESS"
           grep -q "kapouch_evotor" "$BRIDGE"
           grep -q 'evotor_bridge_b64url_decode' "$BRIDGE"
           grep -q "cookie-bridge" "$BRIDGE"
@@ -123,7 +127,8 @@ jobs:
           grep -q '"complete".equals(action)' "$ORDER"
           grep -q 'Kapouch-Orders-Evotor/1.2.24' "$ORDER"
           grep -q 'Kapouch-Orders-Evotor/1.2.24' "$LOYALTY"
-          grep -q 'Kapouch-Orders-Evotor/1.2.27' "$LOYALTY_DISCOUNT"
+          grep -q 'Kapouch-Orders-Evotor/1.2.28' "$LOYALTY_DISCOUNT"
+          grep -q 'https://kapouch.store/evotor-loyalty-discount' "$LOYALTY_DISCOUNT"
 
           grep -q '"complete", "ВЫДАН"' "$MAIN"
           grep -q 'новые заказы будут иметь кнопку «ВЫДАН»' "$MAIN"
@@ -220,7 +225,7 @@ jobs:
 
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='34' versionName='1.2.27'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='35' versionName='1.2.28'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'22'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
 
@@ -234,14 +239,14 @@ jobs:
 
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch-Orders-Evotor/1.2.24' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.27' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.28' /tmp/evotor-dex-strings.txt
           grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt
           grep -q 'LoyaltyBarcodeConsumedActivity' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=order' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-bridge?type=loyalty' /tmp/evotor-dex-strings.txt
           grep -q 'complete' /tmp/evotor-dex-strings.txt
           grep -q 'evotor.intent.action.ACTION_TRIGGER_RECEIPT_DISCOUNT_EVENT' /tmp/evotor-dex-strings.txt
-          grep -q 'evotor_loyalty_discount.php' /tmp/evotor-dex-strings.txt
+          grep -q 'evotor-loyalty-discount' /tmp/evotor-dex-strings.txt
           grep -q 'kapouch_evotor=' /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_A" /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_B" /tmp/evotor-dex-strings.txt
