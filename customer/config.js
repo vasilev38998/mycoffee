@@ -16,6 +16,15 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
     return '';
   }
   function isProfileRequest(input){return requestUrl(input).indexOf('/customer_profile.php')!==-1;}
+  function isCatalogRequest(input){return requestUrl(input).indexOf('/customer_catalog.php')!==-1;}
+  function publishCatalog(response){
+    if(!response||!response.ok)return;
+    response.clone().json().then(function(data){
+      if(!data||!data.ok)return;
+      window.KAPOUCH_CATALOG_SHOP=data.shop||{};
+      try{window.dispatchEvent(new CustomEvent('kapouch:catalog',{detail:data}));}catch(e){}
+    }).catch(function(){});
+  }
   function profileFailure(){
     profileFailures=Math.min(6,profileFailures+1);
     var delays=[0,10000,20000,40000,60000,120000,120000];
@@ -28,10 +37,12 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
     else if(input instanceof URL&&input.href.indexOf(new URL('../api/',window.location.href).href)===0)input=new URL(apiBase+'/'+input.href.slice(new URL('../api/',window.location.href).href.length));
 
     var profile=isProfileRequest(input);
+    var catalog=isCatalogRequest(input);
     if(profile&&Date.now()<profileBlockedUntil){
       return Promise.reject(new TypeError('Kapouch profile endpoint is cooling down after a server error'));
     }
     return nativeFetch(input,init).then(function(response){
+      if(catalog)publishCatalog(response);
       if(profile){
         if(response.ok||((response.status>=400&&response.status<500)&&response.status!==429))profileSuccess();
         else profileFailure();
