@@ -32,14 +32,14 @@ function bindSpendControls(q){
 }
 function render(q){
   lastQuote=q;const box=ensureBox(),reward=q?.reward||{},gift=q?.gift||null,discount=Math.max(0,Number(q?.discount||0));
-  const balance=Math.max(0,Number(q?.loyalty_balance||0)),maxSpend=Math.max(0,Number(q?.loyalty_spend_max||0)),spent=Math.max(0,Number(q?.loyalty_spend||0));
+  const balance=Math.max(0,Number(q?.loyalty_balance||0)),maxSpend=Math.max(0,Number(q?.loyalty_spend_max||0)),spent=Math.max(0,Number(q?.loyalty_spend||0)),spendPercent=Math.max(0,Math.min(100,Number(q?.loyalty_spend_percent??100)));
   if(Number.isFinite(Number(q?.total)))totalEl.textContent=money(q.total);renderCashback(q);
   const blocks=[];
   if(discount>0&&gift){blocks.push('<div class="sixth-drink-checkout-row gift-row"><span>Подарок «6-й напиток»</span><strong>−'+money(discount)+'</strong></div><small>'+String(gift.product_name||'Напиток')+' — скидка до '+money(gift.gift_cap||discount)+'. Если напиток дороже, оплачивается только разница; добавки оплачиваются отдельно.</small>')}
   else if(Number(reward.available_rewards||0)>0){blocks.push('<div class="sixth-drink-checkout-row gift-row"><span>Подарок доступен</span><strong>🎁</strong></div><small>Добавьте в корзину напиток из программы — скидка применится автоматически.</small>')}
   if(balance>0&&maxSpend>0){
     const requested=Math.min(maxSpend,requestedSpend());
-    blocks.push('<div class="loyalty-spend"><div class="loyalty-spend-head"><div><strong>Списать бонусы</strong><span>Доступно '+points(balance)+' ★ · 1 бонус = 1 ₽</span></div>'+(spent>0?'<b>−'+money(spent)+'</b>':'')+'</div><div class="loyalty-spend-controls"><input id="loyaltySpendInput" type="number" inputmode="decimal" min="0" max="'+maxSpend.toFixed(2)+'" step="0.01" value="'+(requested>0?requested:'')+'" placeholder="0"><button type="button" id="loyaltySpendAll">Списать все</button>'+(requested>0?'<button type="button" class="reset" id="loyaltySpendReset">Не списывать</button>':'')+'</div><small>Бонусы применяются после скидки на 6-й напиток. Списать можно не больше суммы к оплате.</small></div>');
+    blocks.push('<div class="loyalty-spend"><div class="loyalty-spend-head"><div><strong>Списать бонусы</strong><span>Доступно '+points(balance)+' ★ · 1 бонус = 1 ₽</span></div>'+(spent>0?'<b>−'+money(spent)+'</b>':'')+'</div><div class="loyalty-spend-controls"><input id="loyaltySpendInput" type="number" inputmode="decimal" min="0" max="'+maxSpend.toFixed(2)+'" step="0.01" value="'+(requested>0?requested:'')+'" placeholder="0"><button type="button" id="loyaltySpendAll">Списать максимум</button>'+(requested>0?'<button type="button" class="reset" id="loyaltySpendReset">Не списывать</button>':'')+'</div><small>Бонусы применяются после скидки на 6-й напиток. Можно списать до '+percent(spendPercent)+'% оставшейся суммы заказа, но не больше доступного баланса.</small></div>');
   }else if(requestedSpend()>0){saveSpend(0)}
   if(!blocks.length){box.hidden=true;box.innerHTML='';return}
   box.innerHTML=blocks.join('<div class="loyalty-divider"></div>');box.hidden=false;bindSpendControls(q);
