@@ -8,6 +8,8 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
   var nativeFetch=window.fetch.bind(window);
   var profileFailures=0;
   var profileBlockedUntil=0;
+  var catalogShared={promise:null,response:null,at:0};
+  var profileShared=new Map();
 
   function requestUrl(input){
     if(typeof input==='string')return input;
@@ -15,14 +17,18 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
     if(input&&typeof input.url==='string')return input.url;
     return '';
   }
+  function requestMethod(init){return String((init&&init.method)||'GET').toUpperCase();}
+  function headerValue(init,name){
+    try{return new Headers((init&&init.headers)||{}).get(name)||''}catch(e){return ''}
+  }
   function isProfileRequest(input){return requestUrl(input).indexOf('/customer_profile.php')!==-1;}
   function isCatalogRequest(input){return requestUrl(input).indexOf('/customer_catalog.php')!==-1;}
-  function publishCatalog(response){
+  function publishJson(response,eventName,assignShop){
     if(!response||!response.ok)return;
     response.clone().json().then(function(data){
       if(!data||!data.ok)return;
-      window.KAPOUCH_CATALOG_SHOP=data.shop||{};
-      try{window.dispatchEvent(new CustomEvent('kapouch:catalog',{detail:data}));}catch(e){}
+      if(assignShop)window.KAPOUCH_CATALOG_SHOP=data.shop||{};
+      try{window.dispatchEvent(new CustomEvent(eventName,{detail:data}));}catch(e){}
     }).catch(function(){});
   }
   function profileFailure(){
@@ -31,21 +37,50 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
     profileBlockedUntil=Date.now()+delays[profileFailures];
   }
   function profileSuccess(){profileFailures=0;profileBlockedUntil=0;}
+  function sharedGet(entry,input,init,ttl,onResponse){
+    var now=Date.now();
+    if(entry.response&&now-entry.at<ttl){
+      try{return Promise.resolve(entry.response.clone())}catch(e){entry.response=null;entry.at=0}
+    }
+    if(entry.promise)return entry.promise.then(function(response){return response.clone()});
+    entry.promise=nativeFetch(input,init).then(function(response){
+      if(response.ok){
+        try{entry.response=response.clone();entry.at=Date.now()}catch(e){entry.response=null;entry.at=0}
+      }
+      if(onResponse)onResponse(response);
+      return response;
+    }).finally(function(){entry.promise=null});
+    return entry.promise.then(function(response){return response.clone()});
+  }
 
   window.fetch=function(input,init){
     if(typeof input==='string'&&input.indexOf('../api/')===0)input=apiBase+'/'+input.slice('../api/'.length);
     else if(input instanceof URL&&input.href.indexOf(new URL('../api/',window.location.href).href)===0)input=new URL(apiBase+'/'+input.href.slice(new URL('../api/',window.location.href).href.length));
 
+    var method=requestMethod(init);
     var profile=isProfileRequest(input);
     var catalog=isCatalogRequest(input);
-    if(profile&&Date.now()<profileBlockedUntil){
+    if(profile&&method==='GET'&&Date.now()<profileBlockedUntil){
       return Promise.reject(new TypeError('Kapouch profile endpoint is cooling down after a server error'));
     }
+    if(catalog&&method==='GET'){
+      return sharedGet(catalogShared,input,init,10000,function(response){publishJson(response,'kapouch:catalog',true)});
+    }
+    if(profile&&method==='GET'){
+      var token=headerValue(init,'X-Customer-Token');
+      var entry=profileShared.get(token);
+      if(!entry){entry={promise:null,response:null,at:0};profileShared.set(token,entry)}
+      return sharedGet(entry,input,init,3000,function(response){
+        if(response.ok||((response.status>=400&&response.status<500)&&response.status!==429))profileSuccess();
+        else profileFailure();
+        publishJson(response,'kapouch:profile',false);
+      }).catch(function(error){profileFailure();throw error});
+    }
     return nativeFetch(input,init).then(function(response){
-      if(catalog)publishCatalog(response);
       if(profile){
         if(response.ok||((response.status>=400&&response.status<500)&&response.status!==429))profileSuccess();
         else profileFailure();
+        if(response.ok)publishJson(response,'kapouch:profile',false);
       }
       return response;
     },function(error){
