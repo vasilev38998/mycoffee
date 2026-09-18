@@ -82,7 +82,13 @@ function customer_order_create(array $data,?array $authenticatedCustomer=null): 
     $payment=null;
     try{
         if($paymentMethod['id']==='sbp'){
-            if($email===''&&$customerId>0)$email=customer_order_account_email($customerId);$payment=customer_payment_create_sbp($orderId,$orderNumber,round($total,2),$phone,$email);
+            if($email===''&&$customerId>0)$email=customer_order_account_email($customerId);
+            // PDOStatement objects keep their PDO connection alive even after
+            // the global handle is cleared. Drop checkout statements before the
+            // external payment request so YooKassa cannot pin a MySQL slot.
+            $stmt=null;$findAccess=null;
+            if(function_exists('db_disconnect'))db_disconnect();
+            $payment=customer_payment_create_sbp($orderId,$orderNumber,round($total,2),$phone,$email);
         }elseif(!$locked||(string)($snapshot['payment_method']??'')==='')customer_payment_mark_cash($orderId);
     }catch(Throwable $e){if($paymentMethod['id']==='sbp'){db()->prepare("UPDATE online_orders SET status='cancelled',cancelled_at=NOW(),payment_status='failed',payment_method='sbp',payment_provider='yookassa_sbp' WHERE id=? AND status IN ('new','awaiting_payment')")->execute([$orderId]);try{customer_loyalty_restore_order_spend($orderId,'платёж СБП не был создан');}catch(Throwable $restoreError){error_log('[Kapouch loyalty spend restore] '.$restoreError->getMessage());}try{customer_drink_loyalty_restore_online_order_reward($orderId,'Платёж не был создан, подарок возвращён');}catch(Throwable $restoreError){error_log('[Kapouch sixth drink restore] '.$restoreError->getMessage());}}throw $e;}
     $final=customer_order_snapshot($orderId);$orderNumber=(string)$final['order_number'];$total=(float)$final['total_amount'];$status=(string)$final['status'];$finalMethod=(string)($final['payment_method']??'');$paymentMethod=customer_order_payment_method_existing($finalMethod,$paymentMethod);$paymentStatus=(string)($final['payment_status']??'');
@@ -92,8 +98,23 @@ function customer_order_create(array $data,?array $authenticatedCustomer=null): 
 }
 function customer_order_public_status(string $token): ?array
 {
-    if(!preg_match('/^[a-f0-9]{64}$/',$token))return null;$stmt=db()->prepare("SELECT o.id,o.order_number,o.status,o.payment_status,o.payment_method,o.total_amount,o.fulfillment_type,o.fulfillment_label,o.external_created_at,o.created_at,o.updated_at,a.customer_id,a.loyalty_earned_at FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.tracking_token=? LIMIT 1");$stmt->execute([$token]);$order=$stmt->fetch();if(!$order)return null;
-    if((string)$order['payment_method']==='sbp'&&(string)$order['payment_status']==='pending'){$pay=customer_payment_status_for_order((int)$order['id']);if($pay&&!empty($pay['provider_order_id'])&&(string)$pay['provider']==='yookassa_sbp'){try{customer_payment_yookassa_sync_by_provider_id((string)$pay['provider_order_id']);$stmt->execute([$token]);$order=$stmt->fetch()?:$order;}catch(Throwable $e){}}}
+    if(!preg_match('/^[a-f0-9]{64}$/',$token))return null;
+    $statusSql="SELECT o.id,o.order_number,o.status,o.payment_status,o.payment_method,o.total_amount,o.fulfillment_type,o.fulfillment_label,o.external_created_at,o.created_at,o.updated_at,a.customer_id,a.loyalty_earned_at FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.tracking_token=? LIMIT 1";
+    $stmt=db()->prepare($statusSql);$stmt->execute([$token]);$order=$stmt->fetch();if(!$order)return null;
+    if((string)$order['payment_method']==='sbp'&&(string)$order['payment_status']==='pending'){
+        $pay=customer_payment_status_for_order((int)$order['id']);
+        if($pay&&!empty($pay['provider_order_id'])&&(string)$pay['provider']==='yookassa_sbp'){
+            try{
+                // The status SELECT used to stay alive throughout YooKassa's
+                // network request. Release it so polling does not consume a DB
+                // connection while waiting on an external provider.
+                $stmt=null;
+                if(function_exists('db_disconnect'))db_disconnect();
+                customer_payment_yookassa_sync_by_provider_id((string)$pay['provider_order_id']);
+                $stmt=db()->prepare($statusSql);$stmt->execute([$token]);$order=$stmt->fetch()?:$order;
+            }catch(Throwable $e){}
+        }
+    }
     $items=db()->prepare('SELECT product_name,variant_name,quantity,unit_price,line_total,item_comment FROM online_order_items WHERE order_id=? ORDER BY sort_order,id');$items->execute([(int)$order['id']]);$customerId=(int)($order['customer_id']??0);$status=(string)$order['status'];$reward=customer_drink_loyalty_online_reward((int)$order['id']);$spent=customer_loyalty_order_spend((int)$order['id']);
     return ['order_number'=>(string)$order['order_number'],'status'=>$status,'status_label'=>$status==='awaiting_payment'?'Ожидает оплаты':online_orders_status_label($status),'payment_status'=>(string)($order['payment_status']??''),'payment_method'=>(string)($order['payment_method']??''),'total_amount'=>(float)$order['total_amount'],'fulfillment_label'=>online_orders_fulfillment_label($order),'created_at'=>(string)($order['external_created_at']?:$order['created_at']),'updated_at'=>(string)$order['updated_at'],'items'=>$items->fetchAll(),'drink_reward_discount'=>round((float)($reward['reward_value']??0),2),'loyalty_spent'=>round($spent,2),'loyalty_balance'=>customer_loyalty_balance($customerId),'loyalty_expected'=>customer_loyalty_preview((float)$order['total_amount']),'loyalty_earned'=>(bool)$order['loyalty_earned_at'],'loyalty_percent'=>customer_loyalty_rate()];
 }

@@ -24,13 +24,19 @@ DirectoryIndex index.php index.html
   RewriteCond %{REQUEST_URI} !^/customer(?:/|$) [NC]
   RewriteRule ^(.*)$ customer/$1 [L]
 
+  # Keep the original core source-deny rule stable: contracts and hosting
+  # diagnostics rely on it being explicit.
   RewriteRule ^(?:inc|database|docs|cron)(?:/|$) - [F,L,NC]
+
+  # CI, tests, APK sources and dependency trees are deployment assets, not
+  # public web content.
+  RewriteRule ^(?:tests|\.github|evotor-app|node_modules|vendor)(?:/|$) - [F,L,NC]
 </IfModule>
 
 <FilesMatch "^(config\.php|config\.example\.php|README\.md)$">
   Require all denied
 </FilesMatch>
-<FilesMatch "\.(?:sql|md)$">
+<FilesMatch "\.(?:sql|md|gradle|properties|keystore|jks)$">
   Require all denied
 </FilesMatch>
 <FilesMatch "(?i)(?:^\.|\.(?:bak|old|orig|save|swp)$|~$)">

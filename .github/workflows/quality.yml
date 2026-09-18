@@ -91,6 +91,9 @@ jobs:
       - name: Runtime stability and Evotor discount contract
         run: php tests/runtime_stability_evotor_contract.php
 
+      - name: Full-project stability audit contract
+        run: php tests/project_stability_audit_contract.php
+
       - name: JavaScript syntax
         run: |
           set -euo pipefail

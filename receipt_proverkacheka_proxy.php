@@ -79,17 +79,26 @@ $post=[
     'token'=>$saved,
 ];
 
+// Everything needed from MySQL has already been copied to local variables. Do
+// not keep one of Beget's scarce DB connections occupied while waiting for an
+// external receipt service.
+$connection=null;
+if(function_exists('db_disconnect'))db_disconnect();
+
 $ch=curl_init('https://proverkacheka.com/api/v1/check/get');
-curl_setopt_array($ch,[
+$opts=[
     CURLOPT_RETURNTRANSFER=>true,
     CURLOPT_POST=>true,
     CURLOPT_POSTFIELDS=>$post,
-    CURLOPT_CONNECTTIMEOUT=>10,
-    CURLOPT_TIMEOUT=>45,
+    CURLOPT_CONNECTTIMEOUT=>5,
+    CURLOPT_TIMEOUT=>20,
     CURLOPT_FOLLOWLOCATION=>false,
     CURLOPT_HTTPHEADER=>['Accept: application/json'],
     CURLOPT_USERAGENT=>'Kapouch/1.0 receipt-import',
-]);
+];
+if(defined('CURLOPT_PROTOCOLS')&&defined('CURLPROTO_HTTPS'))$opts[CURLOPT_PROTOCOLS]=CURLPROTO_HTTPS;
+if(defined('CURLOPT_REDIR_PROTOCOLS')&&defined('CURLPROTO_HTTPS'))$opts[CURLOPT_REDIR_PROTOCOLS]=CURLPROTO_HTTPS;
+curl_setopt_array($ch,$opts);
 $body=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
 if($body===false||$error!=='')pc_fail('Ошибка связи с ПроверкаЧека.com: '.$error,502);
 $json=json_decode((string)$body,true);

@@ -3,8 +3,20 @@ declare(strict_types=1);
 
 function ensure_automatic_expense_tables(): void
 {
-    $migration = file_get_contents(__DIR__ . '/../database/migrations/003_automatic_expenses.sql');
-    if ($migration !== false) db()->exec($migration);
+    static $ready=false;
+    if($ready)return;
+    try{
+        db()->query('SELECT id FROM automatic_expense_rules LIMIT 1');
+        db()->query('SELECT id FROM automatic_expense_accruals LIMIT 1');
+        $ready=true;
+        return;
+    }catch(Throwable $e){
+        if(!db_missing_table_error($e))throw $e;
+    }
+    $migration=file_get_contents(__DIR__.'/../database/migrations/003_automatic_expenses.sql');
+    if($migration===false)throw new RuntimeException('Не удалось прочитать миграцию автоматических расходов.');
+    db()->exec($migration);
+    $ready=true;
 }
 
 function automatic_rule_label(string $type): string

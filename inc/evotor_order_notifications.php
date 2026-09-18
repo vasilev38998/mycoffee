@@ -222,6 +222,9 @@ function evotor_order_push_dispatch_log(int $logId): bool
     $claim->execute([$logId,$attempts]);
     if($claim->rowCount()!==1)return false;
 
+    // Do not occupy a MySQL slot while the Evotor cloud request is in flight.
+    $stmt=null;$claim=null;
+    if(function_exists('db_disconnect'))db_disconnect();
     try{
         $response=evotor_order_push_http($row,$payload);$pushId=trim((string)($response['id']??''));
         db()->prepare("UPDATE evotor_order_push_log SET status='sent',provider_push_id=?,sent_at=NOW(),last_error=NULL,updated_at=NOW() WHERE id=?")->execute([$pushId!==''?$pushId:null,$logId]);

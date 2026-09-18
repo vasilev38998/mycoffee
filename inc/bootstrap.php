@@ -28,30 +28,43 @@ require_once __DIR__.'/db.php';
 require_once __DIR__.'/access.php';
 require_once __DIR__.'/security.php';
 
-if(empty($GLOBALS['kapouch_exception_handler_registered'])){
+// CLI tests/cron should receive the original throwable and stack trace. On web
+// requests handle it once here; rethrowing from an exception handler can call
+// the same handler recursively and turn an ordinary exception into a stack
+// exhaustion fatal error.
+if(PHP_SAPI!=='cli'&&empty($GLOBALS['kapouch_exception_handler_registered'])){
     $GLOBALS['kapouch_exception_handler_registered']=true;
     set_exception_handler(static function(Throwable $e): void {
-        if(function_exists('db_capacity_error')&&db_capacity_error($e)){
-            error_log('[Kapouch DB capacity uncaught] '.$e->getMessage());
-            if(!headers_sent()){
+        $capacity=function_exists('db_capacity_error')&&db_capacity_error($e);
+        error_log(($capacity?'[Kapouch DB capacity uncaught] ':'[Kapouch uncaught] ').mb_substr($e->getMessage(),0,1200));
+
+        if(!headers_sent()){
+            if($capacity){
                 http_response_code(503);
                 header('Retry-After: 20');
-                header('Cache-Control: no-store');
-            }
-            $uri=(string)($_SERVER['REQUEST_URI']??'');
-            $accept=(string)($_SERVER['HTTP_ACCEPT']??'');
-            $json=str_contains($uri,'/api/')||str_contains($uri,'online_orders_feed.php')||str_contains(strtolower($accept),'application/json');
-            if($json){
-                if(!headers_sent())header('Content-Type: application/json; charset=UTF-8');
-                echo json_encode(['ok'=>false,'error'=>'Сервис временно перегружен. Повторите через несколько секунд.','retry_after'=>20],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
             }else{
-                if(!headers_sent())header('Content-Type: text/html; charset=UTF-8');
-                echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kapouch</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#f6efe7;color:#2d1c15;display:grid;place-items:center;min-height:100vh;margin:0}.box{max-width:520px;padding:32px;text-align:center}.box h1{font-size:28px;margin:0 0 10px}.box p{line-height:1.55;color:#765e52}.box button{margin-top:12px;border:0;border-radius:14px;padding:13px 18px;background:#2d1c15;color:#fff;font-weight:700}</style><div class="box"><h1>Kapouch временно занят</h1><p>Сервер базы данных достиг лимита одновременных подключений. Подождите несколько секунд и повторите.</p><button onclick="location.reload()">Повторить</button></div>';
+                http_response_code(500);
             }
+            header('Cache-Control: no-store');
+        }
+        $uri=(string)($_SERVER['REQUEST_URI']??'');
+        $accept=(string)($_SERVER['HTTP_ACCEPT']??'');
+        $json=str_contains($uri,'/api/')||str_contains($uri,'online_orders_feed.php')||str_contains(strtolower($accept),'application/json');
+        if($json){
+            if(!headers_sent())header('Content-Type: application/json; charset=UTF-8');
+            $payload=$capacity
+                ? ['ok'=>false,'error'=>'Сервис временно перегружен. Повторите через несколько секунд.','retry_after'=>20]
+                : ['ok'=>false,'error'=>'Временная ошибка сервиса. Повторите запрос.'];
+            echo json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
             return;
         }
-        restore_exception_handler();
-        throw $e;
+
+        if(!headers_sent())header('Content-Type: text/html; charset=UTF-8');
+        if($capacity){
+            echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kapouch</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#f6efe7;color:#2d1c15;display:grid;place-items:center;min-height:100vh;margin:0}.box{max-width:520px;padding:32px;text-align:center}.box h1{font-size:28px;margin:0 0 10px}.box p{line-height:1.55;color:#765e52}.box button{margin-top:12px;border:0;border-radius:14px;padding:13px 18px;background:#2d1c15;color:#fff;font-weight:700}</style><div class="box"><h1>Kapouch временно занят</h1><p>Сервер базы данных достиг лимита одновременных подключений. Подождите несколько секунд и повторите.</p><button onclick="location.reload()">Повторить</button></div>';
+        }else{
+            echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kapouch</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#f6efe7;color:#2d1c15;display:grid;place-items:center;min-height:100vh;margin:0}.box{max-width:520px;padding:32px;text-align:center}.box h1{font-size:28px;margin:0 0 10px}.box p{line-height:1.55;color:#765e52}.box button{margin-top:12px;border:0;border-radius:14px;padding:13px 18px;background:#2d1c15;color:#fff;font-weight:700}</style><div class="box"><h1>Kapouch временно недоступен</h1><p>Произошла внутренняя ошибка. Повторите попытку через несколько секунд.</p><button onclick="location.reload()">Повторить</button></div>';
+        }
     });
 }
 

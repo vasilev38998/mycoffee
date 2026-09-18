@@ -28,7 +28,7 @@ try{
     $clientOrderId=trim((string)($data['client_order_id']??''));
     $externalId=$clientOrderId!==''?'customer-web-'.$clientOrderId:'';
     $existingId=0;
-    if($externalId!==''){$existing=db()->prepare('SELECT id FROM online_orders WHERE external_id=? LIMIT 1');$existing->execute([$externalId]);$existingId=(int)($existing->fetchColumn()?:0);}
+    if($externalId!==''){$existing=db()->prepare('SELECT id FROM online_orders WHERE external_id=? LIMIT 1');$existing->execute([$externalId]);$existingId=(int)($existing->fetchColumn()?:0);$existing=null;}
     $acceptance=$existingId>0?null:customer_legal_checkout_acceptance($data);
     $phoneKey='';try{$phoneKey=customer_order_normalize_phone((string)($data['phone']??''));}catch(Throwable $e){}
     if($phoneKey!==''){$phoneLimit=kapouch_rate_limit_hit('customer_order_phone',$phoneKey,10,600);if(!$phoneLimit['allowed']){header('Retry-After: '.(int)$phoneLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много заказов для этого номера. Подождите немного и повторите.']);}}
@@ -44,16 +44,20 @@ try{
         if($requested==='')$requested=customer_operations_legacy_slot($delay);
         if($requested==='')throw new RuntimeException('Сейчас нет доступного времени для получения заказа.');
         $lockPurpose='customer_pickup_slot:'.hash('sha256',$requested);
-        if(!kapouch_advisory_lock($lockPurpose,3))throw new RuntimeException('Этот временной интервал сейчас выбирает другой покупатель. Попробуйте ещё раз.');
+        // Checkout may call YooKassa. A MySQL GET_LOCK would pin one scarce DB
+        // connection for the whole external request, so use the host-local
+        // nonblocking lock instead. Beget runs this site on one filesystem host.
+        $slotLock=kapouch_local_lock($lockPurpose);
+        if(!$slotLock)throw new RuntimeException('Этот временной интервал сейчас выбирает другой покупатель. Попробуйте ещё раз.');
         try{
-            if($externalId!==''){$existing=db()->prepare('SELECT id FROM online_orders WHERE external_id=? LIMIT 1');$existing->execute([$externalId]);$existingId=(int)($existing->fetchColumn()?:0);}
+            if($externalId!==''){$existing=db()->prepare('SELECT id FROM online_orders WHERE external_id=? LIMIT 1');$existing->execute([$externalId]);$existingId=(int)($existing->fetchColumn()?:0);$existing=null;}
             if($existingId<=0)customer_operations_validate_slot($requested);
             $order=customer_same_order_gift_create($data,$customer);
             customer_legal_record_acceptance((int)($order['order_id']??0),$acceptance);
             if(!empty($order['order_id'])){
                 $stmt=db()->prepare("UPDATE online_orders SET promised_at=? WHERE id=? AND promised_at IS NULL AND status IN ('new','awaiting_payment')");$stmt->execute([$requested,(int)$order['order_id']]);
             }
-        }finally{kapouch_advisory_unlock($lockPurpose);}
+        }finally{kapouch_local_unlock($slotLock);}
     }
 
     if(!empty($order['order_id'])){

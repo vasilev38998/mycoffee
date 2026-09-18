@@ -35,11 +35,11 @@ function customer_push_vapid_subject(): string{
     $saved=trim((string)app_setting('customer_push_vapid_subject',''));if($saved!=='')return $saved;
     $host=preg_replace('/[^A-Za-z0-9.-]/','',preg_replace('/:\d+$/','',(string)($_SERVER['HTTP_HOST']??'kapouch.local'))??'')?:'kapouch.local';return 'mailto:push@'.$host;
 }
-function customer_push_vapid_jwt(string $endpoint,string $privatePem,string $public): string{
+function customer_push_vapid_jwt(string $endpoint,string $privatePem,string $public,?string $subject=null): string{
     $parts=parse_url($endpoint);if(!$parts||strtolower((string)($parts['scheme']??''))!=='https'||empty($parts['host']))throw new RuntimeException('Некорректный push endpoint.');
     $aud='https://'.$parts['host'].(isset($parts['port'])?':'.$parts['port']:'');
     $header=customer_push_b64url_encode(json_encode(['typ'=>'JWT','alg'=>'ES256'],JSON_UNESCAPED_SLASHES));
-    $payload=customer_push_b64url_encode(json_encode(['aud'=>$aud,'exp'=>time()+43200,'sub'=>customer_push_vapid_subject()],JSON_UNESCAPED_SLASHES));$input=$header.'.'.$payload;
+    $payload=customer_push_b64url_encode(json_encode(['aud'=>$aud,'exp'=>time()+43200,'sub'=>$subject??customer_push_vapid_subject()],JSON_UNESCAPED_SLASHES));$input=$header.'.'.$payload;
     $key=openssl_pkey_get_private($privatePem);if(!$key||!openssl_sign($input,$der,$key,OPENSSL_ALGO_SHA256))throw new RuntimeException('Не удалось подписать VAPID JWT.');
     return $input.'.'.customer_push_b64url_encode(customer_push_der_signature_to_raw($der));
 }
@@ -64,11 +64,16 @@ function customer_push_target_url(string $url): string{
     if(filter_var($url,FILTER_VALIDATE_URL)&&str_starts_with(mb_strtolower($url),'https://'))return mb_substr($url,0,500);
     throw new RuntimeException('Ссылка push-уведомления должна быть внутренней или использовать HTTPS.');
 }
-function customer_push_send_subscription(array $sub,array $payload): array{
-    $endpoint=trim((string)($sub['endpoint']??''));$target=kapouch_public_https_target($endpoint);$keys=customer_push_vapid_keys();$json=json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);if($json===false)throw new RuntimeException('Не удалось собрать push payload.');
-    $body=customer_push_encrypt_payload($json,(string)$sub['p256dh'],(string)$sub['auth_secret']);$jwt=customer_push_vapid_jwt($endpoint,$keys['private'],$keys['public']);
-    $headers=['TTL: 86400','Urgency: high','Content-Encoding: aes128gcm','Content-Type: application/octet-stream','Authorization: vapid t='.$jwt.', k='.$keys['public']];
-    $ch=curl_init($endpoint);curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,CURLOPT_RETURNTRANSFER=>true,CURLOPT_HEADER=>false,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>20,CURLOPT_HTTPHEADER=>$headers]);kapouch_curl_pin_public_target($ch,$target);$response=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
+function customer_push_send_subscription(array $sub,array $payload,?array $vapidContext=null): array{
+    $endpoint=trim((string)($sub['endpoint']??''));$target=kapouch_public_https_target($endpoint);
+    if($vapidContext===null){
+        $keys=customer_push_vapid_keys();$vapidContext=['private'=>$keys['private'],'public'=>$keys['public'],'subject'=>customer_push_vapid_subject()];
+        if(function_exists('db_disconnect'))db_disconnect();
+    }
+    $json=json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);if($json===false)throw new RuntimeException('Не удалось собрать push payload.');
+    $body=customer_push_encrypt_payload($json,(string)$sub['p256dh'],(string)$sub['auth_secret']);$jwt=customer_push_vapid_jwt($endpoint,(string)$vapidContext['private'],(string)$vapidContext['public'],(string)$vapidContext['subject']);
+    $headers=['TTL: 86400','Urgency: high','Content-Encoding: aes128gcm','Content-Type: application/octet-stream','Authorization: vapid t='.$jwt.', k='.$vapidContext['public']];
+    $ch=curl_init($endpoint);curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,CURLOPT_RETURNTRANSFER=>true,CURLOPT_HEADER=>false,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>10,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_HTTPHEADER=>$headers]);kapouch_curl_pin_public_target($ch,$target);$response=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
     if($response===false||$error!=='')return ['ok'=>false,'http'=>$http,'error'=>$error?:'Ошибка push-сервиса','gone'=>false];
     return ['ok'=>$http>=200&&$http<300,'http'=>$http,'error'=>$http>=200&&$http<300?'':'Push HTTP '.$http,'gone'=>in_array($http,[404,410],true)];
 }
@@ -109,20 +114,50 @@ function customer_push_create_campaign(string $title,string $body,string $url,st
     $pdo=db();$pdo->beginTransaction();try{$stmt=$pdo->prepare("INSERT INTO customer_push_campaigns(title,body,target_url,segment_type,category_id,status,created_by) VALUES(?,?,?,?,?,'queued',?)");$stmt->execute([mb_substr($title,0,120),mb_substr($body,0,500),$target!==''?$target:null,$segment,$categoryId,$createdBy]);$id=(int)$pdo->lastInsertId();$pdo->commit();}catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
     $customers=customer_push_customer_ids_for_segment($segment,$categoryId);foreach($customers as $customerId)customer_push_enqueue($customerId,'campaign',$title,$body,$target,'campaign:'.$id.':customer:'.$customerId,$id);db()->prepare("UPDATE customer_push_campaigns SET recipient_count=?,status=? WHERE id=?")->execute([count($customers),count($customers)?'sending':'completed',$id]);return ['id'=>$id,'recipients'=>count($customers)];
 }
-function customer_push_process_queue(int $limit=30): array{
-    $limit=max(1,min(100,$limit));$pdo=db();$pdo->beginTransaction();try{$rows=$pdo->query("SELECT * FROM customer_push_queue WHERE status IN ('pending','failed') AND attempts<3 AND (next_attempt_at IS NULL OR next_attempt_at<=NOW()) ORDER BY id LIMIT {$limit} FOR UPDATE")->fetchAll();$ids=array_map(static fn($r)=>(int)$r['id'],$rows);if($ids)$pdo->exec("UPDATE customer_push_queue SET status='processing' WHERE id IN (".implode(',',$ids).')');$pdo->commit();}catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
-    $sent=0;$failed=0;$campaigns=[];
-    foreach($rows as $row){$stmt=$pdo->prepare('SELECT * FROM customer_push_subscriptions WHERE customer_id=? AND active=1');$stmt->execute([(int)$row['customer_id']]);$subs=$stmt->fetchAll();$any=false;$errors=[];
-        $payload=['title'=>(string)$row['title'],'body'=>(string)$row['body'],'url'=>(string)($row['target_url']?:'./'),'tag'=>(string)$row['event_type'],'icon'=>'./assets/icon.svg','badge'=>'./assets/icon.svg'];
-        foreach($subs as $sub){try{$r=customer_push_send_subscription($sub,$payload);}catch(Throwable $e){$r=['ok'=>false,'gone'=>false,'error'=>$e->getMessage(),'http'=>0];}
-            if($r['ok']){$any=true;$pdo->prepare('UPDATE customer_push_subscriptions SET last_success_at=NOW(),last_error=NULL WHERE id=?')->execute([(int)$sub['id']]);}
-            else{$errors[]=(string)$r['error'];$pdo->prepare('UPDATE customer_push_subscriptions SET last_failure_at=NOW(),last_error=?,active=? WHERE id=?')->execute([mb_substr((string)$r['error'],0,500),$r['gone']?0:1,(int)$sub['id']]);}}
-        $attempt=(int)$row['attempts']+1;if($any){$sent++;$pdo->prepare("UPDATE customer_push_queue SET status='sent',attempts=?,processed_at=NOW(),last_error=NULL WHERE id=? AND status='processing'")->execute([$attempt,(int)$row['id']]);}
-        else{$failed++;$pdo->prepare("UPDATE customer_push_queue SET status='failed',attempts=?,next_attempt_at=DATE_ADD(NOW(),INTERVAL 5 MINUTE),last_error=? WHERE id=? AND status='processing'")->execute([$attempt,mb_substr(implode('; ',$errors)?:'Нет активных push-подписок',0,500),(int)$row['id']]);}
-        if($row['campaign_id'])$campaigns[(int)$row['campaign_id']]=true;
+function customer_push_process_queue(int $limit=20): array{
+    $limit=max(1,min(20,$limit));
+    $queueLock=function_exists('kapouch_local_lock')?kapouch_local_lock('customer_push_process_queue'):true;
+    if(!$queueLock)return ['processed'=>0,'sent'=>0,'failed'=>0];
+    try{
+        $pdo=db();$pdo->beginTransaction();
+        try{
+            $rows=$pdo->query("SELECT * FROM customer_push_queue WHERE status IN ('pending','failed') AND attempts<3 AND (next_attempt_at IS NULL OR next_attempt_at<=NOW()) ORDER BY id LIMIT {$limit} FOR UPDATE")->fetchAll();
+            $ids=array_map(static fn($r)=>(int)$r['id'],$rows);
+            if($ids)$pdo->exec('UPDATE customer_push_queue SET status="processing" WHERE id IN ('.implode(',',$ids).')');
+            $pdo->commit();
+        }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+
+        $vapidKeys=customer_push_vapid_keys();$vapidContext=['private'=>$vapidKeys['private'],'public'=>$vapidKeys['public'],'subject'=>customer_push_vapid_subject()];
+        $pdo=null;if(function_exists('db_disconnect'))db_disconnect();
+
+        $sent=0;$failed=0;$campaigns=[];
+        foreach($rows as $row){
+            $pdo=db();$stmt=$pdo->prepare('SELECT * FROM customer_push_subscriptions WHERE customer_id=? AND active=1');$stmt->execute([(int)$row['customer_id']]);$subs=$stmt->fetchAll();
+            $stmt=null;$pdo=null;if(function_exists('db_disconnect'))db_disconnect();
+            $any=false;$errors=[];$results=[];
+            $payload=['title'=>(string)$row['title'],'body'=>(string)$row['body'],'url'=>(string)($row['target_url']?:'./'),'tag'=>(string)$row['event_type'],'icon'=>'./assets/icon.svg','badge'=>'./assets/icon.svg'];
+            foreach($subs as $sub){
+                try{$r=customer_push_send_subscription($sub,$payload,$vapidContext);}catch(Throwable $e){$r=['ok'=>false,'gone'=>false,'error'=>$e->getMessage(),'http'=>0];}
+                if($r['ok'])$any=true;else $errors[]=(string)$r['error'];
+                $results[]=['id'=>(int)$sub['id'],'ok'=>(bool)$r['ok'],'gone'=>(bool)$r['gone'],'error'=>(string)$r['error']];
+            }
+            $pdo=db();
+            foreach($results as $result){
+                if($result['ok'])$pdo->prepare('UPDATE customer_push_subscriptions SET last_success_at=NOW(),last_error=NULL WHERE id=?')->execute([$result['id']]);
+                else $pdo->prepare('UPDATE customer_push_subscriptions SET last_failure_at=NOW(),last_error=?,active=? WHERE id=?')->execute([mb_substr($result['error'],0,500),$result['gone']?0:1,$result['id']]);
+            }
+            $attempt=(int)$row['attempts']+1;
+            if($any){$sent++;$pdo->prepare("UPDATE customer_push_queue SET status='sent',attempts=?,processed_at=NOW(),last_error=NULL WHERE id=? AND status='processing'")->execute([$attempt,(int)$row['id']]);}
+            else{$failed++;$pdo->prepare("UPDATE customer_push_queue SET status='failed',attempts=?,next_attempt_at=DATE_ADD(NOW(),INTERVAL 5 MINUTE),last_error=? WHERE id=? AND status='processing'")->execute([$attempt,mb_substr(implode('; ',$errors)?:'Нет активных push-подписок',0,500),(int)$row['id']]);}
+            if($row['campaign_id'])$campaigns[(int)$row['campaign_id']]=true;
+            $pdo=null;if(function_exists('db_disconnect'))db_disconnect();
+        }
+        $pdo=db();
+        foreach(array_keys($campaigns) as $campaignId){$stmt=$pdo->prepare("SELECT SUM(status='sent') sent,SUM(status='failed' AND attempts>=3) failed,SUM(status IN ('pending','processing') OR (status='failed' AND attempts<3)) waiting FROM customer_push_queue WHERE campaign_id=?");$stmt->execute([$campaignId]);$s=$stmt->fetch();$done=(int)($s['waiting']??0)===0;$pdo->prepare('UPDATE customer_push_campaigns SET sent_count=?,failed_count=?,status=?,completed_at=IF(?,NOW(),completed_at) WHERE id=?')->execute([(int)($s['sent']??0),(int)($s['failed']??0),$done?'completed':'sending',$done?1:0,$campaignId]);}
+        return ['processed'=>count($rows),'sent'=>$sent,'failed'=>$failed];
+    }finally{
+        if(is_resource($queueLock)&&function_exists('kapouch_local_unlock'))kapouch_local_unlock($queueLock);
     }
-    foreach(array_keys($campaigns) as $campaignId){$stmt=$pdo->prepare("SELECT SUM(status='sent') sent,SUM(status='failed' AND attempts>=3) failed,SUM(status IN ('pending','processing') OR (status='failed' AND attempts<3)) waiting FROM customer_push_queue WHERE campaign_id=?");$stmt->execute([$campaignId]);$s=$stmt->fetch();$done=(int)($s['waiting']??0)===0;$pdo->prepare('UPDATE customer_push_campaigns SET sent_count=?,failed_count=?,status=?,completed_at=IF(?,NOW(),completed_at) WHERE id=?')->execute([(int)($s['sent']??0),(int)($s['failed']??0),$done?'completed':'sending',$done?1:0,$campaignId]);}
-    return ['processed'=>count($rows),'sent'=>$sent,'failed'=>$failed];
 }
 function customer_push_stats(): array{
     return ['active_subscriptions'=>(int)db()->query('SELECT COUNT(*) FROM customer_push_subscriptions WHERE active=1')->fetchColumn(),'customers'=>(int)db()->query('SELECT COUNT(DISTINCT customer_id) FROM customer_push_subscriptions WHERE active=1')->fetchColumn(),'queued'=>(int)db()->query("SELECT COUNT(*) FROM customer_push_queue WHERE status IN ('pending','processing') OR (status='failed' AND attempts<3)")->fetchColumn()];

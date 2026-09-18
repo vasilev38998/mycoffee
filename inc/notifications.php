@@ -33,10 +33,24 @@ function send_telegram_message(string $text): void
     if(!$row||!(int)$row['enabled']||empty($row['destination'])||empty($row['secret_ciphertext']))throw new RuntimeException('Telegram-уведомления не настроены.');
     $token=decrypt_notification_secret($row);
     if(!preg_match('/^[0-9]+:[A-Za-z0-9_-]+$/',$token))throw new RuntimeException('Некорректный Telegram bot token.');
+    $destination=(string)$row['destination'];
+    // Do not hold MySQL while Telegram is slow or unreachable.
+    $row=null;
+    if(function_exists('db_disconnect'))db_disconnect();
     $url='https://api.telegram.org/bot'.$token.'/sendMessage';
     $ch=curl_init($url);
-    curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_TIMEOUT=>30,CURLOPT_POSTFIELDS=>http_build_query(['chat_id'=>$row['destination'],'text'=>$text,'disable_web_page_preview'=>1])]);
+    $opts=[
+        CURLOPT_RETURNTRANSFER=>true,
+        CURLOPT_POST=>true,
+        CURLOPT_CONNECTTIMEOUT=>5,
+        CURLOPT_TIMEOUT=>15,
+        CURLOPT_FOLLOWLOCATION=>false,
+        CURLOPT_POSTFIELDS=>http_build_query(['chat_id'=>$destination,'text'=>$text,'disable_web_page_preview'=>1]),
+    ];
+    if(defined('CURLOPT_PROTOCOLS')&&defined('CURLPROTO_HTTPS'))$opts[CURLOPT_PROTOCOLS]=CURLPROTO_HTTPS;
+    if(defined('CURLOPT_REDIR_PROTOCOLS')&&defined('CURLPROTO_HTTPS'))$opts[CURLOPT_REDIR_PROTOCOLS]=CURLPROTO_HTTPS;
+    curl_setopt_array($ch,$opts);
     $body=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
     if($body===false||$error!=='')throw new RuntimeException('Ошибка Telegram: '.$error);
-    if($status<200||$status>=300)throw new RuntimeException('Telegram API HTTP '.$status.': '.$body);
+    if($status<200||$status>=300)throw new RuntimeException('Telegram API HTTP '.$status.': '.mb_substr((string)$body,0,500));
 }

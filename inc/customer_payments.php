@@ -65,7 +65,18 @@ function customer_payment_yookassa_request(array $connection,string $httpMethod,
     $headers=['Accept: application/json','Content-Type: application/json'];
     if($idempotenceKey!==null)$headers[]='Idempotence-Key: '.$idempotenceKey;
     $ch=curl_init($url);
-    $opts=[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>45,CURLOPT_HTTPAUTH=>CURLAUTH_BASIC,CURLOPT_USERPWD=>(string)$connection['merchant_login'].':'.customer_payment_yookassa_secret($connection),CURLOPT_HTTPHEADER=>$headers,CURLOPT_USERAGENT=>'Kapouch/1.0 YooKassa'];
+    $opts=[
+        CURLOPT_RETURNTRANSFER=>true,
+        CURLOPT_CONNECTTIMEOUT=>5,
+        CURLOPT_TIMEOUT=>20,
+        CURLOPT_FOLLOWLOCATION=>false,
+        CURLOPT_HTTPAUTH=>CURLAUTH_BASIC,
+        CURLOPT_USERPWD=>(string)$connection['merchant_login'].':'.customer_payment_yookassa_secret($connection),
+        CURLOPT_HTTPHEADER=>$headers,
+        CURLOPT_USERAGENT=>'Kapouch/1.0 YooKassa',
+    ];
+    if(defined('CURLOPT_PROTOCOLS')&&defined('CURLPROTO_HTTPS'))$opts[CURLOPT_PROTOCOLS]=CURLPROTO_HTTPS;
+    if(defined('CURLOPT_REDIR_PROTOCOLS')&&defined('CURLPROTO_HTTPS'))$opts[CURLOPT_REDIR_PROTOCOLS]=CURLPROTO_HTTPS;
     if(strtoupper($httpMethod)!=='GET'){$opts[CURLOPT_CUSTOMREQUEST]=strtoupper($httpMethod);if($payload!==null)$opts[CURLOPT_POSTFIELDS]=json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);}
     curl_setopt_array($ch,$opts);
     $body=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
@@ -139,6 +150,8 @@ function customer_payment_create_sbp(int $orderId,string $orderNumber,float $amo
     ];
     db()->prepare("UPDATE online_orders SET status='awaiting_payment',payment_status='pending',payment_method='sbp',payment_provider='yookassa_sbp' WHERE id=? AND status='new'")->execute([$orderId]);
     $key=substr(hash('sha256','kapouch|yookassa|'.$orderId.'|'.$orderNumber),0,64);
+    $access=null;
+    if(function_exists('db_disconnect'))db_disconnect();
     $response=customer_payment_yookassa_request($connection,'POST','payments',$payload,$key);
     $paymentId=trim((string)($response['id']??''));$paymentUrl=trim((string)($response['confirmation']['confirmation_url']??''));
     if($paymentId===''||$paymentUrl==='')throw new RuntimeException('ЮKassa создала платёж без ссылки для оплаты.');
@@ -155,21 +168,34 @@ function customer_payment_mark_cash(int $orderId): void
 function customer_payment_yookassa_sync_by_provider_id(string $providerOrderId): ?array
 {
     if(!preg_match('/^[A-Za-z0-9_-]{10,190}$/',$providerOrderId))return null;
-    $stmt=db()->prepare("SELECT p.*,o.total_amount,o.status order_status FROM customer_payments p JOIN online_orders o ON o.id=p.order_id WHERE p.provider='yookassa_sbp' AND p.provider_order_id=? LIMIT 1");$stmt->execute([$providerOrderId]);$payment=$stmt->fetch();if(!$payment)return null;
-    $connection=customer_payment_connection('yookassa_sbp');if(!$connection)return null;
-    $status=customer_payment_yookassa_request($connection,'GET','payments/'.rawurlencode($providerOrderId));
-    $state=(string)($status['status']??'');$paid=!empty($status['paid'])&&$state==='succeeded';$actual=round((float)($status['amount']['value']??0),2);$expected=round((float)$payment['amount'],2);$paid=$paid&&abs($actual-$expected)<0.001;
-    if($paid){
-        db()->prepare("UPDATE customer_payments SET status=CASE WHEN refund_status='succeeded' THEN 'refunded' ELSE 'paid' END,paid_at=COALESCE(paid_at,NOW()),provider_response=? WHERE id=?")->execute([json_encode($status,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),(int)$payment['id']]);
-        db()->prepare("UPDATE online_orders SET status=CASE WHEN status='awaiting_payment' THEN 'new' ELSE status END,payment_status=CASE WHEN payment_status='refunded' THEN 'refunded' ELSE 'paid' END,payment_provider='yookassa_sbp' WHERE id=?")->execute([(int)$payment['order_id']]);
-    }elseif($state==='canceled'){
-        db()->prepare("UPDATE customer_payments SET status='failed',failed_at=COALESCE(failed_at,NOW()),provider_response=? WHERE id=?")->execute([json_encode($status,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),(int)$payment['id']]);
-        db()->prepare("UPDATE online_orders SET status=CASE WHEN status='awaiting_payment' THEN 'cancelled' ELSE status END,payment_status='failed' WHERE id=?")->execute([(int)$payment['order_id']]);
-        try{customer_drink_loyalty_restore_online_order_reward((int)$payment['order_id'],'Платёж отменён, подарок восстановлен');}catch(Throwable $e){error_log('[Kapouch sixth drink restore] '.$e->getMessage());}
-    }else{
-        db()->prepare('UPDATE customer_payments SET provider_response=? WHERE id=?')->execute([json_encode($status,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),(int)$payment['id']]);
-    }
-    return ['paid'=>$paid,'order_id'=>(int)$payment['order_id'],'payment_state'=>$state];
+    $stmt=db()->prepare("SELECT p.*,o.total_amount,o.status order_status FROM customer_payments p JOIN online_orders o ON o.id=p.order_id WHERE p.provider='yookassa_sbp' AND p.provider_order_id=? LIMIT 1");
+    $stmt->execute([$providerOrderId]);$payment=$stmt->fetch();if(!$payment)return null;
+    $localStatus=(string)($payment['status']??'');
+    if(in_array($localStatus,['paid','refunded'],true))return ['paid'=>$localStatus==='paid','order_id'=>(int)$payment['order_id'],'payment_state'=>$localStatus==='paid'?'succeeded':'refunded'];
+    if($localStatus==='failed')return ['paid'=>false,'order_id'=>(int)$payment['order_id'],'payment_state'=>'canceled'];
+    $updatedAt=strtotime((string)($payment['updated_at']??''));
+    if($localStatus==='pending'&&$updatedAt!==false&&time()-$updatedAt<2)return ['paid'=>false,'order_id'=>(int)$payment['order_id'],'payment_state'=>'pending'];
+
+    $lock=kapouch_local_lock('yookassa_payment_sync:'.$providerOrderId);
+    if(!$lock)return ['paid'=>false,'order_id'=>(int)$payment['order_id'],'payment_state'=>'pending'];
+    try{
+        $connection=customer_payment_connection('yookassa_sbp');if(!$connection)return null;
+        $stmt=null;
+        if(function_exists('db_disconnect'))db_disconnect();
+        $status=customer_payment_yookassa_request($connection,'GET','payments/'.rawurlencode($providerOrderId));
+        $state=(string)($status['status']??'');$paid=!empty($status['paid'])&&$state==='succeeded';$actual=round((float)($status['amount']['value']??0),2);$expected=round((float)$payment['amount'],2);$paid=$paid&&abs($actual-$expected)<0.001;
+        if($paid){
+            db()->prepare("UPDATE customer_payments SET status=CASE WHEN refund_status='succeeded' THEN 'refunded' ELSE 'paid' END,paid_at=COALESCE(paid_at,NOW()),provider_response=? WHERE id=?")->execute([json_encode($status,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),(int)$payment['id']]);
+            db()->prepare("UPDATE online_orders SET status=CASE WHEN status='awaiting_payment' THEN 'new' ELSE status END,payment_status=CASE WHEN payment_status='refunded' THEN 'refunded' ELSE 'paid' END,payment_provider='yookassa_sbp' WHERE id=?")->execute([(int)$payment['order_id']]);
+        }elseif($state==='canceled'){
+            db()->prepare("UPDATE customer_payments SET status='failed',failed_at=COALESCE(failed_at,NOW()),provider_response=? WHERE id=?")->execute([json_encode($status,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),(int)$payment['id']]);
+            db()->prepare("UPDATE online_orders SET status=CASE WHEN status='awaiting_payment' THEN 'cancelled' ELSE status END,payment_status='failed' WHERE id=?")->execute([(int)$payment['order_id']]);
+            try{customer_drink_loyalty_restore_online_order_reward((int)$payment['order_id'],'Платёж отменён, подарок восстановлен');}catch(Throwable $e){error_log('[Kapouch sixth drink restore] '.$e->getMessage());}
+        }else{
+            db()->prepare('UPDATE customer_payments SET provider_response=? WHERE id=?')->execute([json_encode($status,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),(int)$payment['id']]);
+        }
+        return ['paid'=>$paid,'order_id'=>(int)$payment['order_id'],'payment_state'=>$state];
+    }finally{kapouch_local_unlock($lock);}
 }
 
 function customer_payment_status_for_order(int $orderId): ?array
@@ -187,9 +213,11 @@ function customer_payment_refundable_orders(int $limit=100): array
 
 function customer_payment_yookassa_refund_full(int $orderId): array
 {
-    $pdo=db();
-    $pdo->beginTransaction();
+    $lock=kapouch_local_lock('yookassa_refund_order:'.$orderId);
+    if(!$lock)throw new RuntimeException('Возврат этого заказа уже обрабатывается. Повторите через несколько секунд.');
+    $pdo=null;
     try{
+        $pdo=db();$pdo->beginTransaction();
         $stmt=$pdo->prepare("SELECT p.*,o.order_number,o.status order_status,o.payment_status order_payment_status,o.total_amount FROM customer_payments p JOIN online_orders o ON o.id=p.order_id WHERE p.order_id=? AND p.provider='yookassa_sbp' FOR UPDATE");
         $stmt->execute([$orderId]);$payment=$stmt->fetch();
         if(!$payment)throw new RuntimeException('Платёж ЮKassa для заказа не найден.');
@@ -201,8 +229,10 @@ function customer_payment_yookassa_refund_full(int $orderId): array
         $retrySeed=(string)($payment['refund_status']??'')==='canceled'?(string)($payment['provider_refund_id']??''):'';
         $pdo->commit();
 
+        $stmt=null;$pdo=null;
         $connection=customer_payment_connection('yookassa_sbp');
         if(!$connection||empty($connection['merchant_login'])||empty($connection['secret_ciphertext']))throw new RuntimeException('Не настроены реквизиты ЮKassa для возврата.');
+        if(function_exists('db_disconnect'))db_disconnect();
         $key=substr(hash('sha256','kapouch|refund|'.$orderId.'|'.$paymentId.'|'.number_format($amount,2,'.','').'|'.$retrySeed),0,64);
         $response=customer_payment_yookassa_request($connection,'POST','refunds',[
             'payment_id'=>$paymentId,
@@ -214,7 +244,8 @@ function customer_payment_yookassa_refund_full(int $orderId): array
         if(!in_array($state,['pending','succeeded','canceled'],true))throw new RuntimeException('ЮKassa вернула неизвестный статус возврата: '.$state);
         customer_payment_apply_refund_state($refundId,$response);
         return ['status'=>$state,'refund_id'=>$refundId];
-    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+    }catch(Throwable $e){if($pdo instanceof PDO&&$pdo->inTransaction())$pdo->rollBack();throw $e;}
+    finally{kapouch_local_unlock($lock);}
 }
 
 function customer_payment_apply_refund_state(string $refundId,array $response): ?array
@@ -246,7 +277,11 @@ function customer_payment_apply_refund_state(string $refundId,array $response): 
 function customer_payment_yookassa_sync_refund(string $refundId): ?array
 {
     if(!preg_match('/^[A-Za-z0-9_-]{10,190}$/',$refundId))return null;
-    $connection=customer_payment_connection('yookassa_sbp');if(!$connection)return null;
-    $response=customer_payment_yookassa_request($connection,'GET','refunds/'.rawurlencode($refundId));
-    return customer_payment_apply_refund_state($refundId,$response);
+    $lock=kapouch_local_lock('yookassa_refund_sync:'.$refundId);if(!$lock)return null;
+    try{
+        $connection=customer_payment_connection('yookassa_sbp');if(!$connection)return null;
+        if(function_exists('db_disconnect'))db_disconnect();
+        $response=customer_payment_yookassa_request($connection,'GET','refunds/'.rawurlencode($refundId));
+        return customer_payment_apply_refund_state($refundId,$response);
+    }finally{kapouch_local_unlock($lock);}
 }

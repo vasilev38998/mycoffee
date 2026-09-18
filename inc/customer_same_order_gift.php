@@ -63,17 +63,23 @@ function customer_same_order_gift_create(array $data,array $customer): array
 
     // Checkout must not rely on a quote having run just before it. Bring any
     // completed online/Evotor purchases into the stamp ledger first, then make
-    // the same-order decision again while holding a per-customer advisory lock.
+    // the same-order decision again while holding a per-customer lock.
     customer_drink_loyalty_refresh_customer($customerId,100);
     if(!customer_same_order_gift_should_unlock($customerId,$items))return customer_order_create($data,$customer);
 
     $lockName='customer_same_order_gift:'.$customerId;
-    $locked=function_exists('kapouch_advisory_lock')?kapouch_advisory_lock($lockName,4):true;
-    if(!$locked)throw new RuntimeException('Бонусная программа сейчас обновляется. Повторите оформление через пару секунд.');
-    $pdo=db();$clientId=trim((string)($data['client_order_id']??''));
+    // This section can lead to an external YooKassa request. A MySQL advisory
+    // lock would pin its DB connection until that request returns, so serialize
+    // the checkout with the host-local file lock instead.
+    $lockHandle=function_exists('kapouch_local_lock')?kapouch_local_lock($lockName):true;
+    if(!$lockHandle)throw new RuntimeException('Бонусная программа сейчас обновляется. Повторите оформление через пару секунд.');
+    $clientId=trim((string)($data['client_order_id']??''));
     $key='provisional:order:'.$customerId.':'.substr(hash('sha256',$clientId!==''?$clientId:bin2hex(random_bytes(12))),0,32);
     $inserted=false;
-    $cleanup=static function()use($pdo,$customerId,$key,&$inserted): void{if(!$inserted)return;try{customer_same_order_gift_remove_provisional($pdo,$customerId,$key);$inserted=false;}catch(Throwable $e){error_log('[Kapouch same-order gift cleanup] '.$e->getMessage());}};
+    $cleanup=static function()use($customerId,$key,&$inserted): void{
+        if(!$inserted)return;
+        try{customer_same_order_gift_remove_provisional(db(),$customerId,$key);$inserted=false;}catch(Throwable $e){error_log('[Kapouch same-order gift cleanup] '.$e->getMessage());}
+    };
     register_shutdown_function($cleanup);
     try{
         customer_drink_loyalty_refresh_customer($customerId,100);
@@ -83,12 +89,17 @@ function customer_same_order_gift_create(array $data,array $customer): array
         // just-earned gift exactly like an already-earned reward. The row is
         // removed immediately after order creation; the resulting -1 redemption
         // is balanced by stamps credited when the paid drinks are completed.
+        $pdo=db();
         customer_same_order_gift_remove_provisional($pdo,$customerId,$key);
         $inserted=customer_same_order_gift_insert_provisional($pdo,$customerId,$key);
         if(!$inserted)throw new RuntimeException('Не удалось активировать подарок для текущего заказа.');
+        // Do not keep a local PDO reference alive while order creation may wait
+        // on YooKassa. customer_order_create() can now release MySQL cleanly.
+        $pdo=null;
+        if(function_exists('db_disconnect'))db_disconnect();
         return customer_order_create($data,$customer);
     }finally{
         $cleanup();
-        if(function_exists('kapouch_advisory_unlock'))kapouch_advisory_unlock($lockName);
+        if(is_resource($lockHandle)&&function_exists('kapouch_local_unlock'))kapouch_local_unlock($lockHandle);
     }
 }
