@@ -23,6 +23,17 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
   }
   function isProfileRequest(input){return requestUrl(input).indexOf('/customer_profile.php')!==-1;}
   function isCatalogRequest(input){return requestUrl(input).indexOf('/customer_catalog.php')!==-1;}
+  function isOrderRequest(input){return requestUrl(input).indexOf('/customer_order.php')!==-1;}
+  function loyaltyMode(){var mode=String(localStorage.getItem('kapouch_loyalty_mode')||'gift');return ['gift','points','none'].indexOf(mode)!==-1?mode:'gift';}
+  function attachLoyaltyMode(input,init){
+    if(!isOrderRequest(input)||requestMethod(init)!=='POST'||!init||typeof init.body!=='string')return init;
+    try{
+      var payload=JSON.parse(init.body);
+      if(!payload||Array.isArray(payload)||typeof payload!=='object')return init;
+      payload.loyalty_mode=loyaltyMode();
+      return Object.assign({},init,{body:JSON.stringify(payload)});
+    }catch(e){return init}
+  }
   function publishJson(response,eventName,assignShop){
     if(!response||!response.ok)return;
     response.clone().json().then(function(data){
@@ -57,6 +68,7 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
     if(typeof input==='string'&&input.indexOf('../api/')===0)input=apiBase+'/'+input.slice('../api/'.length);
     else if(input instanceof URL&&input.href.indexOf(new URL('../api/',window.location.href).href)===0)input=new URL(apiBase+'/'+input.href.slice(new URL('../api/',window.location.href).href.length));
 
+    init=attachLoyaltyMode(input,init);
     var method=requestMethod(init);
     var profile=isProfileRequest(input);
     var catalog=isCatalogRequest(input);
@@ -97,8 +109,13 @@ window.addEventListener('DOMContentLoaded',function(){
 
   var giftStyle=document.createElement('link');
   giftStyle.rel='stylesheet';
-  giftStyle.href='assets/sixth-drink-checkout.css?v=2';
+  giftStyle.href='assets/sixth-drink-checkout.css?v=3';
   document.head.appendChild(giftStyle);
+
+  var disclaimerStyle=document.createElement('link');
+  disclaimerStyle.rel='stylesheet';
+  disclaimerStyle.href='assets/product-disclaimer.css?v=1';
+  document.head.appendChild(disclaimerStyle);
 
   var contrastStyle=document.createElement('link');
   contrastStyle.rel='stylesheet';
@@ -121,9 +138,14 @@ window.addEventListener('DOMContentLoaded',function(){
   document.body.appendChild(authRequired);
 
   var giftCheckout=document.createElement('script');
-  giftCheckout.src='assets/sixth-drink-checkout.js?v=4';
+  giftCheckout.src='assets/sixth-drink-checkout.js?v=5';
   giftCheckout.defer=true;
   document.body.appendChild(giftCheckout);
+
+  var disclaimer=document.createElement('script');
+  disclaimer.src='assets/product-disclaimer.js?v=1';
+  disclaimer.defer=true;
+  document.body.appendChild(disclaimer);
 
   var phoneMask=document.createElement('script');
   phoneMask.src='assets/phone-mask.js?v=1';
