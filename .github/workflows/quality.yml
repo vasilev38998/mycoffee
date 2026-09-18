@@ -60,6 +60,9 @@ jobs:
       - name: PWA bonus redemption contract
         run: php tests/pwa_bonus_redemption_contract.php
 
+      - name: PWA admin customization contract
+        run: php tests/pwa_admin_customization_contract.php
+
       - name: Evotor order push queue contract
         run: php tests/evotor_order_push_queue_contract.php
 
