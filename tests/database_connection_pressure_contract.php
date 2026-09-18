@@ -26,7 +26,7 @@ $checks=[
     'staff order board polling is reduced and backs off'=>str_contains($board,'Live · каждые 5 сек')&&str_contains($board,'pollFailures')&&str_contains($board,"r.headers.get('Retry-After')"),
     'pwa base polling interval is ten seconds'=>str_contains($config,'pollIntervalMs: 10000'),
     'pwa order tracker pauses hidden and backs off'=>str_contains($orderTracker,'ACTIVE_POLL_MS')&&str_contains($orderTracker,'document.hidden')&&str_contains($orderTracker,"r.headers.get('Retry-After')"),
-    'pwa cache retains connection-pressure fix'=>str_contains($sw,"kapouch-pwa-v40")&&str_contains($sw,"kapouch-pwa-v39")&&str_contains($sw,"kapouch-pwa-v38"),
+    'pwa cache retains connection-pressure fix'=>str_contains($sw,"kapouch-pwa-v41")&&str_contains($sw,"kapouch-pwa-v40")&&str_contains($sw,"kapouch-pwa-v39")&&str_contains($sw,"kapouch-pwa-v38"),
 ];
 
 foreach($checks as $label=>$ok){
