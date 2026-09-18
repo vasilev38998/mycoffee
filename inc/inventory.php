@@ -3,8 +3,20 @@ declare(strict_types=1);
 
 function ensure_inventory_tables(): void
 {
-    $migration = file_get_contents(__DIR__ . '/../database/migrations/004_inventory.sql');
-    if ($migration !== false) db()->exec($migration);
+    static $ready=false;
+    if($ready)return;
+    try{
+        db()->query('SELECT id FROM inventory_movements LIMIT 1');
+        db()->query('SELECT id FROM inventory_counts LIMIT 1');
+        $ready=true;
+        return;
+    }catch(Throwable $e){
+        if(!db_missing_table_error($e))throw $e;
+    }
+    $migration=file_get_contents(__DIR__.'/../database/migrations/004_inventory.sql');
+    if($migration===false)throw new RuntimeException('Не удалось прочитать миграцию склада.');
+    db()->exec($migration);
+    $ready=true;
 }
 
 function apply_inventory_movement(
