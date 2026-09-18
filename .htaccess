@@ -7,14 +7,15 @@ DirectoryIndex index.php index.html
   # Cheaply reject the most common automated reconnaissance targets before
   # they reach PHP or the PWA rewrite. These names are not Kapouch routes.
   RewriteRule ^(?:phpinfo|info|php-info|phpversion|old_phpinfo|server-info|server-status|debug|test|php|pi|p|i)(?:\.php)?(?:\.(?:bak|old|save|orig|swp))?/?$ - [F,L,NC]
-  RewriteRule ^(?:\.env(?:\..*)?|\.git(?:/|$)|\.svn(?:/|$)|composer\.(?:json|lock)|vendor/phpunit(?:/|$)|wp-login\.php|wp-admin(?:/|$)) - [F,L,NC]
+  RewriteRule ^(?:\.env(?:\..*)?|\.git(?:/|$)|\.svn(?:/|$)|composer\.(?:json|lock)|vendor/phpunit(?:/|$)|wp-login\.php|wp-admin(?:/|$)|wp-config\.php(?:\..*)?) - [F,L,NC]
 
   # Physical Evotor OS 4.x can reach kapouch.store over the reviewed legacy TLS
-  # path but the hosting edge rejects direct /api/*.php requests with HTTP 405.
-  # Keep the compatibility endpoint extensionless so the edge treats it as a
-  # normal GET, then route internally to the authenticated bridge script.
+  # path but the hosting edge may reject direct /api/*.php calls. Keep terminal
+  # transport endpoints extensionless and rewrite them internally to PHP.
   RewriteCond %{HTTP_HOST} ^(?:www\.)?kapouch\.store(?::[0-9]+)?$ [NC]
   RewriteRule ^evotor-bridge/?$ api/evotor_bridge.php [L,NC]
+  RewriteCond %{HTTP_HOST} ^(?:www\.)?kapouch\.store(?::[0-9]+)?$ [NC]
+  RewriteRule ^evotor-loyalty-discount/?$ api/evotor_loyalty_discount.php [L,NC]
 
   # app.kapouch.store is attached to this same Beget site, but is allowed to
   # serve only the public customer PWA. This is an internal rewrite: the
