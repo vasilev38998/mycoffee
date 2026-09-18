@@ -20,7 +20,7 @@ import ru.evotor.framework.receipt.Position;
 import ru.evotor.framework.receipt.Receipt;
 
 final class LoyaltyDiscountApi {
-    private static final String URL = "https://kapouch.store/api/evotor_loyalty_discount.php";
+    private static final String URL = "https://kapouch.store/evotor-loyalty-discount";
 
     private LoyaltyDiscountApi() {}
 
@@ -91,7 +91,7 @@ final class LoyaltyDiscountApi {
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("Cache-Control", "no-store");
-            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.27");
+            connection.setRequestProperty("User-Agent", "Kapouch-Orders-Evotor/1.2.28");
             connection.setRequestProperty("X-Kapouch-Terminal-Token", terminalToken);
             byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
             connection.setFixedLengthStreamingMode(payload.length);
