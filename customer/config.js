@@ -65,7 +65,7 @@ window.addEventListener('DOMContentLoaded',function(){
   document.head.appendChild(polishStyle);
 
   var polish=document.createElement('script');
-  polish.src='assets/pwa-polish.js?v=2';
+  polish.src='assets/pwa-polish.js?v=3';
   polish.defer=true;
   document.body.appendChild(polish);
 
@@ -75,7 +75,7 @@ window.addEventListener('DOMContentLoaded',function(){
   document.body.appendChild(authRequired);
 
   var giftCheckout=document.createElement('script');
-  giftCheckout.src='assets/sixth-drink-checkout.js?v=3';
+  giftCheckout.src='assets/sixth-drink-checkout.js?v=4';
   giftCheckout.defer=true;
   document.body.appendChild(giftCheckout);
 
