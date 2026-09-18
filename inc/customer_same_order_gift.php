@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__.'/customer_drink_loyalty.php';
+require_once __DIR__.'/customer_checkout_loyalty.php';
 
 function customer_same_order_gift_eligible_units(array $items): int
 {
@@ -58,6 +59,11 @@ function customer_same_order_gift_quote(int $customerId,array $items): array
 
 function customer_same_order_gift_create(array $data,array $customer): array
 {
+    // The PWA loyalty mechanics are mutually exclusive: when the customer
+    // chooses ordinary points, the sixth-drink reward must stay untouched for
+    // a future order. Do not create a provisional same-order reward either.
+    if(customer_checkout_loyalty_mode($data)!=='gift')return customer_order_create($data,$customer);
+
     $customerId=(int)($customer['id']??0);$items=$data['items']??[];
     if($customerId<=0||!is_array($items))return customer_order_create($data,$customer);
 

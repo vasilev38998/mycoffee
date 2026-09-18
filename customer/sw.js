@@ -1,5 +1,5 @@
-const CACHE='kapouch-pwa-v43';
-const PREVIOUS_CACHE='kapouch-pwa-v42';
+const CACHE='kapouch-pwa-v44';
+const PREVIOUS_CACHE='kapouch-pwa-v43';
 const LOCAL_NAMES_CACHE='kapouch-pwa-v41';
 const CUSTOMIZATION_CACHE='kapouch-pwa-v40';
 const BONUS_CACHE='kapouch-pwa-v39';
@@ -9,7 +9,7 @@ const DESIGN_CACHE='kapouch-pwa-v32';
 const MIGRATION_CACHE='kapouch-pwa-v31';
 const AUTH_GATE_CACHE='kapouch-pwa-v30';
 const LEGACY_CACHE='kapouch-pwa-v28';
-const SHELL=['./','./index.html','./legal.html','./payment-return.html','./config.js?v=12','./assets/app.css?v=5','./assets/variants.css?v=1','./assets/pwa-v2.css?v=1','./assets/pwa-v3.css?v=1','./assets/contrast-fix.css?v=1','./assets/pwa-polish.css?v=2','./assets/modifiers.css?v=3','./assets/payments.css?v=1','./assets/legal.css?v=2','./assets/auth-required.css?v=1','./assets/sixth-drink-checkout.css?v=2','./assets/app.js?v=10','./assets/profile-plus.js?v=1','./assets/profile-compact.js?v=1','./assets/loyalty-card.js?v=5','./assets/status-once.js?v=1','./assets/phone-mask.js?v=1','./assets/auth-required.js?v=1','./assets/sixth-drink-checkout.js?v=4','./assets/pwa-polish.js?v=3','./assets/pwa-standalone.js?v=1','./assets/hero-cup.svg?v=2','./assets/modifier-price-ui.js?v=1','./assets/payments.js?v=8','./assets/personalization.js?v=2','./assets/current-order.js?v=2','./assets/growth-suite.js?v=2','./assets/push.js?v=1','./assets/legal.js?v=3','./assets/icon.svg'];
+const SHELL=['./','./index.html','./legal.html','./payment-return.html','./config.js?v=12','./assets/app.css?v=5','./assets/variants.css?v=1','./assets/pwa-v2.css?v=1','./assets/pwa-v3.css?v=1','./assets/contrast-fix.css?v=1','./assets/pwa-polish.css?v=2','./assets/modifiers.css?v=3','./assets/payments.css?v=1','./assets/legal.css?v=2','./assets/auth-required.css?v=1','./assets/sixth-drink-checkout.css?v=3','./assets/product-disclaimer.css?v=1','./assets/app.js?v=10','./assets/profile-plus.js?v=1','./assets/profile-compact.js?v=1','./assets/loyalty-card.js?v=5','./assets/status-once.js?v=1','./assets/phone-mask.js?v=1','./assets/auth-required.js?v=1','./assets/sixth-drink-checkout.js?v=5','./assets/product-disclaimer.js?v=1','./assets/pwa-polish.js?v=3','./assets/pwa-standalone.js?v=1','./assets/hero-cup.svg?v=2','./assets/modifier-price-ui.js?v=1','./assets/payments.js?v=8','./assets/personalization.js?v=2','./assets/current-order.js?v=2','./assets/growth-suite.js?v=2','./assets/push.js?v=1','./assets/legal.js?v=3','./assets/icon.svg'];
 const SCOPE_PATH=new URL(self.registration.scope).pathname;
 const inAppScope=url=>url.origin===self.location.origin&&url.pathname.startsWith(SCOPE_PATH);
 const navShell=url=>url.pathname.endsWith('/legal.html')?'./legal.html':url.pathname.endsWith('/payment-return.html')?'./payment-return.html':'./index.html';
