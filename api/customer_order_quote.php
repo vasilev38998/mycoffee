@@ -6,6 +6,7 @@ require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty.php';
 require_once dirname(__DIR__).'/inc/customer_drink_loyalty.php';
 require_once dirname(__DIR__).'/inc/customer_same_order_gift.php';
+require_once dirname(__DIR__).'/inc/customer_checkout_loyalty.php';
 
 customer_api_headers();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))==='OPTIONS'){http_response_code(204);exit;}
@@ -15,9 +16,25 @@ try{
     $customer=customer_auth_current();if(!$customer)customer_api_reply(401,['ok'=>false,'error'=>'Войдите в профиль, чтобы рассчитать скидки.']);
     $data=customer_api_json();$items=$data['items']??[];if(!is_array($items))throw new RuntimeException('Некорректная корзина.');
     $customerId=(int)$customer['id'];customer_loyalty_refresh_customer($customerId,100);
+
+    // Always calculate the possible sixth-drink gift once so the PWA can show
+    // it as an alternative. If points are selected, the gift discount is not
+    // included in the payable base and the reward stays untouched.
+    $mode=customer_checkout_loyalty_mode($data);
     $quote=customer_same_order_gift_quote($customerId,$items);
+    $giftOffer=$quote['gift']??null;
+    if($mode!=='gift'){
+        $quote['discount']=0.0;
+        $quote['gift']=null;
+        $quote['total']=round(max(0,(float)($quote['subtotal']??0)),2);
+    }
+
     $beforePoints=round(max(0,(float)($quote['total']??0)),2);
-    $points=customer_loyalty_quote_spend($customerId,$beforePoints,$data['loyalty_spend']??0);
+    $requestedSpend=$mode==='points'?($data['loyalty_spend']??0):0;
+    $points=customer_loyalty_quote_spend($customerId,$beforePoints,$requestedSpend);
+    $quote['gift_offer']=$giftOffer;
+    $quote['gift_available']=is_array($giftOffer)&&!empty($giftOffer);
+    $quote['loyalty_mode']=$mode;
     $quote['total_before_points']=$beforePoints;
     $quote['loyalty_balance']=$points['balance'];
     $quote['loyalty_spend_max']=$points['max_spend'];
