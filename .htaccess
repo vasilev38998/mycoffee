@@ -24,9 +24,13 @@ DirectoryIndex index.php index.html
   RewriteCond %{REQUEST_URI} !^/customer(?:/|$) [NC]
   RewriteRule ^(.*)$ customer/$1 [L]
 
-  # Source, CI, tests, migrations and APK project files are deployment assets,
-  # not public web content. Deny them before Apache can serve a raw source file.
-  RewriteRule ^(?:inc|database|docs|cron|tests|\.github|evotor-app|node_modules|vendor)(?:/|$) - [F,L,NC]
+  # Keep the original core source-deny rule stable: contracts and hosting
+  # diagnostics rely on it being explicit.
+  RewriteRule ^(?:inc|database|docs|cron)(?:/|$) - [F,L,NC]
+
+  # CI, tests, APK sources and dependency trees are deployment assets, not
+  # public web content.
+  RewriteRule ^(?:tests|\.github|evotor-app|node_modules|vendor)(?:/|$) - [F,L,NC]
 </IfModule>
 
 <FilesMatch "^(config\.php|config\.example\.php|README\.md)$">
