@@ -9,6 +9,17 @@ function customer_loyalty_rate(): float
     return max(0,min(50,$rate));
 }
 
+function customer_loyalty_spend_percent(): float
+{
+    $percent=(float)app_setting('customer_loyalty_spend_percent','100');
+    return max(0,min(100,$percent));
+}
+
+function customer_loyalty_spend_limit(float $amountDue): float
+{
+    return round(max(0,$amountDue)*customer_loyalty_spend_percent()/100,2);
+}
+
 function customer_loyalty_balance(int $customerId): float
 {
     if($customerId<=0)return 0.0;
@@ -36,9 +47,10 @@ function customer_loyalty_quote_spend(int $customerId,float $amountDue,mixed $re
     $balance=customer_loyalty_balance($customerId);
     $due=round(max(0,$amountDue),2);
     $wanted=customer_loyalty_normalize_spend($requested);
-    $max=round(min($balance,$due),2);
+    $spendPercent=customer_loyalty_spend_percent();
+    $max=round(min($balance,$due,customer_loyalty_spend_limit($due)),2);
     $applied=round(min($wanted,$max),2);
-    return ['balance'=>$balance,'requested'=>$wanted,'max_spend'=>$max,'spend'=>$applied,'total'=>round(max(0,$due-$applied),2)];
+    return ['balance'=>$balance,'requested'=>$wanted,'max_spend'=>$max,'spend'=>$applied,'spend_percent'=>$spendPercent,'total'=>round(max(0,$due-$applied),2)];
 }
 
 function customer_loyalty_order_spend(int $orderId,?PDO $pdo=null): float
@@ -63,14 +75,14 @@ function customer_loyalty_apply_order_spend(int $orderId,int $customerId,mixed $
         if(!$orderRow)throw new RuntimeException('Заказ не найден.');
         if((string)$orderRow['source']!=='customer-web')throw new RuntimeException('Списание бонусов доступно только в приложении Kapouch.');
         if(!in_array((string)$orderRow['status'],['new','awaiting_payment'],true))throw new RuntimeException('Для этого заказа бонусы уже нельзя списать.');
-        $balance=round(max(0,(float)$row['loyalty_balance']),2);$due=round(max(0,(float)$orderRow['total_amount']),2);$target=round(min($wanted,$balance,$due),2);
+        $balance=round(max(0,(float)$row['loyalty_balance']),2);$due=round(max(0,(float)$orderRow['total_amount']),2);$limit=customer_loyalty_spend_limit($due);$target=round(min($wanted,$balance,$due,$limit),2);
         if($target<=0){$pdo->commit();return ['applied'=>0.0,'balance'=>$balance];}
 
         // Keep fiscal item prices consistent with the discounted order total.
         // A line with quantity > 1 cannot represent every arbitrary cent after
         // division, so we round its unit price upward and continue applying any
         // remaining cents to the next line. We never spend more points than the
-        // customer requested.
+        // customer requested or the configured percentage cap.
         $items=$pdo->prepare('SELECT id,quantity,unit_price,line_total,item_comment FROM online_order_items WHERE order_id=? AND quantity>0 AND line_total>0 ORDER BY id DESC FOR UPDATE');
         $items->execute([$orderId]);$remaining=$target;$applied=0.0;
         foreach($items->fetchAll() as $item){

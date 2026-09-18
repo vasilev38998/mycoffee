@@ -13,12 +13,12 @@ $checks=[
     'sensitive dotfiles and composer probes are blocked'=>str_contains($ht,'\\.env')&&str_contains($ht,'\\.git')&&str_contains($ht,'composer\\.(?:json|lock)'),
     'backup files are denied'=>str_contains($ht,'bak|old|orig|save|swp'),
     'initial hero uses polished SVG asset'=>str_contains($index,'src="assets/hero-cup.svg?v=2"')&&!str_contains($index,'hero-cup-shell'),
-    'runtime hero uses polished SVG asset'=>str_contains($polish,'assets/hero-cup.svg?v=2'),
+    'runtime hero keeps SVG fallback and supports admin image'=>str_contains($polish,'assets/hero-cup.svg?v=2')&&str_contains($polish,"d.shop?.hero_image")&&str_contains($polish,'custom-hero-image'),
     'hero no longer scans catalog product photos'=>!str_contains($polish,'bestCoffeeImage')&&!str_contains($polish,'img.product-photo'),
-    'polish assets are cache-busted'=>str_contains($config,'assets/pwa-polish.css?v=2')&&str_contains($config,'assets/pwa-polish.js?v=2'),
+    'polish assets are cache-busted'=>str_contains($config,'assets/pwa-polish.css?v=2')&&str_contains($config,'assets/pwa-polish.js?v=3'),
     'SVG has accessible title and no external image/script'=>str_contains($svg,'<title id="title">')&&!preg_match('/<(?:image|script)\b[^>]*(?:href|src)=["\']https?:\/\//i',$svg),
     'SVG renders layered latte and Kapouch branding'=>str_contains($svg,'id="coffee"')&&str_contains($svg,'id="foam"')&&str_contains($svg,'>KAPOUCH</text>'),
-    'service worker caches polished SVG hero'=>str_contains($sw,"kapouch-pwa-v40")&&str_contains($sw,'./assets/hero-cup.svg?v=2'),
+    'service worker caches polished SVG hero'=>str_contains($sw,"kapouch-pwa-v41")&&str_contains($sw,'./assets/hero-cup.svg?v=2')&&str_contains($sw,'./assets/pwa-polish.js?v=3'),
 ];
 foreach($checks as $label=>$ok){
     if(!$ok){fwrite(STDERR,"PWA hero/probe hardening contract failed: {$label}\n");exit(1);}

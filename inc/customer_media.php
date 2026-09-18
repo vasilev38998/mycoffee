@@ -55,9 +55,35 @@ function customer_media_delete(?string $path): void
 }
 function customer_media_save_upload(array $file,string $prefix,?string $oldPath=null): string
 {
-    if(($file['error']??UPLOAD_ERR_NO_FILE)===UPLOAD_ERR_NO_FILE)throw new RuntimeException('Выберите фотографию.');if(($file['error']??UPLOAD_ERR_OK)!==UPLOAD_ERR_OK)throw new RuntimeException('Не удалось загрузить фотографию. Код: '.(int)$file['error']);if((int)($file['size']??0)<=0||(int)$file['size']>12*1024*1024)throw new RuntimeException('Фото должно быть не больше 12 МБ.');
+    if(($file['error']??UPLOAD_ERR_NO_FILE)===UPLOAD_ERR_NO_FILE)throw new RuntimeException('Выберите фотографию.');if(($file['error']??UPLOAD_ERR_OK)!==UPLOAD_ERR_OK)throw new RuntimeException('Не удалось загрузить фотографию. Код: '.(int)$file['error']);if((int)($file['size']??0)<=0||(int)($file['size']??0)>12*1024*1024)throw new RuntimeException('Фото должно быть не больше 12 МБ.');
     $tmp=(string)($file['tmp_name']??'');if($tmp===''||!is_uploaded_file($tmp))throw new RuntimeException('Некорректный файл загрузки.');$info=@getimagesize($tmp);if(!$info)throw new RuntimeException('Файл не является изображением.');$iw=(int)($info[0]??0);$ih=(int)($info[1]??0);if($iw<1||$ih<1||$iw*$ih>24000000)throw new RuntimeException('Слишком большое разрешение фото. Максимум около 24 мегапикселей.');
     $mime=(string)($info['mime']??'');if(!in_array($mime,['image/jpeg','image/png','image/webp'],true))throw new RuntimeException('Поддерживаются JPG, PNG и WebP.');if(!function_exists('imagecreatetruecolor'))throw new RuntimeException('На сервере не включена библиотека GD для обработки изображений.');$src=customer_media_source($tmp,$mime);if(!$src)throw new RuntimeException('Не удалось прочитать изображение.');if($mime==='image/jpeg')$src=customer_media_orient_jpeg($src,$tmp);
     $sw=imagesx($src);$sh=imagesy($src);if($sw<1||$sh<1){imagedestroy($src);throw new RuntimeException('Некорректный размер изображения.');}$size=1000;$ratio=max($size/$sw,$size/$sh);$rw=(int)ceil($sw*$ratio);$rh=(int)ceil($sh*$ratio);$scaled=imagecreatetruecolor($rw,$rh);$canvas=imagecreatetruecolor($size,$size);if(!$scaled||!$canvas){imagedestroy($src);throw new RuntimeException('Недостаточно памяти для обработки изображения.');}$bg=imagecolorallocate($canvas,20,18,16);imagefill($canvas,0,0,$bg);imagecopyresampled($scaled,$src,0,0,0,0,$rw,$rh,$sw,$sh);$sx=max(0,(int)floor(($rw-$size)/2));$sy=max(0,(int)floor(($rh-$size)/2));imagecopy($canvas,$scaled,0,0,$sx,$sy,$size,$size);
     customer_media_ensure_dir();$safe=preg_replace('/[^a-z0-9_-]+/i','-',trim($prefix))?:'image';$token=substr(bin2hex(random_bytes(8)),0,12);$ext=function_exists('imagewebp')?'webp':'jpg';$name=$safe.'-'.$token.'.'.$ext;$target=customer_media_root().'/'.$name;$ok=$ext==='webp'?imagewebp($canvas,$target,86):imagejpeg($canvas,$target,88);imagedestroy($canvas);imagedestroy($scaled);imagedestroy($src);if(!$ok||!is_file($target))throw new RuntimeException('Не удалось сохранить обработанное фото.');customer_media_delete($oldPath);return customer_media_public_prefix().$name;
+}
+
+/**
+ * Hero art is not cropped into a product square. It is resized proportionally
+ * into a reasonable source size and the PWA itself fits it into the responsive
+ * hero frame with object-fit: contain.
+ */
+function customer_media_save_hero_upload(array $file,?string $oldPath=null): string
+{
+    if(($file['error']??UPLOAD_ERR_NO_FILE)===UPLOAD_ERR_NO_FILE)throw new RuntimeException('Выберите изображение для главного экрана.');
+    if(($file['error']??UPLOAD_ERR_OK)!==UPLOAD_ERR_OK)throw new RuntimeException('Не удалось загрузить изображение. Код: '.(int)$file['error']);
+    if((int)($file['size']??0)<=0||(int)($file['size']??0)>12*1024*1024)throw new RuntimeException('Изображение должно быть не больше 12 МБ.');
+    $tmp=(string)($file['tmp_name']??'');if($tmp===''||!is_uploaded_file($tmp))throw new RuntimeException('Некорректный файл загрузки.');
+    $info=@getimagesize($tmp);if(!$info)throw new RuntimeException('Файл не является изображением.');
+    $iw=(int)($info[0]??0);$ih=(int)($info[1]??0);if($iw<1||$ih<1||$iw*$ih>24000000)throw new RuntimeException('Слишком большое разрешение изображения. Максимум около 24 мегапикселей.');
+    $mime=(string)($info['mime']??'');if(!in_array($mime,['image/jpeg','image/png','image/webp'],true))throw new RuntimeException('Поддерживаются JPG, PNG и WebP.');
+    if(!function_exists('imagecreatetruecolor'))throw new RuntimeException('На сервере не включена библиотека GD для обработки изображений.');
+    $src=customer_media_source($tmp,$mime);if(!$src)throw new RuntimeException('Не удалось прочитать изображение.');if($mime==='image/jpeg')$src=customer_media_orient_jpeg($src,$tmp);
+    $sw=imagesx($src);$sh=imagesy($src);if($sw<1||$sh<1){imagedestroy($src);throw new RuntimeException('Некорректный размер изображения.');}
+    $ratio=min(1.0,1600/$sw,1200/$sh);$rw=max(1,(int)round($sw*$ratio));$rh=max(1,(int)round($sh*$ratio));$canvas=imagecreatetruecolor($rw,$rh);if(!$canvas){imagedestroy($src);throw new RuntimeException('Недостаточно памяти для обработки изображения.');}
+    $webp=function_exists('imagewebp');
+    if($webp){imagealphablending($canvas,false);imagesavealpha($canvas,true);$transparent=imagecolorallocatealpha($canvas,0,0,0,127);imagefill($canvas,0,0,$transparent);}else{$bg=imagecolorallocate($canvas,255,255,255);imagefill($canvas,0,0,$bg);}
+    imagecopyresampled($canvas,$src,0,0,0,0,$rw,$rh,$sw,$sh);
+    customer_media_ensure_dir();$token=substr(bin2hex(random_bytes(8)),0,12);$ext=$webp?'webp':'jpg';$name='hero-'.$token.'.'.$ext;$target=customer_media_root().'/'.$name;$ok=$webp?imagewebp($canvas,$target,88):imagejpeg($canvas,$target,90);imagedestroy($canvas);imagedestroy($src);
+    if(!$ok||!is_file($target))throw new RuntimeException('Не удалось сохранить изображение главного экрана.');
+    customer_media_delete($oldPath);return customer_media_public_prefix().$name;
 }
