@@ -4,9 +4,16 @@ declare(strict_types=1);
 require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/online_orders.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty.php';
+require_once dirname(__DIR__).'/inc/customer_checkout_loyalty.php';
 
 function spend_assert(bool $ok,string $message): void{if(!$ok)throw new RuntimeException($message);}
 function spend_close(float $a,float $b): bool{return abs($a-$b)<0.011;}
+
+spend_assert(customer_checkout_loyalty_mode([])==='gift','legacy checkout defaults to sixth-drink gift');
+spend_assert(customer_checkout_loyalty_mode(['loyalty_spend'=>25])==='points','legacy positive point spend resolves to points');
+spend_assert(customer_checkout_loyalty_mode(['loyalty_mode'=>'gift','loyalty_spend'=>25])==='gift','explicit gift choice wins over point amount');
+spend_assert(customer_checkout_loyalty_mode(['loyalty_mode'=>'points'])==='points','explicit points choice is supported');
+spend_assert(customer_checkout_loyalty_mode(['loyalty_mode'=>'none','loyalty_spend'=>25])==='none','explicit none choice disables both benefits');
 
 $pdo=db();
 set_app_setting('customer_loyalty_spend_percent','30');
