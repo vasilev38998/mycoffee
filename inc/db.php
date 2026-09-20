@@ -24,13 +24,20 @@ function db_capacity_cooldown_remaining(): int
 function db_capacity_mark_busy(int $seconds=20): void
 {
     $seconds=max(5,min(60,$seconds));
+    $GLOBALS['kapouch_db_capacity_active']=true;
     @file_put_contents(db_capacity_cooldown_file(),(string)(time()+$seconds),LOCK_EX);
 }
 
 function db_capacity_clear_busy(): void
 {
+    $GLOBALS['kapouch_db_capacity_active']=false;
     $file=db_capacity_cooldown_file();
     if(is_file($file))@unlink($file);
+}
+
+function db_capacity_active(): bool
+{
+    return !empty($GLOBALS['kapouch_db_capacity_active'])||db_capacity_cooldown_remaining()>0;
 }
 
 function db_capacity_error(Throwable $e): bool
@@ -59,6 +66,7 @@ function db(): PDO
 
     $remaining=db_capacity_cooldown_remaining();
     if($remaining>0){
+        $GLOBALS['kapouch_db_capacity_active']=true;
         throw new KapouchDatabaseBusyException('MySQL capacity cooldown active for '.$remaining.'s');
     }
 

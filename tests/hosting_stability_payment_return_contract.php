@@ -15,7 +15,7 @@ $checks=[
     'migration registry avoids repeated DDL'=>str_contains($updater,"kapouch_table_exists(\$pdo,'schema_migrations')"),
     'failed migrations do not retry on public requests'=>str_contains($updater,'bool $retryFailed=false')&&str_contains($updater,"if(\$failed&&!\$retryFailed)"),
     'failed migration retry is owner initiated'=>str_contains($updates,'kapouch_apply_pending_migrations(db(),true,true)'),
-    'profile does not double-refresh drink loyalty'=>substr_count($profile,'customer_drink_loyalty_refresh_customer($customerId)')===0&&str_contains($profile,'customer_loyalty_refresh_customer($customerId)'),
+    'profile does not double-refresh drink loyalty'=>substr_count($profile,'customer_drink_loyalty_refresh_customer($customerId)')===0&&str_contains($profile,'customer_loyalty_refresh_customer_if_due($customerId,30,20)'),
     'SBP return URL carries order tracking token'=>str_contains($payments,"'payment-return.html'.(\$trackingToken!==''?'?token='" )&&str_contains($payments,"SELECT tracking_token FROM customer_order_access WHERE order_id=?"),
     'payment return accepts token from query'=>str_contains($return,"params.get('token')")&&str_contains($return,"localStorage.setItem('kapouch_tracking_token',queryToken)"),
     'payment return scrubs token from address bar'=>str_contains($return,'history.replaceState'),

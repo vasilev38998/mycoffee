@@ -9,6 +9,12 @@ header('X-Content-Type-Options: nosniff');
 
 function online_orders_api_reply(int $status,array $data): never
 {
+    if($status>=400&&function_exists('db_capacity_active')&&db_capacity_active()){
+        $retry=max(5,function_exists('db_capacity_cooldown_remaining')?db_capacity_cooldown_remaining():20);
+        header('Retry-After: '.$retry);
+        $status=503;
+        $data=['ok'=>false,'error'=>'Service temporarily overloaded','retry_after'=>$retry];
+    }
     http_response_code($status);
     echo json_encode($data,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
     exit;
