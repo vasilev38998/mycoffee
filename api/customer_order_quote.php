@@ -4,6 +4,7 @@ require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty.php';
+require_once dirname(__DIR__).'/inc/customer_loyalty_runtime.php';
 require_once dirname(__DIR__).'/inc/customer_drink_loyalty.php';
 require_once dirname(__DIR__).'/inc/customer_same_order_gift.php';
 require_once dirname(__DIR__).'/inc/customer_checkout_loyalty.php';
@@ -15,7 +16,11 @@ if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))!=='POST')customer_api
 try{
     $customer=customer_auth_current();if(!$customer)customer_api_reply(401,['ok'=>false,'error'=>'Войдите в профиль, чтобы рассчитать скидки.']);
     $data=customer_api_json();$items=$data['items']??[];if(!is_array($items))throw new RuntimeException('Некорректная корзина.');
-    $customerId=(int)$customer['id'];customer_loyalty_refresh_customer($customerId,100);
+    $customerId=(int)$customer['id'];
+    // The checkout UI can quote repeatedly while quantities/options change.
+    // Historical reconciliation is much heavier than the quote itself, so run
+    // it at most once per short customer window across quote/profile/card.
+    customer_loyalty_refresh_customer_if_due($customerId,30,20);
 
     // Always calculate the possible sixth-drink gift once so the PWA can show
     // it as an alternative. If points are selected, the gift discount is not
