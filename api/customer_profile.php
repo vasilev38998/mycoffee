@@ -4,6 +4,7 @@ require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty.php';
+require_once dirname(__DIR__).'/inc/customer_loyalty_runtime.php';
 require_once dirname(__DIR__).'/inc/customer_drink_loyalty.php';
 
 customer_api_headers();
@@ -23,10 +24,10 @@ try{
         $customer['name']=$name;
     }
     $customerId=(int)$customer['id'];
-    // customer_loyalty_refresh_customer() already refreshes the drink program.
-    // Calling customer_drink_loyalty_refresh_customer() again doubled DB work on
-    // every profile load and was especially expensive immediately after signup.
-    customer_loyalty_refresh_customer($customerId);
+    // Profile, loyalty card and basket quote are often requested at nearly the
+    // same time. Reconcile historical loyalty once, then reuse the fresh ledger
+    // for the neighbouring requests instead of replaying dozens of old orders.
+    customer_loyalty_refresh_customer_if_due($customerId,30,20);
     $profile=customer_auth_profile($customer);
     $stmt=db()->prepare('SELECT email,name FROM customer_accounts WHERE id=? LIMIT 1');$stmt->execute([$customerId]);$account=$stmt->fetch()?:[];
     $profile['customer']['email']=trim((string)($account['email']??''));
