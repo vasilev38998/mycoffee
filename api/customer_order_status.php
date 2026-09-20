@@ -23,8 +23,10 @@ if(preg_match('/^[a-f0-9]{64}$/',$token)){
     $stmt->execute([$token]);$row=$stmt->fetch()?:[];
     $orderId=(int)($row['id']??0);$status=(string)($row['status']??'');$paymentStatus=(string)($row['payment_status']??'');$customerId=(int)($row['customer_id']??0);
     if($orderId>0&&$status==='completed'){
-        if(empty($row['loyalty_earned_at']))customer_loyalty_on_order_completed($orderId);
-        customer_drink_loyalty_credit_online_order($orderId,$customerId);
+        // This function is idempotent and already reconciles the sixth-drink
+        // ledger even when ordinary loyalty was credited earlier. Calling the
+        // drink-credit function again doubled completed-order DB work.
+        customer_loyalty_on_order_completed($orderId);
     }
     if($orderId>0&&($status==='cancelled'||$paymentStatus==='refunded')){
         try{customer_loyalty_restore_order_spend($orderId,$paymentStatus==='refunded'?'оплата возвращена':'заказ отменён');}catch(Throwable $restoreError){error_log('[Kapouch loyalty spend restore] '.$restoreError->getMessage());}
