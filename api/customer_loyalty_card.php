@@ -5,6 +5,7 @@ require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty.php';
+require_once dirname(__DIR__).'/inc/customer_loyalty_runtime.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty_card.php';
 require_once dirname(__DIR__).'/inc/customer_drink_loyalty.php';
 
@@ -17,8 +18,10 @@ if($method!=='GET')customer_api_reply(405,['ok'=>false,'error'=>'Method not allo
 try{
     $customer=customer_auth_require();
     $customerId=(int)$customer['id'];
-    customer_loyalty_refresh_customer($customerId);
-    customer_drink_loyalty_refresh_customer($customerId);
+    // customer_loyalty_refresh_customer() already reconciles the sixth-drink
+    // ledger. Coalesce this with the simultaneous profile/quote requests and do
+    // not run customer_drink_loyalty_refresh_customer() a second time.
+    customer_loyalty_refresh_customer_if_due($customerId,30,20);
     $card=customer_loyalty_card_payload($customerId);
     $card['customer']['loyalty_balance']=customer_loyalty_balance($customerId);
     $card['loyalty_rate']=customer_loyalty_rate();
