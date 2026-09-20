@@ -66,6 +66,17 @@ function customer_api_guard_origin(): void
 
 function customer_api_reply(int $status,array $payload): never
 {
+    // PDOException extends RuntimeException, so endpoint-level business-error
+    // catches can accidentally convert MySQL 1040/1203 into HTTP 422/500.
+    // Keep one central capacity gate here: every customer/Evotor JSON endpoint
+    // that uses customer_api_reply() now returns a real retryable 503 instead.
+    if($status>=400&&function_exists('db_capacity_active')&&db_capacity_active()){
+        $retry=function_exists('db_capacity_cooldown_remaining')?db_capacity_cooldown_remaining():20;
+        $retry=max(5,$retry);
+        if(!headers_sent())header('Retry-After: '.$retry);
+        $status=503;
+        $payload=['ok'=>false,'error'=>'Сервис временно перегружен. Повторите через несколько секунд.','retry_after'=>$retry];
+    }
     customer_api_headers();http_response_code($status);
     echo json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
     exit;
