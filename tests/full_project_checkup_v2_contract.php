@@ -13,9 +13,9 @@ $quote=file_get_contents($root.'/api/customer_order_quote.php');
 $status=file_get_contents($root.'/api/customer_order_status.php');
 
 $checks=[
-    'db exposes cross-catch capacity state'=>str_contains($db,'function db_capacity_active(): bool')&&str_contains($db,"$GLOBALS['kapouch_db_capacity_active']=true")&&str_contains($db,'db_capacity_cooldown_remaining()>0'),
-    'customer JSON errors preserve retryable DB capacity status'=>str_contains($api,"$status>=400")&&str_contains($api,'db_capacity_active()')&&str_contains($api,"$status=503")&&str_contains($api,"header('Retry-After: '"),
-    'external orders API preserves retryable DB capacity status'=>str_contains($externalApi,'db_capacity_active()')&&str_contains($externalApi,"$status=503")&&str_contains($externalApi,"header('Retry-After: '"),
+    'db exposes cross-catch capacity state'=>str_contains($db,'function db_capacity_active(): bool')&&str_contains($db,"kapouch_db_capacity_active']=true")&&str_contains($db,'db_capacity_cooldown_remaining()>0'),
+    'customer JSON errors preserve retryable DB capacity status'=>str_contains($api,'status>=400')&&str_contains($api,'db_capacity_active()')&&str_contains($api,'status=503')&&str_contains($api,"header('Retry-After: '"),
+    'external orders API preserves retryable DB capacity status'=>str_contains($externalApi,'db_capacity_active()')&&str_contains($externalApi,'status=503')&&str_contains($externalApi,"header('Retry-After: '"),
     'loyalty reconciliation is coalesced per customer'=>str_contains($runtime,'function customer_loyalty_refresh_customer_if_due')&&str_contains($runtime,"kapouch_local_lock('customer_loyalty_refresh:'")&&str_contains($runtime,'customer_loyalty_refresh_recent($customerId,$minInterval)'),
     'profile uses coalesced loyalty reconciliation'=>str_contains($profile,'customer_loyalty_refresh_customer_if_due($customerId,30,20)')&&!str_contains($profile,'customer_loyalty_refresh_customer($customerId);'),
     'loyalty card avoids duplicate drink reconciliation'=>str_contains($card,'customer_loyalty_refresh_customer_if_due($customerId,30,20)')&&!str_contains($card,'customer_drink_loyalty_refresh_customer($customerId)'),
