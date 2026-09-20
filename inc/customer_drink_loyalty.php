@@ -3,14 +3,26 @@ declare(strict_types=1);
 
 require_once __DIR__.'/customer_modifiers.php';
 
+function customer_drink_loyalty_runtime_cache_reset(): void
+{
+    unset(
+        $GLOBALS['kapouch_drink_loyalty_settings_cache'],
+        $GLOBALS['kapouch_drink_loyalty_rows_cache'],
+        $GLOBALS['kapouch_drink_loyalty_map_cache'],
+        $GLOBALS['kapouch_drink_loyalty_reference_cache'],
+        $GLOBALS['kapouch_drink_loyalty_reference_loaded']
+    );
+}
+
 function customer_drink_loyalty_settings(): array
 {
+    if(isset($GLOBALS['kapouch_drink_loyalty_settings_cache'])&&is_array($GLOBALS['kapouch_drink_loyalty_settings_cache']))return $GLOBALS['kapouch_drink_loyalty_settings_cache'];
     $required=max(1,min(20,(int)app_setting('customer_sixth_drink_paid_count','5')));
     $mode=(string)app_setting('customer_sixth_drink_products_mode','auto');if(!in_array($mode,['auto','selected'],true))$mode='auto';
     $ids=[];foreach(preg_split('/\s*,\s*/',trim((string)app_setting('customer_sixth_drink_product_ids','')),-1,PREG_SPLIT_NO_EMPTY)?:[] as $raw){$id=(int)$raw;if($id>0)$ids[$id]=true;}
     $started=trim((string)app_setting('customer_sixth_drink_started_at',''));
     if($started===''||strtotime($started)===false)$started='1970-01-01 00:00:00';
-    return [
+    return $GLOBALS['kapouch_drink_loyalty_settings_cache']=[
         'enabled'=>(string)app_setting('customer_sixth_drink_enabled','1')==='1',
         'required_paid'=>$required,
         'products_mode'=>$mode,
@@ -22,14 +34,18 @@ function customer_drink_loyalty_settings(): array
 
 function customer_drink_loyalty_product_rows(bool $activeOnly=true): array
 {
+    $key=$activeOnly?'active':'all';
+    if(isset($GLOBALS['kapouch_drink_loyalty_rows_cache'][$key])&&is_array($GLOBALS['kapouch_drink_loyalty_rows_cache'][$key]))return $GLOBALS['kapouch_drink_loyalty_rows_cache'][$key];
     $where=$activeOnly?'WHERE p.active=1 AND p.sale_price>0':'';
-    return db()->query("SELECT p.id,p.name,p.category,p.sale_price,p.active,
+    $rows=db()->query("SELECT p.id,p.name,p.category,p.sale_price,p.active,
         (SELECT c.slug FROM customer_product_settings cps JOIN customer_categories c ON c.id=cps.category_id WHERE cps.product_id=p.id LIMIT 1) direct_slug,
         (SELECT c.name FROM customer_product_settings cps JOIN customer_categories c ON c.id=cps.category_id WHERE cps.product_id=p.id LIMIT 1) direct_category,
         (SELECT gc.slug FROM customer_product_group_variants gv JOIN customer_product_groups g ON g.id=gv.group_id LEFT JOIN customer_categories gc ON gc.id=g.category_id WHERE gv.product_id=p.id LIMIT 1) group_slug,
         (SELECT g.name FROM customer_product_group_variants gv JOIN customer_product_groups g ON g.id=gv.group_id WHERE gv.product_id=p.id LIMIT 1) group_name,
         (SELECT gv.variant_label FROM customer_product_group_variants gv WHERE gv.product_id=p.id LIMIT 1) variant_label
         FROM products p {$where} ORDER BY p.category,p.name,p.sale_price,p.id")->fetchAll();
+    if(!isset($GLOBALS['kapouch_drink_loyalty_rows_cache'])||!is_array($GLOBALS['kapouch_drink_loyalty_rows_cache']))$GLOBALS['kapouch_drink_loyalty_rows_cache']=[];
+    return $GLOBALS['kapouch_drink_loyalty_rows_cache'][$key]=$rows;
 }
 
 function customer_drink_loyalty_auto_eligible(array $row): bool
@@ -43,9 +59,10 @@ function customer_drink_loyalty_auto_eligible(array $row): bool
 
 function customer_drink_loyalty_product_map(): array
 {
+    if(isset($GLOBALS['kapouch_drink_loyalty_map_cache'])&&is_array($GLOBALS['kapouch_drink_loyalty_map_cache']))return $GLOBALS['kapouch_drink_loyalty_map_cache'];
     $settings=customer_drink_loyalty_settings();$selected=array_fill_keys($settings['product_ids'],true);$map=[];
     foreach(customer_drink_loyalty_product_rows(true) as $row){$id=(int)$row['id'];$map[$id]=$settings['products_mode']==='selected'?isset($selected[$id]):customer_drink_loyalty_auto_eligible($row);}
-    return $map;
+    return $GLOBALS['kapouch_drink_loyalty_map_cache']=$map;
 }
 
 function customer_drink_loyalty_is_eligible_product(int $productId): bool
@@ -55,17 +72,24 @@ function customer_drink_loyalty_is_eligible_product(int $productId): bool
 
 function customer_drink_loyalty_reference_product(): ?array
 {
-    $settings=customer_drink_loyalty_settings();$rows=customer_drink_loyalty_product_rows(true);
-    if($settings['reference_product_id']>0){foreach($rows as $row)if((int)$row['id']===$settings['reference_product_id'])return ['id'=>(int)$row['id'],'name'=>(string)$row['name'],'variant'=>(string)($row['variant_label']??''),'price'=>round((float)$row['sale_price'],2),'auto'=>false];}
-    $best=null;$bestScore=-1;
-    foreach($rows as $row){
-        $name=mb_strtolower((string)$row['name'].' '.(string)($row['group_name']??''));if(!str_contains($name,'капуч'))continue;
-        $variant=mb_strtolower(trim((string)($row['variant_label']??'')));$hay=$name.' '.$variant;$score=100;
-        if(preg_match('/(^|[^0-9])(0[\.,]2|200)(\s*(мл|ml))?([^0-9]|$)/u',$hay))$score+=60;
-        elseif(preg_match('/(^|[^0-9])(0[\.,]25|250)(\s*(мл|ml))?([^0-9]|$)/u',$hay))$score+=20;
-        $price=(float)$row['sale_price'];if($price<=0)continue;
-        if($best===null||$score>$bestScore||($score===$bestScore&&$price<(float)$best['price'])){$best=['id'=>(int)$row['id'],'name'=>(string)$row['name'],'variant'=>(string)($row['variant_label']??''),'price'=>round($price,2),'auto'=>true];$bestScore=$score;}
+    if(!empty($GLOBALS['kapouch_drink_loyalty_reference_loaded']))return $GLOBALS['kapouch_drink_loyalty_reference_cache']??null;
+    $settings=customer_drink_loyalty_settings();$rows=customer_drink_loyalty_product_rows(true);$best=null;
+    if($settings['reference_product_id']>0){
+        foreach($rows as $row)if((int)$row['id']===$settings['reference_product_id']){$best=['id'=>(int)$row['id'],'name'=>(string)$row['name'],'variant'=>(string)($row['variant_label']??''),'price'=>round((float)$row['sale_price'],2),'auto'=>false];break;}
     }
+    if($best===null){
+        $bestScore=-1;
+        foreach($rows as $row){
+            $name=mb_strtolower((string)$row['name'].' '.(string)($row['group_name']??''));if(!str_contains($name,'капуч'))continue;
+            $variant=mb_strtolower(trim((string)($row['variant_label']??'')));$hay=$name.' '.$variant;$score=100;
+            if(preg_match('/(^|[^0-9])(0[\.,]2|200)(\s*(мл|ml))?([^0-9]|$)/u',$hay))$score+=60;
+            elseif(preg_match('/(^|[^0-9])(0[\.,]25|250)(\s*(мл|ml))?([^0-9]|$)/u',$hay))$score+=20;
+            $price=(float)$row['sale_price'];if($price<=0)continue;
+            if($best===null||$score>$bestScore||($score===$bestScore&&$price<(float)$best['price'])){$best=['id'=>(int)$row['id'],'name'=>(string)$row['name'],'variant'=>(string)($row['variant_label']??''),'price'=>round($price,2),'auto'=>true];$bestScore=$score;}
+        }
+    }
+    $GLOBALS['kapouch_drink_loyalty_reference_loaded']=true;
+    $GLOBALS['kapouch_drink_loyalty_reference_cache']=$best;
     return $best;
 }
 
