@@ -1,0 +1,56 @@
+/* KAPOUCH redesign v2 — overrides for modules that inject their own styles after page load */
+body.k-redesign-v2 .loyalty-card{position:relative!important;overflow:hidden!important;margin:13px 0!important;padding:20px!important;border:0!important;border-radius:28px!important;background:linear-gradient(137deg,#352017 0,#4d2b1d 58%,#6b3a23 100%)!important;color:#fffaf4!important;box-shadow:0 20px 46px rgba(54,29,17,.17)!important}
+body.k-redesign-v2 .loyalty-card:before{content:"";position:absolute;right:-58px;bottom:-82px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(255,194,28,.20),transparent 68%);pointer-events:none}
+body.k-redesign-v2 .loyalty-card:after{right:-6px!important;top:-30px!important;color:rgba(255,216,101,.10)!important;font-size:150px!important}
+body.k-redesign-v2 .loyalty-card-head{position:relative!important;z-index:2!important;align-items:flex-start!important}
+body.k-redesign-v2 .loyalty-card-head span{color:#ffd268!important;font-size:9px!important;letter-spacing:.17em!important;font-weight:950!important}
+body.k-redesign-v2 .loyalty-card-head h2{margin:6px 0 0!important;color:#fffaf4!important;font-size:22px!important;letter-spacing:-.025em!important}
+body.k-redesign-v2 .loyalty-card-balance small{color:#d7c1b4!important;opacity:1!important}
+body.k-redesign-v2 .loyalty-card-balance strong{color:#ffd05b!important;font-size:21px!important}
+body.k-redesign-v2 .loyalty-card-body{position:relative!important;z-index:2!important;grid-template-columns:168px 1fr!important;gap:17px!important;margin-top:18px!important}
+body.k-redesign-v2 .loyalty-card-qr{width:168px!important;height:168px!important;padding:10px!important;border:5px solid rgba(255,255,255,.13)!important;border-radius:22px!important;background:#fff!important;box-shadow:0 13px 28px rgba(17,7,3,.18)!important}
+body.k-redesign-v2 .loyalty-card-copy{color:#e7d8cf!important;font-size:11px!important;line-height:1.5!important}
+body.k-redesign-v2 .loyalty-card-copy strong{color:#fff!important;font-size:16px!important}
+body.k-redesign-v2 .loyalty-card-copy button{margin-top:12px!important;padding:10px 12px!important;border:0!important;border-radius:13px!important;background:#ffc21c!important;color:#2b190f!important;font-weight:950!important}
+body.k-redesign-v2 .loyalty-card-status{color:#d7c0b2!important;opacity:1!important}
+body.k-redesign-v2 .loyalty-coffee{position:relative!important;z-index:2!important;margin-top:14px!important;padding:12px 13px!important;border:1px solid rgba(255,255,255,.09)!important;border-radius:17px!important;background:rgba(255,255,255,.07)!important}
+body.k-redesign-v2 .loyalty-coffee-head strong{color:#fff!important;font-size:12px!important}
+body.k-redesign-v2 .loyalty-coffee-head span{color:#ffd05b!important;font-size:10px!important}
+body.k-redesign-v2 .loyalty-coffee-dot{height:8px!important;border-radius:999px!important;background:rgba(255,255,255,.14)!important}
+body.k-redesign-v2 .loyalty-coffee-dot.on{background:#ffc21c!important;box-shadow:0 3px 9px rgba(255,194,28,.16)!important}
+body.k-redesign-v2 .loyalty-coffee-note{color:#d9c7bb!important;opacity:1!important}
+body.k-redesign-v2 .loyalty-card-error{border:1px solid rgba(166,75,66,.13)!important;border-radius:17px!important;background:#f5e2df!important;color:#8a463e!important}
+
+body.k-redesign-v2 .loyalty-card-overlay{background:rgba(44,25,16,.86)!important;backdrop-filter:blur(12px)!important}
+body.k-redesign-v2 .loyalty-card-overlay-inner{padding:24px!important;border:1px solid rgba(73,42,24,.10)!important;border-radius:30px!important;background:linear-gradient(145deg,#fffdf9,#f8eee5)!important;color:#28170f!important;box-shadow:0 28px 70px rgba(31,15,8,.26)!important}
+body.k-redesign-v2 .loyalty-card-overlay-inner>strong{font-size:20px!important}
+body.k-redesign-v2 .loyalty-card-overlay-qr{border:5px solid #f2e4d7!important;border-radius:24px!important;background:#fff!important;box-shadow:0 12px 28px rgba(62,34,20,.10)!important}
+body.k-redesign-v2 .loyalty-card-overlay-gift{color:#745029!important}
+body.k-redesign-v2 .loyalty-card-overlay p{color:#77645a!important}
+body.k-redesign-v2 .loyalty-card-overlay button{padding:12px 18px!important;border:0!important;border-radius:14px!important;background:#3c2117!important;color:#fff!important;font-weight:900!important}
+
+/* Push / account helper modules */
+body.k-redesign-v2 .push-permission-card,body.k-redesign-v2 .account-card{border:1px solid rgba(69,39,23,.10)!important;border-radius:22px!important;background:#fffdf9!important;color:#25150f!important;box-shadow:0 9px 26px rgba(68,38,21,.055)!important}
+body.k-redesign-v2 .push-permission-card p,body.k-redesign-v2 .account-card p{color:#66544b!important}
+
+/* Modifier UI injected after the main stylesheet */
+body.k-redesign-v2 .modifier-group{border:1px solid rgba(69,39,23,.10)!important;border-radius:18px!important;background:#f8f0e8!important;color:#25150f!important}
+body.k-redesign-v2 .modifier-group-head span{color:#76645a!important}
+body.k-redesign-v2 .modifier-option{border:1px solid rgba(69,39,23,.10)!important;border-radius:14px!important;background:#fffdf9!important;color:#25150f!important}
+body.k-redesign-v2 .modifier-option b{color:#6f503d!important}
+body.k-redesign-v2 .modifier-option.active{border-color:#d39a0a!important;background:#fff2c9!important;color:#25150f!important}
+body.k-redesign-v2 .modifier-option .check{border-color:#b79d8d!important;background:#f3e7dc!important;color:#3a2117!important}
+body.k-redesign-v2 .modifier-option.active .check{border-color:#d39a0a!important;background:#ffc21c!important;color:#2a190f!important}
+
+/* Keep all legal / payment copy readable against the new light palette */
+body.k-redesign-v2 .legal-consent,body.k-redesign-v2 .legal-consent span,body.k-redesign-v2 .payment-online-note{color:#66544b!important}
+body.k-redesign-v2 .legal-consent a{color:#70462f!important;text-decoration-color:rgba(112,70,47,.35)!important}
+
+@media(max-width:430px){
+  body.k-redesign-v2 .loyalty-card-body{grid-template-columns:145px 1fr!important;gap:13px!important}
+  body.k-redesign-v2 .loyalty-card-qr{width:145px!important;height:145px!important}
+}
+@media(max-width:360px){
+  body.k-redesign-v2 .loyalty-card-body{grid-template-columns:1fr!important}
+  body.k-redesign-v2 .loyalty-card-qr{width:176px!important;height:176px!important;margin:0 auto!important}
+}
