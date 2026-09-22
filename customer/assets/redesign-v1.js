@@ -8,7 +8,7 @@ const $=id=>document.getElementById(id);
 const themeMeta=document.querySelector('meta[name="theme-color"]');
 const quick=$('loyaltyQuickButton');
 const profileButton=document.querySelector('.bottom-nav [data-nav="profile"]');
-let loyaltyLoading=false,lastLoyaltyLoad=0,arrangeQueued=false;
+let loyaltyLoading=false,lastLoyaltyLoad=0;
 
 function ensureStyle(id,href){
   if(document.getElementById(id))return;
@@ -19,18 +19,39 @@ function ensureStyle(id,href){
   document.head.appendChild(link);
 }
 
+function ensureHomeOrderStyle(){
+  if(document.getElementById('kapouchHomeOrderFix'))return;
+  const style=document.createElement('style');
+  style.id='kapouchHomeOrderFix';
+  style.textContent=`
+    .k-redesign-v2 .view[data-view="home"].active{display:flex!important;flex-direction:column!important}
+    .k-redesign-v2 .view[data-view="home"]>*{order:200}
+    .k-redesign-v2 .view[data-view="home"]>.home-greeting{order:10}
+    .k-redesign-v2 .view[data-view="home"]>.hero-v2{order:20}
+    .k-redesign-v2 .view[data-view="home"]>#balanceCard{order:30}
+    .k-redesign-v2 .view[data-view="home"]>.loyalty-teaser{order:40}
+    .k-redesign-v2 .view[data-view="home"]>#growthPromo{order:50}
+    .k-redesign-v2 .view[data-view="home"]>#personalOffer{order:60}
+    .k-redesign-v2 .view[data-view="home"]>#orderStatusStrip{order:70}
+    .k-redesign-v2 .view[data-view="home"]>#currentOrderCard{order:80}
+    .k-redesign-v2 .view[data-view="home"]>#quickRepeatCard{order:90}
+    .k-redesign-v2 .view[data-view="home"]>.home-perks{order:100}
+    .k-redesign-v2 .view[data-view="home"]>#favoriteSection{order:110}
+    .k-redesign-v2 .view[data-view="home"]>.section-title{order:120}
+    .k-redesign-v2 .view[data-view="home"]>#popularList{order:130}
+    .k-redesign-v2 .view[data-view="home"]>.about-card{order:140}
+    .k-redesign-v2 .view[data-view="home"]>#homeLegalFooter{order:150}
+  `;
+  document.head.appendChild(style);
+}
+
 ensureStyle('kapouchRedesignV2','assets/redesign-v2.css?v=2');
 ensureStyle('kapouchRedesignV2Modules','assets/redesign-v2-modules.css?v=2');
 document.body.classList.add('k-redesign-v2');
+ensureHomeOrderStyle();
 
 function syncTheme(){
   if(themeMeta&&themeMeta.getAttribute('content')!=='#f7f1e8')themeMeta.setAttribute('content','#f7f1e8');
-}
-
-function moveAfter(node,anchor){
-  if(!node||!anchor||node===anchor||node.previousElementSibling===anchor)return anchor;
-  anchor.insertAdjacentElement('afterend',node);
-  return node;
 }
 
 function ensureHeroFacts(){
@@ -52,40 +73,9 @@ function updateAvatar(){
   if(avatar.textContent!==letter)avatar.textContent=letter;
 }
 
-function arrangeHome(){
-  if(arrangeQueued)return;
-  arrangeQueued=true;
-  requestAnimationFrame(()=>{
-    arrangeQueued=false;
-    const home=document.querySelector('[data-view="home"]');
-    if(!home)return;
-    const greeting=home.querySelector('.home-greeting');
-    const hero=home.querySelector('.hero-v2');
-    const balance=$('balanceCard');
-    const teaser=home.querySelector('.loyalty-teaser');
-    if(!greeting||!hero||!balance||!teaser)return;
-
-    let anchor=greeting;
-    anchor=moveAfter(hero,anchor);
-    anchor=moveAfter(balance,anchor);
-    anchor=moveAfter(teaser,anchor);
-
-    const growth=$('growthPromo');
-    const personal=$('personalOffer');
-    const status=$('orderStatusStrip');
-    const current=$('currentOrderCard');
-    const repeat=$('quickRepeatCard');
-    const perks=home.querySelector('.home-perks');
-    if(growth)anchor=moveAfter(growth,anchor);
-    if(personal)anchor=moveAfter(personal,anchor);
-    if(status)anchor=moveAfter(status,anchor);
-    if(current)anchor=moveAfter(current,anchor);
-    if(repeat)anchor=moveAfter(repeat,anchor);
-    if(perks)moveAfter(perks,anchor);
-
-    ensureHeroFacts();
-    updateAvatar();
-  });
+function refreshPresentation(){
+  ensureHeroFacts();
+  updateAvatar();
 }
 
 function renderLoyaltyProgress(drink){
@@ -150,21 +140,18 @@ function openBonuses(){
 if(quick)quick.addEventListener('click',openBonuses);
 
 const welcome=$('welcomeTitle');
-if(welcome)new MutationObserver(()=>{updateAvatar();arrangeHome()}).observe(welcome,{childList:true,subtree:true,characterData:true});
-
-const home=document.querySelector('[data-view="home"]');
-if(home)new MutationObserver(()=>arrangeHome()).observe(home,{childList:true,subtree:false});
+if(welcome)new MutationObserver(updateAvatar).observe(welcome,{childList:true,subtree:true,characterData:true});
 
 if(themeMeta)new MutationObserver(syncTheme).observe(themeMeta,{attributes:true,attributeFilter:['content']});
 
 syncTheme();
-arrangeHome();
+refreshPresentation();
 loadLoyalty(false);
 
-window.addEventListener('load',()=>{syncTheme();arrangeHome();window.setTimeout(()=>{syncTheme();arrangeHome();loadLoyalty(false)},650)});
-window.addEventListener('focus',()=>{syncTheme();arrangeHome();loadLoyalty(false)});
-window.addEventListener('hashchange',()=>{arrangeHome();if(location.hash==='#home')loadLoyalty(false)});
-window.addEventListener('storage',e=>{if(e.key===AUTH_KEY){lastLoyaltyLoad=0;loadLoyalty(true);arrangeHome()}});
-window.addEventListener('kapouch-order-status',e=>{const status=String(e.detail?.status||'');arrangeHome();if(status==='completed'||status==='cancelled'){lastLoyaltyLoad=0;window.setTimeout(()=>loadLoyalty(true),250)}});
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){syncTheme();arrangeHome();loadLoyalty(false)}});
+window.addEventListener('load',()=>{syncTheme();refreshPresentation();window.setTimeout(()=>{syncTheme();refreshPresentation();loadLoyalty(false)},650)});
+window.addEventListener('focus',()=>{syncTheme();refreshPresentation();loadLoyalty(false)});
+window.addEventListener('hashchange',()=>{refreshPresentation();if(location.hash==='#home')loadLoyalty(false)});
+window.addEventListener('storage',e=>{if(e.key===AUTH_KEY){lastLoyaltyLoad=0;loadLoyalty(true);refreshPresentation()}});
+window.addEventListener('kapouch-order-status',e=>{const status=String(e.detail?.status||'');if(status==='completed'||status==='cancelled'){lastLoyaltyLoad=0;window.setTimeout(()=>loadLoyalty(true),250)}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){syncTheme();refreshPresentation();loadLoyalty(false)}});
 })();

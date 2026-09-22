@@ -19,8 +19,29 @@
 <link rel="stylesheet" href="assets/payments.css?v=1">
 <link rel="stylesheet" href="assets/legal.css?v=2">
 <link rel="stylesheet" href="assets/redesign-v1.css?v=1">
+<link id="kapouchRedesignV2" rel="stylesheet" href="assets/redesign-v2.css?v=2">
+<link id="kapouchRedesignV2Modules" rel="stylesheet" href="assets/redesign-v2-modules.css?v=2">
+<style id="kapouchHomeOrderFix">
+.k-redesign-v2 .view[data-view="home"].active{display:flex!important;flex-direction:column!important}
+.k-redesign-v2 .view[data-view="home"]>*{order:200}
+.k-redesign-v2 .view[data-view="home"]>.home-greeting{order:10}
+.k-redesign-v2 .view[data-view="home"]>.hero-v2{order:20}
+.k-redesign-v2 .view[data-view="home"]>#balanceCard{order:30}
+.k-redesign-v2 .view[data-view="home"]>.loyalty-teaser{order:40}
+.k-redesign-v2 .view[data-view="home"]>#growthPromo{order:50}
+.k-redesign-v2 .view[data-view="home"]>#personalOffer{order:60}
+.k-redesign-v2 .view[data-view="home"]>#orderStatusStrip{order:70}
+.k-redesign-v2 .view[data-view="home"]>#currentOrderCard{order:80}
+.k-redesign-v2 .view[data-view="home"]>#quickRepeatCard{order:90}
+.k-redesign-v2 .view[data-view="home"]>.home-perks{order:100}
+.k-redesign-v2 .view[data-view="home"]>#favoriteSection{order:110}
+.k-redesign-v2 .view[data-view="home"]>.section-title{order:120}
+.k-redesign-v2 .view[data-view="home"]>#popularList{order:130}
+.k-redesign-v2 .view[data-view="home"]>.about-card{order:140}
+.k-redesign-v2 .view[data-view="home"]>#homeLegalFooter{order:150}
+</style>
 </head>
-<body>
+<body class="k-redesign-v2">
 <div id="app" class="pwa-app">
 <header class="app-header"><button class="location-button" id="locationButton"><span class="location-pin">⌖</span><span id="pickupLabel">Самовывоз из кофейни</span><b>⌄</b></button><button class="mini-cart" id="headerCart" aria-label="Корзина"><span>▣</span><b id="headerCartCount">0</b></button></header>
 <main class="app-main">
@@ -49,5 +70,5 @@
 <div class="modal" id="productModal" hidden><div class="modal-backdrop" data-close-product></div><article class="product-sheet"><button class="sheet-close" data-close-product>×</button><div class="product-hero"><img id="productImage" class="product-detail-image" alt="" hidden><div id="productFallback" class="product-fallback"><div class="cup large"><span>K</span></div></div></div><div class="product-detail"><div class="eyebrow-client" id="productCategory"></div><h2 id="productName"></h2><p id="productDescription"></p><div class="variant-picker" id="variantPicker" hidden><div class="variant-picker-title"><strong>Выберите вариант</strong><span>Цена зависит от варианта</span></div><div class="variant-options" id="variantOptions"></div></div><div class="modifier-picker" id="modifierPicker" hidden></div><div class="modifier-error" id="modifierError"></div><div class="product-buy-row"><div class="product-price" id="productPrice"></div><div class="qty-control"><button id="detailMinus">−</button><strong id="detailQty">1</strong><button id="detailPlus">+</button></div></div><button class="accent-button" id="detailAdd">Добавить в корзину</button></div></article></div>
 <div class="install-banner" id="installBanner" hidden><div class="install-icon">K</div><div class="install-copy"><strong>Установить Kapouch</strong><span>Быстрый доступ к заказам и бонусам</span></div><button class="install-action" id="installButton">Установить</button><button class="install-close" id="installClose" aria-label="Закрыть">×</button></div>
 </div>
-<script src="config.js?v=12"></script><script src="assets/app.js?v=10"></script><script src="assets/profile-plus.js?v=1"></script><script src="assets/modifier-price-ui.js?v=1"></script><script src="assets/payments.js?v=8"></script><script src="assets/personalization.js?v=2"></script><script src="assets/current-order.js?v=2"></script><script src="assets/growth-suite.js?v=2"></script><script src="assets/push.js?v=1"></script><script src="assets/legal.js?v=3"></script><script src="assets/pwa-standalone.js?v=1"></script><script src="assets/redesign-v1.js?v=1"></script>
+<script src="config.js?v=12"></script><script src="assets/app.js?v=10"></script><script src="assets/profile-plus.js?v=1"></script><script src="assets/modifier-price-ui.js?v=1"></script><script src="assets/payments.js?v=8"></script><script src="assets/personalization.js?v=2"></script><script src="assets/current-order.js?v=2"></script><script src="assets/growth-suite.js?v=2"></script><script src="assets/push.js?v=1"></script><script src="assets/legal.js?v=3"></script><script src="assets/pwa-standalone.js?v=1"></script><script src="assets/redesign-v1.js?v=2"></script>
 </body></html>
