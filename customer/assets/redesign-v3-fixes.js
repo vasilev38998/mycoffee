@@ -5,9 +5,23 @@ const cfg=window.KAPOUCH_CUSTOMER_CONFIG||{};
 const appOrigin=(()=>{try{return new URL(cfg.appBase||location.origin,location.href).origin}catch(e){return location.origin}})();
 const apiOrigin=(()=>{try{return new URL(cfg.apiBase||location.origin,location.href).origin}catch(e){return location.origin}})();
 
+function ensureV4Style(){
+  let link=document.getElementById('kapouchRedesignV4');
+  if(!link){
+    link=document.createElement('link');
+    link.id='kapouchRedesignV4';
+    link.rel='stylesheet';
+    link.href='assets/redesign-v4-polish.css?v=1';
+    document.head.appendChild(link);
+  }
+  return link;
+}
+
 function promoteFinalStyle(){
-  const link=document.getElementById('kapouchRedesignV3');
-  if(link&&link.parentNode===document.head)document.head.appendChild(link);
+  const v3=document.getElementById('kapouchRedesignV3');
+  const v4=ensureV4Style();
+  if(v3&&v3.parentNode===document.head)document.head.appendChild(v3);
+  if(v4&&v4.parentNode===document.head)document.head.appendChild(v4);
 }
 
 function cupSvg(){
@@ -127,6 +141,7 @@ function watchDynamicUi(){
 }
 
 document.addEventListener('error',onImageError,true);
+ensureV4Style();
 upgradeLoyaltyCups();
 decorateSocialLinks();
 
