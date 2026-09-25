@@ -15,14 +15,14 @@ customer_api_guard_origin();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))!=='GET')customer_api_reply(405,['ok'=>false,'error'=>'Method not allowed']);
 try{
     $catalog=customer_pwa_catalog();
-    // Serve uploaded PWA images through a dedicated PHP endpoint on the API origin.
-    // Reads support both the current customer/uploads/products directory and the
-    // legacy /uploads/products directory so older photos survive deployments.
+    // Keep the logical image reference even when the file is not found in the
+    // primary API filesystem. The image endpoint checks every known Beget root,
+    // and the PWA can additionally try historical public paths. Returning null
+    // here used to prevent all client-side recovery attempts.
     $stableImage=static function(?string $value): ?string {
         $name=customer_media_filename($value);if($name===null)return null;
         $file=customer_media_existing_file($value);
-        if($file===null)return null;
-        $version=(int)(filemtime($file)?:0);
+        $version=$file!==null?(int)(filemtime($file)?:0):0;
         return customer_public_api_base().'/customer_product_image.php?f='.rawurlencode($name).'&v='.$version;
     };
     foreach($catalog['products'] as &$product){
