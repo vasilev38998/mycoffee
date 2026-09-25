@@ -38,18 +38,17 @@ body.k-redesign-v2 .links-card a.social-icon-link small{display:block!important;
 body.k-redesign-v2 .links-card a.profile-external-link{order:2!important;flex:1 1 170px!important;min-height:72px!important;display:flex!important;align-items:center!important;padding:13px 15px!important;border:1px solid rgba(69,39,23,.07)!important;border-radius:18px!important;background:#f2e5d9!important;color:#42291c!important;font-weight:800!important;text-decoration:none!important}
 
 @media(max-width:430px){
-  body.k-redesign-v2 .loyalty-teaser{gap:12px!important;padding:16px 14px!important}
-  body.k-redesign-v2 .loyalty-cups{gap:2px!important}
-  body.k-redesign-v2 .loyalty-cup{width:27px!important;height:39px!important}
-  body.k-redesign-v2 .loyalty-cup.gift{width:31px!important;height:44px!important}
+  body.k-redesign-v2 .loyalty-teaser{grid-template-columns:1fr!important;gap:13px!important;padding:17px 15px 16px!important}
+  body.k-redesign-v2 .loyalty-cups{width:100%!important;justify-self:stretch!important;justify-content:space-between!important;gap:4px!important;padding:0 4px!important}
+  body.k-redesign-v2 .loyalty-cup{width:30px!important;height:42px!important}
+  body.k-redesign-v2 .loyalty-cup.gift{width:35px!important;height:48px!important}
   body.k-redesign-v2 .links-card a.social-icon-link{flex-basis:62px!important;width:62px!important;height:68px!important}
   body.k-redesign-v2 .links-card .social-mark,
   body.k-redesign-v2 .links-card .social-mark svg{width:37px!important;height:37px!important}
 }
 
 @media(max-width:370px){
-  body.k-redesign-v2 .loyalty-teaser{grid-template-columns:1fr!important}
-  body.k-redesign-v2 .loyalty-cups{justify-self:start!important;gap:5px!important}
-  body.k-redesign-v2 .loyalty-cup{width:29px!important;height:41px!important}
-  body.k-redesign-v2 .loyalty-cup.gift{width:33px!important;height:46px!important}
+  body.k-redesign-v2 .loyalty-cups{gap:3px!important;padding:0!important}
+  body.k-redesign-v2 .loyalty-cup{width:28px!important;height:40px!important}
+  body.k-redesign-v2 .loyalty-cup.gift{width:32px!important;height:45px!important}
 }
