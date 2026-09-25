@@ -5,6 +5,7 @@ declare(strict_types=1);
 // image must not bootstrap the database/migrations: one PWA screen can request
 // many images in parallel and those static reads must stay independent of MySQL.
 require_once dirname(__DIR__).'/inc/customer_media.php';
+require_once dirname(__DIR__).'/inc/customer_media_legacy.php';
 
 $method=strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'));
 if(!in_array($method,['GET','HEAD'],true)){
@@ -17,8 +18,8 @@ $name=trim((string)($_GET['f']??''));
 if($name===''||$name!==basename($name)||!preg_match('/^[A-Za-z0-9._-]+\.(?:jpe?g|png|webp)$/i',$name)){
     http_response_code(404);exit;
 }
-$file=customer_media_root().'/'.$name;
-if(!is_file($file)||!is_readable($file)){
+$file=customer_media_existing_file('uploads/products/'.$name);
+if($file===null){
     http_response_code(404);exit;
 }
 $info=@getimagesize($file);$mime=(string)($info['mime']??'');
