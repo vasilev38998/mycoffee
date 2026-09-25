@@ -11,13 +11,20 @@ function promoteFinalStyle(){
 }
 
 function cupSvg(){
-  return '<svg viewBox="0 0 32 40" aria-hidden="true" focusable="false"><path class="cup-lid" d="M5 4.5h22c1.4 0 2.5 1.1 2.5 2.5v2H2.5V7C2.5 5.6 3.6 4.5 5 4.5Z"/><path class="cup-body" d="M5.5 9h21l-2.2 25.2c-.2 2.1-1.9 3.8-4 3.8h-8.6c-2.1 0-3.8-1.7-4-3.8L5.5 9Z"/><path class="cup-band" d="M7.3 17.2h17.4l-.9 10.4H8.2l-.9-10.4Z"/></svg>';
+  return '<svg viewBox="0 0 42 52" aria-hidden="true" focusable="false">'
+    +'<ellipse class="cup-shadow" cx="21" cy="47.2" rx="11.5" ry="2.4"/>'
+    +'<path class="cup-cap" d="M10 7.3c.4-2.1 2.1-3.5 4.2-3.5h13.6c2.1 0 3.8 1.4 4.2 3.5l.4 2.1H9.6l.4-2.1Z"/>'
+    +'<rect class="cup-lid" x="6.5" y="8.8" width="29" height="6.1" rx="3.05"/>'
+    +'<path class="cup-body" d="M9.2 14.2h23.6l-2.8 27c-.3 3-2.8 5.2-5.8 5.2h-6.4c-3 0-5.5-2.2-5.8-5.2l-2.8-27Z"/>'
+    +'<path class="cup-highlight" d="M13.2 16.5h3.1l1.7 25.8h-1.1c-1.6 0-2.8-1.2-3-2.8l-2.2-21.3c-.1-.9.6-1.7 1.5-1.7Z"/>'
+    +'<path class="cup-band" d="M11.6 25.1h18.8l-1.1 11.3H12.7l-1.1-11.3Z"/>'
+    +'</svg>';
 }
 
 function upgradeCup(node){
-  if(!(node instanceof HTMLElement)||!node.classList.contains('loyalty-cup')||node.dataset.cupV3==='1')return;
+  if(!(node instanceof HTMLElement)||!node.classList.contains('loyalty-cup')||node.dataset.cupV4==='1')return;
   const label=node.classList.contains('gift')?'★':String(node.textContent||'').trim();
-  node.dataset.cupV3='1';
+  node.dataset.cupV4='1';
   node.innerHTML=cupSvg()+'<span>'+label+'</span>';
 }
 
@@ -26,9 +33,9 @@ function upgradeLoyaltyCups(root=document){
 }
 
 function socialSvg(kind){
-  if(kind==='vk')return '<svg viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="14" fill="#2787F5"/><path d="M12.2 15.2h6.2c.5 0 .8.2 1 .7 1.5 4.2 3.8 7.8 5.1 7.8.7 0 .9-.6.9-2.2v-3.3c0-1.5-.3-2.2-1.3-2.5v-.5h7.8c.6 0 .9.3.9.8v5.2c0 1.1.4 1.6.9 1.6.8 0 2.1-1.8 3.9-5.7.4-.9.8-1.8 1.2-1.9h6.5c.9 0 1.2.5.8 1.4-1 2.4-3.2 5.5-5.2 7.7-.8.9-.8 1.4-.1 2.2 1.4 1.5 3.2 3.1 5.1 5.5.6.8.3 1.5-.7 1.5h-6.5c-.8 0-1.3-.3-1.8-.9-1.7-2-3.1-3.7-4-3.7-.7 0-1.1.6-1.1 2v1.8c0 .5-.3.8-.9.8h-2.8c-5.4 0-10.1-3.2-13.7-9-1.7-2.7-3.3-5.9-4.2-8.5-.2-.6.1-1 .8-1Z" fill="#fff" transform="scale(.8) translate(5.8 5.8)"/></svg>';
-  if(kind==='max')return '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="maxg" x1="6" y1="5" x2="42" y2="43" gradientUnits="userSpaceOnUse"><stop stop-color="#6F7BFF"/><stop offset="1" stop-color="#3AB9F1"/></linearGradient></defs><rect width="48" height="48" rx="14" fill="url(#maxg)"/><path d="M13 31V17.6c0-1 .8-1.8 1.8-1.8h2.3c.7 0 1.3.4 1.6 1l5.3 9.1 5.3-9.1c.3-.6.9-1 1.6-1h2.3c1 0 1.8.8 1.8 1.8V31h-4.3v-7.8l-4.5 7.2c-.5.8-1.7.8-2.2 0l-4.5-7.2V31H13Z" fill="#fff"/></svg>';
-  if(kind==='telegram')return '<svg viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="14" fill="#2AABEE"/><path d="m12 23.3 22.7-8.8c1.1-.4 2 .3 1.6 1.9l-3.9 18.2c-.3 1.3-1 1.6-2.1 1l-6-4.4-2.9 2.8c-.3.3-.6.6-1.2.6l.4-6.1 11.1-10c.5-.4-.1-.7-.7-.3l-13.7 8.6-5.9-1.8c-1.3-.4-1.3-1.2.6-1.7Z" fill="#fff"/></svg>';
+  if(kind==='vk')return '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="24" fill="#2787F5"/><path fill="#fff" d="M24.8 34C14.4 34 8.5 26.9 8.3 15.1h5.2c.2 8.7 4 12.4 7 13.2V15.1h4.9v7.5c3.8-.4 7.7-3.8 9-7.5h4.9c-1 4.6-5 8-7.8 9.4 2.8 1.1 7.3 4 9 9.5h-5.4c-1.5-3.6-5.1-6.4-9.7-6.9V34h-.6Z"/></svg>';
+  if(kind==='max')return '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="kapouch-max-gradient" x1="5" y1="5" x2="43" y2="43" gradientUnits="userSpaceOnUse"><stop stop-color="#786BFF"/><stop offset=".52" stop-color="#4F8CFF"/><stop offset="1" stop-color="#35C4E8"/></linearGradient></defs><circle cx="24" cy="24" r="24" fill="url(#kapouch-max-gradient)"/><path fill="#fff" d="M12.6 32.7V15.3h5.2l6.2 9.3 6.2-9.3h5.2v17.4h-4.8V22.5L25.8 30h-3.6l-4.8-7.5v10.2h-4.8Z"/></svg>';
+  if(kind==='telegram')return '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="24" fill="#2AABEE"/><path fill="#fff" d="M11.7 23.1 35.3 14c1.1-.4 2 .3 1.6 1.9l-4 18.8c-.3 1.3-1.1 1.6-2.2 1l-6.1-4.5-3 2.9c-.3.3-.6.6-1.2.6l.4-6.2 11.4-10.3c.5-.4-.1-.7-.8-.3l-14 8.8-6-1.9c-1.3-.4-1.4-1.2.3-1.7Z"/></svg>';
   return '';
 }
 
@@ -37,31 +44,43 @@ function decorateSocialLinks(){
   if(!box)return;
   box.querySelectorAll('a').forEach(link=>{
     const href=String(link.getAttribute('href')||'').toLowerCase();
-    const text=String(link.textContent||'').trim().toLowerCase();
+    const rawText=String(link.textContent||'').trim();
+    const text=rawText.toLowerCase();
     let kind='';
     if(link.dataset.kapouchMax==='1'||text.startsWith('max')||href.includes('max.ru'))kind='max';
     else if(text.startsWith('vk')||href.includes('vk.com'))kind='vk';
     else if(text.startsWith('telegram')||href.includes('t.me/'))kind='telegram';
-    if(!kind)return;
+    if(!kind){link.classList.add('profile-external-link');return}
     if(link.dataset.socialIcon===kind)return;
+    const label=kind==='vk'?'VK':kind==='max'?'MAX':'Telegram';
     link.dataset.socialIcon=kind;
     link.classList.add('social-icon-link');
-    link.setAttribute('aria-label',kind==='vk'?'VK':kind==='max'?'MAX':'Telegram');
-    link.setAttribute('title',kind==='vk'?'VK':kind==='max'?'MAX':'Telegram');
-    link.innerHTML=socialSvg(kind);
+    link.setAttribute('aria-label',label);
+    link.setAttribute('title',label);
+    link.innerHTML='<span class="social-mark">'+socialSvg(kind)+'</span><small>'+label+'</small>';
   });
 }
 
+function imageFilename(src){
+  let url;try{url=new URL(src,location.href)}catch(e){return ''}
+  const queryFile=url.searchParams.get('f');
+  if(queryFile&&/^[A-Za-z0-9._-]+\.(?:jpe?g|png|webp)$/i.test(queryFile))return queryFile;
+  const base=decodeURIComponent(url.pathname.split('/').pop()||'');
+  return /^[A-Za-z0-9._-]+\.(?:jpe?g|png|webp)$/i.test(base)?base:'';
+}
+
 function imageFallbackCandidates(src){
-  let url;try{url=new URL(src,location.href)}catch(e){return []}
-  const filename=url.searchParams.get('f');
-  if(!filename||!/^[A-Za-z0-9._-]+\.(?:jpe?g|png|webp)$/i.test(filename))return [];
+  const filename=imageFilename(src);
+  if(!filename)return [];
   const f=encodeURIComponent(filename);
   return [
     appOrigin+'/uploads/products/'+f,
+    appOrigin+'/customer/uploads/products/'+f,
     apiOrigin+'/customer/uploads/products/'+f,
-    apiOrigin+'/uploads/products/'+f
-  ].filter((value,index,array)=>value!==url.href&&array.indexOf(value)===index);
+    apiOrigin+'/uploads/products/'+f,
+    location.origin+'/uploads/products/'+f,
+    location.origin+'/customer/uploads/products/'+f
+  ].filter((value,index,array)=>value!==src&&array.indexOf(value)===index);
 }
 
 function onImageError(event){
@@ -78,6 +97,8 @@ function onImageError(event){
   const index=Number(img.dataset.kapouchImageFallbackIndex||0);
   if(index<candidates.length){
     img.dataset.kapouchImageFallbackIndex=String(index+1);
+    img.removeAttribute('hidden');
+    img.hidden=false;
     img.src=candidates[index];
     return;
   }
@@ -119,6 +140,6 @@ else{
   watchDynamicUi();
 }
 
-window.addEventListener('kapouch:catalog',()=>setTimeout(decorateSocialLinks,0));
+window.addEventListener('kapouch:catalog',()=>setTimeout(()=>{decorateSocialLinks();upgradeLoyaltyCups()},0));
 window.addEventListener('load',()=>{promoteFinalStyle();upgradeLoyaltyCups();decorateSocialLinks()});
 })();
