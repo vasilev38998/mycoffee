@@ -37,6 +37,25 @@ body.k-redesign-v2 .links-card .social-mark svg{width:40px!important;height:40px
 body.k-redesign-v2 .links-card a.social-icon-link small{display:block!important;color:#685247!important;font-size:8px!important;font-weight:900!important;line-height:1!important;letter-spacing:.02em!important}
 body.k-redesign-v2 .links-card a.profile-external-link{order:2!important;flex:1 1 170px!important;min-height:72px!important;display:flex!important;align-items:center!important;padding:13px 15px!important;border:1px solid rgba(69,39,23,.07)!important;border-radius:18px!important;background:#f2e5d9!important;color:#42291c!important;font-weight:800!important;text-decoration:none!important}
 
+/* Product modifiers: clean, compact, non-clipped cards instead of a nested pill carousel. */
+body.k-redesign-v2 .modifier-picker{display:grid!important;gap:20px!important;margin:22px 0 20px!important;min-width:0!important}
+body.k-redesign-v2 .modifier-group{display:grid!important;gap:10px!important;min-width:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible!important;color:#25150f!important}
+body.k-redesign-v2 .modifier-group-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important;padding:0 2px!important;min-width:0!important}
+body.k-redesign-v2 .modifier-group-head strong{display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important;color:#25150f!important;font-size:15px!important;font-weight:900!important;line-height:1.2!important;letter-spacing:-.01em!important}
+body.k-redesign-v2 .modifier-group-head span{flex:0 0 auto!important;padding:5px 8px!important;border-radius:999px!important;background:#f2e5d9!important;color:#79655b!important;font-size:9px!important;font-weight:750!important;line-height:1!important;white-space:nowrap!important;text-align:center!important}
+body.k-redesign-v2 .modifier-group-price{display:inline-flex!important;align-items:center!important;padding:3px 7px!important;border-radius:999px!important;background:#fff3c8!important;color:#b87800!important;font-size:10px!important;font-weight:950!important;line-height:1!important;white-space:nowrap!important}
+body.k-redesign-v2 .modifier-options{display:grid!important;grid-auto-flow:row!important;grid-auto-columns:initial!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;overflow:visible!important;padding:0!important;scroll-snap-type:none!important;overscroll-behavior:auto!important}
+body.k-redesign-v2 .modifier-option{scroll-snap-align:none!important;display:grid!important;grid-template-columns:24px minmax(0,1fr) auto!important;align-items:center!important;gap:9px!important;width:100%!important;min-width:0!important;min-height:58px!important;padding:10px 11px!important;border:1px solid #e2d3c7!important;border-radius:16px!important;background:linear-gradient(145deg,#fffdfa,#fbf5ef)!important;color:#25150f!important;text-align:left!important;box-shadow:0 5px 14px rgba(66,37,21,.045)!important;transition:border-color .14s ease,background .14s ease,transform .14s ease,box-shadow .14s ease!important}
+body.k-redesign-v2 .modifier-option:active{transform:scale(.985)!important}
+body.k-redesign-v2 .modifier-option .check{width:23px!important;height:23px!important;border:1.5px solid #bda89a!important;border-radius:50%!important;background:#f4e9df!important;color:#2f1a11!important;box-shadow:inset 0 0 0 4px #fffaf6!important;font-size:10px!important}
+body.k-redesign-v2 .modifier-option strong{min-width:0!important;color:#2b1810!important;font-size:12px!important;font-weight:850!important;line-height:1.2!important;overflow-wrap:anywhere!important}
+body.k-redesign-v2 .modifier-option b{padding-left:3px!important;color:#8a6048!important;font-size:10px!important;font-weight:850!important;white-space:nowrap!important}
+body.k-redesign-v2 .modifier-option.active{border-color:#dfaa18!important;background:linear-gradient(145deg,#fff6d7,#ffefb6)!important;color:#25150f!important;box-shadow:0 7px 18px rgba(191,128,0,.10),inset 0 0 0 1px rgba(223,170,24,.12)!important}
+body.k-redesign-v2 .modifier-option.active .check{border-color:#d79c04!important;background:#ffc21c!important;color:#2b190f!important;box-shadow:inset 0 0 0 4px #ffc21c!important}
+body.k-redesign-v2 .modifier-group.uniform-price .modifier-option{grid-template-columns:24px minmax(0,1fr)!important}
+body.k-redesign-v2 .modifier-group.uniform-price .modifier-option b{display:none!important}
+body.k-redesign-v2 .modifier-error{margin-top:1px!important;padding:10px 12px!important;border-radius:13px!important;background:#fbe9e6!important;color:#8e463e!important;font-size:10px!important;font-weight:700!important}
+
 @media(max-width:430px){
   body.k-redesign-v2 .loyalty-teaser{grid-template-columns:1fr!important;gap:13px!important;padding:17px 15px 16px!important}
   body.k-redesign-v2 .loyalty-cups{width:100%!important;justify-self:stretch!important;justify-content:space-between!important;gap:4px!important;padding:0 4px!important}
@@ -45,6 +64,15 @@ body.k-redesign-v2 .links-card a.profile-external-link{order:2!important;flex:1 
   body.k-redesign-v2 .links-card a.social-icon-link{flex-basis:62px!important;width:62px!important;height:68px!important}
   body.k-redesign-v2 .links-card .social-mark,
   body.k-redesign-v2 .links-card .social-mark svg{width:37px!important;height:37px!important}
+  body.k-redesign-v2 .modifier-picker{margin-top:20px!important;gap:18px!important}
+  body.k-redesign-v2 .modifier-group-head strong{font-size:14px!important}
+  body.k-redesign-v2 .modifier-options{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+  body.k-redesign-v2 .modifier-option{min-height:56px!important;padding:9px 10px!important;gap:8px!important;border-radius:15px!important}
+  body.k-redesign-v2 .modifier-option strong{font-size:11px!important}
+}
+
+@media(max-width:350px){
+  body.k-redesign-v2 .modifier-options{grid-template-columns:1fr!important}
 }
 
 @media(max-width:370px){
