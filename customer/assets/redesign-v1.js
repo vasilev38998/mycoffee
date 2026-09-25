@@ -19,6 +19,15 @@ function ensureStyle(id,href){
   document.head.appendChild(link);
 }
 
+function ensureScript(id,src){
+  if(document.getElementById(id))return;
+  const script=document.createElement('script');
+  script.id=id;
+  script.src=src;
+  script.defer=true;
+  document.body.appendChild(script);
+}
+
 function ensureHomeOrderStyle(){
   if(document.getElementById('kapouchHomeOrderFix'))return;
   const style=document.createElement('style');
@@ -47,8 +56,10 @@ function ensureHomeOrderStyle(){
 
 ensureStyle('kapouchRedesignV2','assets/redesign-v2.css?v=2');
 ensureStyle('kapouchRedesignV2Modules','assets/redesign-v2-modules.css?v=2');
+ensureStyle('kapouchRedesignV3','assets/redesign-v3-fixes.css?v=1');
 document.body.classList.add('k-redesign-v2');
 ensureHomeOrderStyle();
+ensureScript('kapouchRedesignV3Script','assets/redesign-v3-fixes.js?v=1');
 
 function syncTheme(){
   if(themeMeta&&themeMeta.getAttribute('content')!=='#f7f1e8')themeMeta.setAttribute('content','#f7f1e8');
