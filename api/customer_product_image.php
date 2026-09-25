@@ -18,7 +18,8 @@ $name=trim((string)($_GET['f']??''));
 if($name===''||$name!==basename($name)||!preg_match('/^[A-Za-z0-9._-]+\.(?:jpe?g|png|webp)$/i',$name)){
     http_response_code(404);exit;
 }
-$file=customer_media_existing_file('uploads/products/'.$name);
+$primary=customer_media_root().'/'.$name;
+$file=(is_file($primary)&&is_readable($primary))?$primary:customer_media_existing_file('uploads/products/'.$name);
 if($file===null){
     http_response_code(404);exit;
 }
