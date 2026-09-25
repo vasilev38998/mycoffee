@@ -1,0 +1,100 @@
+/* Final redesign compatibility layer. Loaded last on purpose. */
+body.k-redesign-v2 .balance-copy>span{color:#351d0d!important;font-weight:950!important;text-shadow:none!important;opacity:1!important}
+body.k-redesign-v2 .balance-copy>em{color:#4b2a10!important;font-weight:850!important;text-shadow:none!important;opacity:1!important}
+body.k-redesign-v2 .balance-copy strong{color:#21130b!important;text-shadow:none!important}
+body.k-redesign-v2 .balance-copy small{color:#4a2910!important}
+body.k-redesign-v2 .card-arrow{color:#41220d!important}
+body.k-redesign-v2 .loyalty-teaser-copy strong{color:#24150f!important}
+body.k-redesign-v2 .loyalty-teaser-copy span{color:#654f43!important;font-weight:650!important}
+body.k-redesign-v2 .page-head p,
+body.k-redesign-v2 .product-meta,
+body.k-redesign-v2 .cart-item small,
+body.k-redesign-v2 .profile-card p,
+body.k-redesign-v2 .auth-hint,
+body.k-redesign-v2 .checkout-line,
+body.k-redesign-v2 .payment-online-note,
+body.k-redesign-v2 .profile-fold-summary span{color:#665249!important}
+
+/* Real takeaway-cup progress icons. */
+body.k-redesign-v2 .loyalty-cups{display:flex!important;align-items:flex-end!important;gap:5px!important;min-width:0!important}
+body.k-redesign-v2 .loyalty-cup{position:relative!important;width:30px!important;height:37px!important;display:grid!important;place-items:center!important;background:transparent!important;border-radius:0!important;color:#6f4937!important;font-size:8px!important;font-weight:950!important;font-style:normal!important;box-shadow:none!important;overflow:visible!important}
+body.k-redesign-v2 .loyalty-cup:before{display:none!important}
+body.k-redesign-v2 .loyalty-cup svg{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;display:block!important;overflow:visible!important;filter:drop-shadow(0 4px 7px rgba(64,38,24,.08))}
+body.k-redesign-v2 .loyalty-cup .cup-lid{fill:#cdb29d!important}
+body.k-redesign-v2 .loyalty-cup .cup-body{fill:#eadbd0!important}
+body.k-redesign-v2 .loyalty-cup .cup-band{fill:#f5eee8!important}
+body.k-redesign-v2 .loyalty-cup>span{position:relative!important;z-index:2!important;margin-top:4px!important;color:#73503e!important;font-size:8px!important;font-weight:950!important;line-height:1!important}
+body.k-redesign-v2 .loyalty-cup.done .cup-lid{fill:#4d2b1e!important}
+body.k-redesign-v2 .loyalty-cup.done .cup-body{fill:#6b3a28!important}
+body.k-redesign-v2 .loyalty-cup.done .cup-band{fill:#80503d!important}
+body.k-redesign-v2 .loyalty-cup.done>span{color:#fff8ee!important}
+body.k-redesign-v2 .loyalty-cup.gift{width:35px!important;height:43px!important;background:transparent!important;box-shadow:none!important}
+body.k-redesign-v2 .loyalty-cup.gift .cup-lid{fill:#d99900!important}
+body.k-redesign-v2 .loyalty-cup.gift .cup-body{fill:#ffc21c!important}
+body.k-redesign-v2 .loyalty-cup.gift .cup-band{fill:#ffd75f!important}
+body.k-redesign-v2 .loyalty-cup.gift>span{color:#2b190f!important;font-size:13px!important;margin-top:4px!important}
+body.k-redesign-v2 .loyalty-cup.gift.available svg{filter:drop-shadow(0 6px 10px rgba(198,132,6,.22))}
+
+/* Product images: do not let legacy injected styles hide them. */
+body.k-redesign-v2 .product-card .product-photo,
+body.k-redesign-v2 .mini-visual img,
+body.k-redesign-v2 .product-detail-image{display:block!important;visibility:visible!important;opacity:1!important;max-width:100%!important}
+body.k-redesign-v2 .product-card .product-photo{width:100%!important;height:100%!important;object-fit:cover!important;object-position:center!important}
+body.k-redesign-v2 .product-card .visual.has-photo{padding:0!important;overflow:hidden!important}
+
+/* Checkout radios and offer checkbox were inheriting width:100% from text inputs. */
+body.k-redesign-v2 .checkout-card{max-width:100%!important;overflow:hidden!important}
+body.k-redesign-v2 .checkout-form,
+body.k-redesign-v2 .payment-methods,
+body.k-redesign-v2 .payment-method-list{min-width:0!important;max-width:100%!important;width:100%!important}
+body.k-redesign-v2 .payment-method-list{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:9px!important}
+body.k-redesign-v2 .payment-method{display:grid!important;grid-template-columns:24px minmax(0,1fr)!important;align-items:center!important;gap:12px!important;width:100%!important;max-width:100%!important;min-width:0!important;padding:13px 14px!important;border-radius:17px!important;overflow:hidden!important}
+body.k-redesign-v2 .payment-method input[type="radio"]{appearance:auto!important;-webkit-appearance:radio!important;width:22px!important;min-width:22px!important;max-width:22px!important;height:22px!important;min-height:22px!important;padding:0!important;margin:0!important;border:0!important;border-radius:50%!important;background:transparent!important;box-shadow:none!important;accent-color:#e2a900!important}
+body.k-redesign-v2 .payment-method-copy{display:grid!important;gap:3px!important;min-width:0!important;width:auto!important;overflow-wrap:anywhere!important}
+body.k-redesign-v2 .payment-method-copy strong{font-size:13px!important;line-height:1.25!important;color:#25150f!important}
+body.k-redesign-v2 .payment-method-copy span{font-size:10px!important;line-height:1.4!important;color:#665249!important;white-space:normal!important}
+body.k-redesign-v2 .legal-consent{display:grid!important;grid-template-columns:23px minmax(0,1fr)!important;align-items:start!important;gap:11px!important;width:100%!important;max-width:100%!important;min-width:0!important;padding:13px 14px!important;border-radius:17px!important;background:#f7eee5!important;color:#58453b!important;overflow:hidden!important}
+body.k-redesign-v2 .legal-consent input[type="checkbox"]{appearance:auto!important;-webkit-appearance:checkbox!important;width:20px!important;min-width:20px!important;max-width:20px!important;height:20px!important;min-height:20px!important;padding:0!important;margin:1px 0 0!important;border:0!important;background:transparent!important;box-shadow:none!important;accent-color:#dca200!important}
+body.k-redesign-v2 .legal-consent>span{min-width:0!important;display:block!important;font-size:10px!important;line-height:1.5!important;overflow-wrap:anywhere!important;color:#58453b!important}
+body.k-redesign-v2 .legal-consent a{color:#814226!important;font-weight:800!important}
+
+/* Cleaner compact bottom navigation. */
+body.k-redesign-v2 .pwa-app{padding-bottom:94px!important}
+body.k-redesign-v2 .bottom-nav{bottom:7px!important;width:min(600px,calc(100% - 14px))!important;min-height:74px!important;padding:6px 7px max(7px,env(safe-area-inset-bottom))!important;border:1px solid rgba(72,42,25,.10)!important;border-radius:24px!important;background:rgba(255,253,249,.97)!important;box-shadow:0 15px 38px rgba(55,31,19,.14)!important}
+body.k-redesign-v2 .bottom-nav button{min-height:54px!important;gap:3px!important;padding:5px 2px!important;border-radius:15px!important;color:#927d70!important;transition:background .15s ease,color .15s ease,transform .15s ease!important}
+body.k-redesign-v2 .bottom-nav button.active{background:#f1e2d5!important;color:#59311f!important}
+body.k-redesign-v2 .bottom-nav button>span{width:24px!important;height:24px!important;font-size:20px!important}
+body.k-redesign-v2 .bottom-nav button>span svg{width:22px!important;height:22px!important}
+body.k-redesign-v2 .bottom-nav small{font-size:8px!important;line-height:1!important;font-weight:850!important;letter-spacing:0!important}
+body.k-redesign-v2 .bottom-nav .nav-special{top:-5px!important;min-height:58px!important}
+body.k-redesign-v2 .bottom-nav .nav-special>span{width:46px!important;height:46px!important;border:3px solid #fffdf9!important;border-radius:15px!important;box-shadow:0 9px 20px rgba(174,113,3,.18)!important}
+body.k-redesign-v2 .bottom-nav .nav-special .nav-icon{width:23px!important;height:23px!important}
+body.k-redesign-v2 .bottom-nav .nav-special small{margin-top:0!important;color:#694d3e!important}
+body.k-redesign-v2 .bottom-nav i{top:0!important;right:21%!important;min-width:17px!important;height:17px!important;font-size:8px!important;border-width:2px!important}
+
+/* Social links become visual brand buttons. */
+body.k-redesign-v2 .links-card{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:10px!important}
+body.k-redesign-v2 .links-card a{min-width:0!important}
+body.k-redesign-v2 .links-card a.social-icon-link{flex:0 0 52px!important;width:52px!important;height:52px!important;padding:0!important;display:grid!important;place-items:center!important;border-radius:16px!important;background:#f2e6db!important;border:1px solid rgba(69,39,23,.08)!important}
+body.k-redesign-v2 .links-card a.social-icon-link svg{width:34px!important;height:34px!important;display:block!important}
+body.k-redesign-v2 .links-card a:not(.social-icon-link){flex:1 1 170px!important;padding:12px 13px!important;border-radius:14px!important}
+
+/* Make profile/order surfaces feel aligned instead of clipped. */
+body.k-redesign-v2 #profileOrders{min-width:0!important;overflow-x:auto!important;padding-bottom:3px!important;scrollbar-width:none!important}
+body.k-redesign-v2 #profileOrders::-webkit-scrollbar{display:none!important}
+body.k-redesign-v2 .profile-row{min-width:0!important}
+
+@media(max-width:430px){
+  body.k-redesign-v2 .loyalty-cups{gap:3px!important}
+  body.k-redesign-v2 .loyalty-cup{width:27px!important;height:34px!important}
+  body.k-redesign-v2 .loyalty-cup.gift{width:31px!important;height:39px!important}
+  body.k-redesign-v2 .bottom-nav{width:calc(100% - 10px)!important;bottom:5px!important}
+  body.k-redesign-v2 .bottom-nav button{min-height:51px!important}
+  body.k-redesign-v2 .bottom-nav .nav-special>span{width:44px!important;height:44px!important}
+}
+
+@media(max-width:370px){
+  body.k-redesign-v2 .loyalty-cup{width:25px!important;height:32px!important}
+  body.k-redesign-v2 .loyalty-cup.gift{width:29px!important;height:37px!important}
+  body.k-redesign-v2 .bottom-nav small{font-size:7px!important}
+}

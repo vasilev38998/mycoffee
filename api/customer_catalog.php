@@ -7,6 +7,7 @@ require_once dirname(__DIR__).'/inc/customer_pwa.php';
 require_once dirname(__DIR__).'/inc/customer_operations.php';
 require_once dirname(__DIR__).'/inc/customer_urls.php';
 require_once dirname(__DIR__).'/inc/customer_media.php';
+require_once dirname(__DIR__).'/inc/customer_media_legacy.php';
 
 customer_api_headers();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))==='OPTIONS'){http_response_code(204);exit;}
@@ -15,12 +16,12 @@ if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))!=='GET')customer_api_
 try{
     $catalog=customer_pwa_catalog();
     // Serve uploaded PWA images through a dedicated PHP endpoint on the API origin.
-    // It accepts every legacy local image-path representation but never proxies an
-    // arbitrary external URL. This avoids Beget static-file rewrite differences.
+    // Reads support both the current customer/uploads/products directory and the
+    // legacy /uploads/products directory so older photos survive deployments.
     $stableImage=static function(?string $value): ?string {
         $name=customer_media_filename($value);if($name===null)return null;
-        $file=customer_media_root().'/'.$name;
-        if(!is_file($file)||!is_readable($file))return null;
+        $file=customer_media_existing_file($value);
+        if($file===null)return null;
         $version=(int)(filemtime($file)?:0);
         return customer_public_api_base().'/customer_product_image.php?f='.rawurlencode($name).'&v='.$version;
     };
