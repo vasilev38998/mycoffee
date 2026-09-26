@@ -24,8 +24,8 @@ $checks=[
   'pickup capacity copy removed at source'=>!str_contains($payments,'свободно')&&str_contains($payments,'<select id="pickupAt">'),
   'pickup cleanup watches real select id'=>str_contains($polish,"const select=\$('pickupAt')")&&!str_contains($polish,"\$('pickupDelay')"),
   'menu uses variant wording with Russian pluralization'=>str_contains($polish,'function variantWord')&&str_contains($polish,"return 'варианта'")&&str_contains($polish,"return 'вариантов'")&&str_contains($index,'Выберите вариант'),
-  'fresh polish assets are loaded'=>str_contains($config,'assets/pwa-polish.js?v=3')&&str_contains($index,'config.js?v=12')&&str_contains($index,'payments.js?v=8'),
-  'PWA shell is v41'=>str_contains($sw,"kapouch-pwa-v41")&&str_contains($sw,'./assets/pwa-polish.js?v=3')&&str_contains($sw,'./assets/payments.js?v=8'),
+  'fresh polish assets are loaded'=>str_contains($config,'assets/pwa-polish.js?v=3')&&str_contains($index,'config.js?v=13')&&str_contains($index,'payments.js?v=9'),
+  'PWA shell is refreshed'=>str_contains($sw,"kapouch-pwa-v41")&&str_contains($sw,'./assets/pwa-polish.js?v=3')&&str_contains($sw,'./assets/payments.js?v=9'),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"PWA admin customization contract failed: {$label}\n");exit(1);}}
 echo "PWA ADMIN CUSTOMIZATION CONTRACT PASSED\n";
