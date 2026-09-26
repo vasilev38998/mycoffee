@@ -81,7 +81,7 @@ function evotor_customer_loyalty_attach_sale(PDO $pdo,array $connection,array $d
     $insert=$pdo->prepare('INSERT INTO evotor_customer_sales(connection_id,evotor_document_id,sale_id,customer_id,scan_id,gross_amount,loyalty_earned,loyalty_spent) VALUES(?,?,?,?,?,?,?,0)');
     $insert->execute([$connectionId,$documentId,$saleId,$customerId,(int)$row['id'],$gross,$earned]);
     if($earned>0){
-        $note='Начисление за покупку на Эвоторе · чек '.($document['number']??$documentId);
+        $note='Начисление за покупку в кофейне · чек '.($document['number']??$documentId);
         $pdo->prepare("INSERT INTO customer_loyalty_ledger(customer_id,order_id,amount,operation_type,note) VALUES(?,NULL,?,'earn',?)")->execute([$customerId,$earned,mb_substr($note,0,255)]);
         $pdo->prepare('UPDATE customer_accounts SET loyalty_balance=loyalty_balance+? WHERE id=?')->execute([$earned,$customerId]);
     }
@@ -92,9 +92,60 @@ function evotor_customer_loyalty_attach_sale(PDO $pdo,array $connection,array $d
     return ['customer_id'=>$customerId,'scan_id'=>(int)$row['id'],'gross_amount'=>$gross,'loyalty_earned'=>$earned,'drink_stamps'=>$drinkStamps,'drink_gift'=>$drinkGift];
 }
 
+function evotor_customer_loyalty_payback_base_document_id(array $document): string
+{
+    $body=is_array($document['body']??null)?$document['body']:[];
+    foreach(['base_document_id','baseDocumentId','base_document_uuid','baseDocumentUUID'] as $key){
+        if(isset($body[$key])&&is_scalar($body[$key])&&trim((string)$body[$key])!=='')return trim((string)$body[$key]);
+    }
+    foreach((array)($body['transactions']??$document['transactions']??[]) as $transaction){
+        if(!is_array($transaction))continue;
+        foreach(['base_document_id','baseDocumentId','base_document_uuid','baseDocumentUUID'] as $key){
+            if(isset($transaction[$key])&&is_scalar($transaction[$key])&&trim((string)$transaction[$key])!=='')return trim((string)$transaction[$key]);
+        }
+    }
+    return '';
+}
+
+function evotor_customer_loyalty_attach_payback(PDO $pdo,array $connection,array $document,?int $saleId): ?array
+{
+    if(($document['type']??'')!=='PAYBACK'||$saleId===null||$saleId<=0||empty($document['id']))return null;
+    $connectionId=(int)($connection['id']??0);if($connectionId<=0)return null;
+    $documentId=(string)$document['id'];
+    $check=$pdo->prepare('SELECT id FROM evotor_customer_sales WHERE connection_id=? AND evotor_document_id=? LIMIT 1');$check->execute([$connectionId,$documentId]);if($check->fetchColumn())return null;
+
+    $baseDocumentId=evotor_customer_loyalty_payback_base_document_id($document);if($baseDocumentId==='')return null;
+    $originalStmt=$pdo->prepare('SELECT * FROM evotor_customer_sales WHERE connection_id=? AND evotor_document_id=? AND gross_amount>0 LIMIT 1 FOR UPDATE');
+    $originalStmt->execute([$connectionId,$baseDocumentId]);$original=$originalStmt->fetch();if(!$original)return null;
+    $customerId=(int)$original['customer_id'];if($customerId<=0)return null;
+    $lock=$pdo->prepare('SELECT id,loyalty_balance FROM customer_accounts WHERE id=? FOR UPDATE');$lock->execute([$customerId]);if(!$lock->fetch())return null;
+
+    $body=is_array($document['body']??null)?$document['body']:[];$refundAmount=round(max(0,(float)($body['result_sum']??0)),2);
+    if($refundAmount<=0){$sale=$pdo->prepare('SELECT ABS(total_amount) FROM sales WHERE id=? LIMIT 1');$sale->execute([$saleId]);$refundAmount=round(max(0,(float)$sale->fetchColumn()),2);}
+    if($refundAmount<=0)return null;
+
+    $originalGross=round(max(0,(float)$original['gross_amount']),2);$originalEarned=round(max(0,(float)$original['loyalty_earned']),2);$scanId=$original['scan_id']!==null?(int)$original['scan_id']:null;
+    $priorStmt=$pdo->prepare('SELECT COALESCE(SUM(ABS(gross_amount)),0) refunded,COALESCE(SUM(ABS(loyalty_earned)),0) reversed FROM evotor_customer_sales WHERE connection_id=? AND customer_id=? AND scan_id<=>? AND gross_amount<0');
+    $priorStmt->execute([$connectionId,$customerId,$scanId]);$prior=$priorStmt->fetch()?:[];$alreadyRefunded=round((float)($prior['refunded']??0),2);$alreadyReversed=round((float)($prior['reversed']??0),2);
+    $remainingGross=max(0,round($originalGross-$alreadyRefunded,2));$effectiveRefund=min($refundAmount,$remainingGross>0?$remainingGross:$refundAmount);
+    $fullRefund=$originalGross>0&&$alreadyRefunded+$effectiveRefund>=$originalGross-0.01;
+    $remainingEarned=max(0,round($originalEarned-$alreadyReversed,2));
+    $reverseEarned=$fullRefund?$remainingEarned:($originalGross>0?round(min($remainingEarned,$originalEarned*$effectiveRefund/$originalGross),2):0.0);
+
+    $insert=$pdo->prepare('INSERT INTO evotor_customer_sales(connection_id,evotor_document_id,sale_id,customer_id,scan_id,gross_amount,loyalty_earned,loyalty_spent) VALUES(?,?,?,?,?,?,?,0)');
+    $insert->execute([$connectionId,$documentId,$saleId,$customerId,$scanId,-$effectiveRefund,-$reverseEarned]);
+    if($reverseEarned>0){
+        $note='Возврат покупки в кофейне · чек возврата '.($document['number']??$documentId);
+        $pdo->prepare("INSERT INTO customer_loyalty_ledger(customer_id,order_id,amount,operation_type,note) VALUES(?,NULL,?,'adjust',?)")->execute([$customerId,-$reverseEarned,mb_substr($note,0,255)]);
+        $pdo->prepare('UPDATE customer_accounts SET loyalty_balance=ROUND(loyalty_balance-?,2) WHERE id=?')->execute([$reverseEarned,$customerId]);
+    }
+    $drink=customer_drink_loyalty_refund_evotor_sale($pdo,$customerId,(int)$original['sale_id'],$baseDocumentId,$saleId,$documentId,$fullRefund);
+    return ['customer_id'=>$customerId,'original_document_id'=>$baseDocumentId,'refund_amount'=>$effectiveRefund,'loyalty_reversed'=>$reverseEarned,'full_refund'=>$fullRefund,'drink_stamps_reversed'=>(int)($drink['reversed_stamps']??0),'gift_restored'=>!empty($drink['gift_restored'])];
+}
+
 function evotor_customer_loyalty_attach_synced_sales(array $connection,int $limit=100): array
 {
-    $connectionId=(int)($connection['id']??0);if($connectionId<=0)return ['processed'=>0,'linked'=>0,'earned'=>0.0,'drink_stamps'=>0];
+    $connectionId=(int)($connection['id']??0);if($connectionId<=0)return ['processed'=>0,'linked'=>0,'earned'=>0.0,'drink_stamps'=>0,'refunds'=>0,'loyalty_reversed'=>0.0,'drink_stamps_reversed'=>0,'gifts_restored'=>0];
     $limit=max(1,min(500,$limit));$pdo=db();
     $stmt=$pdo->prepare("SELECT d.evotor_document_id,d.imported_sale_id,d.raw_json FROM evotor_documents d LEFT JOIN evotor_customer_sales cs ON cs.connection_id=d.connection_id AND cs.evotor_document_id=d.evotor_document_id WHERE d.connection_id=? AND d.document_type='SELL' AND d.imported_sale_id IS NOT NULL AND d.close_date>=DATE_SUB(NOW(),INTERVAL 2 DAY) AND cs.id IS NULL ORDER BY d.close_date DESC,d.id DESC LIMIT {$limit}");
     $stmt->execute([$connectionId]);$rows=$stmt->fetchAll();$linked=0;$earned=0.0;$drinkStamps=0;
@@ -107,7 +158,21 @@ function evotor_customer_loyalty_attach_synced_sales(array $connection,int $limi
             if($result!==null){$linked++;$earned+=(float)$result['loyalty_earned'];$drinkStamps+=(int)($result['drink_stamps']??0);}
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
     }
+
+    $baseExpr="COALESCE(JSON_UNQUOTE(JSON_EXTRACT(d.raw_json,'$.body.base_document_id')),JSON_UNQUOTE(JSON_EXTRACT(d.raw_json,'$.body.baseDocumentId')),JSON_UNQUOTE(JSON_EXTRACT(d.raw_json,'$.body.base_document_uuid')),JSON_UNQUOTE(JSON_EXTRACT(d.raw_json,'$.body.baseDocumentUUID')),JSON_UNQUOTE(JSON_EXTRACT(d.raw_json,'$.body.transactions[0].baseDocumentUUID')))";
+    $refundStmt=$pdo->prepare("SELECT d.evotor_document_id,d.imported_sale_id,d.raw_json FROM evotor_documents d JOIN evotor_customer_sales original ON original.connection_id=d.connection_id AND original.evotor_document_id={$baseExpr} AND original.gross_amount>0 LEFT JOIN evotor_customer_sales linked_refund ON linked_refund.connection_id=d.connection_id AND linked_refund.evotor_document_id=d.evotor_document_id WHERE d.connection_id=? AND d.document_type='PAYBACK' AND d.imported_sale_id IS NOT NULL AND d.close_date>=DATE_SUB(NOW(),INTERVAL 90 DAY) AND linked_refund.id IS NULL ORDER BY d.close_date,d.id LIMIT {$limit}");
+    $refundStmt->execute([$connectionId]);$refundRows=$refundStmt->fetchAll();$refunds=0;$loyaltyReversed=0.0;$drinkReversed=0;$giftsRestored=0;
+    foreach($refundRows as $row){
+        $document=json_decode((string)$row['raw_json'],true);if(!is_array($document)||empty($document['id']))continue;
+        $pdo->beginTransaction();
+        try{
+            $result=evotor_customer_loyalty_attach_payback($pdo,$connection,$document,(int)$row['imported_sale_id']);
+            $pdo->commit();
+            if($result!==null){$refunds++;$loyaltyReversed+=(float)$result['loyalty_reversed'];$drinkReversed+=(int)$result['drink_stamps_reversed'];if(!empty($result['gift_restored']))$giftsRestored++;}
+        }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+    }
+
     $pdo->prepare("UPDATE evotor_customer_scans SET status='expired' WHERE connection_id=? AND status='pending' AND expires_at_unix<?")->execute([$connectionId,time()]);
     $pdo->prepare("UPDATE customer_evotor_reward_pending SET status='expired' WHERE connection_id=? AND status IN ('quoted','applied') AND expires_at<NOW()")->execute([$connectionId]);
-    return ['processed'=>count($rows),'linked'=>$linked,'earned'=>round($earned,2),'drink_stamps'=>$drinkStamps];
+    return ['processed'=>count($rows)+count($refundRows),'linked'=>$linked,'earned'=>round($earned,2),'drink_stamps'=>$drinkStamps,'refunds'=>$refunds,'loyalty_reversed'=>round($loyaltyReversed,2),'drink_stamps_reversed'=>$drinkReversed,'gifts_restored'=>$giftsRestored];
 }
