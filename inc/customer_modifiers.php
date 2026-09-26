@@ -65,6 +65,12 @@ function customer_modifier_catalog_map(array $products): array
     return $map;
 }
 
+function customer_modifier_limit_text(int $value): string
+{
+    $value=max(1,$value);
+    return $value.' '.($value===1?'варианта':'вариантов');
+}
+
 function customer_modifier_validate_selection(int $baseProductId,array $selectedOptionIds): array
 {
     $displayGroupId=customer_modifier_display_group_for_product($baseProductId);$groups=customer_modifier_groups_for_product($baseProductId,$displayGroupId);
@@ -72,7 +78,7 @@ function customer_modifier_validate_selection(int $baseProductId,array $selected
     foreach($groups as $g){$groupById[(int)$g['id']]=$g;foreach($g['options'] as $o)$optionById[(int)$o['id']]=['group_id'=>(int)$g['id'],'option'=>$o];}
     foreach($selected as $optionId)if(!isset($optionById[$optionId]))throw new RuntimeException('Один из выбранных модификаторов недоступен для этого напитка. Обновите меню.');
     $counts=[];foreach($selected as $optionId){$gid=$optionById[$optionId]['group_id'];$counts[$gid]=($counts[$gid]??0)+1;}
-    foreach($groups as $g){$gid=(int)$g['id'];$count=(int)($counts[$gid]??0);if($count<(int)$g['min_select'])throw new RuntimeException('Выберите «'.$g['name'].'».');if($count>(int)$g['max_select'])throw new RuntimeException('Для «'.$g['name'].'» можно выбрать не больше '.$g['max_select'].'.');}
+    foreach($groups as $g){$gid=(int)$g['id'];$count=(int)($counts[$gid]??0);if($count<(int)$g['min_select'])throw new RuntimeException('Выберите «'.$g['name'].'».');if($count>(int)$g['max_select'])throw new RuntimeException('Для «'.$g['name'].'» можно выбрать не более '.customer_modifier_limit_text((int)$g['max_select']).'.');}
     $validated=[];foreach($selected as $optionId){$entry=$optionById[$optionId];$o=$entry['option'];$validated[]=['option_id'=>$optionId,'group_id'=>$entry['group_id'],'group_name'=>(string)$groupById[$entry['group_id']]['name'],'product_id'=>(int)$o['product_id'],'evotor_product_id'=>$o['evotor_product_id']??null,'label'=>(string)$o['label'],'product_name'=>(string)$o['product_name'],'price'=>(float)$o['price']];}
     return $validated;
 }

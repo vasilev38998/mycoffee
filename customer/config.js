@@ -138,7 +138,7 @@ window.addEventListener('DOMContentLoaded',function(){
   document.body.appendChild(authRequired);
 
   var giftCheckout=document.createElement('script');
-  giftCheckout.src='assets/sixth-drink-checkout.js?v=5';
+  giftCheckout.src='assets/sixth-drink-checkout.js?v=6';
   giftCheckout.defer=true;
   document.body.appendChild(giftCheckout);
 
@@ -153,12 +153,12 @@ window.addEventListener('DOMContentLoaded',function(){
   document.body.appendChild(phoneMask);
 
   var s=document.createElement('script');
-  s.src='assets/push.js?v=1';
+  s.src='assets/push.js?v=2';
   s.defer=true;
   document.body.appendChild(s);
 
   var compact=document.createElement('script');
-  compact.src='assets/profile-compact.js?v=1';
+  compact.src='assets/profile-compact.js?v=2';
   compact.defer=true;
   document.body.appendChild(compact);
 
@@ -174,7 +174,7 @@ window.addEventListener('DOMContentLoaded',function(){
   qr.referrerPolicy='no-referrer';
   var loadCard=function(){
     if(document.querySelector('script[data-kapouch-loyalty-card]'))return;
-    var card=document.createElement('script');card.src='assets/loyalty-card.js?v=5';card.defer=true;card.dataset.kapouchLoyaltyCard='1';document.body.appendChild(card);
+    var card=document.createElement('script');card.src='assets/loyalty-card.js?v=6';card.defer=true;card.dataset.kapouchLoyaltyCard='1';document.body.appendChild(card);
   };
   qr.onload=loadCard;qr.onerror=loadCard;document.body.appendChild(qr);
 });

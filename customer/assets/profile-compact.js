@@ -21,7 +21,7 @@ function makeFold(anchor,title,note,extraClass){
 
 const notification=profile.querySelector('.notification-card');
 if(notification&&!notification.closest('.profile-fold')){
-  const fold=makeFold(notification,'Уведомления','Push о заказах и бонусах','profile-fold-notifications');
+  const fold=makeFold(notification,'Уведомления','Push-уведомления о заказах и бонусах','profile-fold-notifications');
   fold.content.appendChild(notification);
 }
 

@@ -1,6 +1,6 @@
-const CACHE='kapouch-pwa-v48';
-const PREVIOUS_CACHE='kapouch-pwa-v47';
-const PREVIOUS_PREVIOUS_CACHE='kapouch-pwa-v46';
+const CACHE='kapouch-pwa-v49';
+const PREVIOUS_CACHE='kapouch-pwa-v48';
+const PREVIOUS_PREVIOUS_CACHE='kapouch-pwa-v47';
 const SIXTH_DRINK_CONTRACT_CACHE='kapouch-pwa-v44';
 const LOCAL_NAMES_CONTRACT_CACHE='kapouch-pwa-v43';
 const LOCAL_NAMES_CACHE='kapouch-pwa-v41';
@@ -12,7 +12,7 @@ const DESIGN_CACHE='kapouch-pwa-v32';
 const MIGRATION_CACHE='kapouch-pwa-v31';
 const AUTH_GATE_CACHE='kapouch-pwa-v30';
 const LEGACY_CACHE='kapouch-pwa-v28';
-const SHELL=['./','./index.html','./legal.html','./payment-return.html','./config.js?v=12','./assets/app.css?v=5','./assets/variants.css?v=1','./assets/pwa-v2.css?v=1','./assets/pwa-v3.css?v=1','./assets/contrast-fix.css?v=1','./assets/pwa-polish.css?v=2','./assets/modifiers.css?v=3','./assets/payments.css?v=1','./assets/legal.css?v=2','./assets/redesign-v1.css?v=1','./assets/redesign-v2.css?v=2','./assets/redesign-v2-modules.css?v=2','./assets/redesign-v3-fixes.css?v=1','./assets/redesign-v4-polish.css?v=1','./assets/auth-required.css?v=1','./assets/sixth-drink-checkout.css?v=3','./assets/product-disclaimer.css?v=1','./assets/app.js?v=10','./assets/profile-plus.js?v=1','./assets/profile-compact.js?v=1','./assets/loyalty-card.js?v=5','./assets/status-once.js?v=1','./assets/phone-mask.js?v=1','./assets/auth-required.js?v=1','./assets/sixth-drink-checkout.js?v=5','./assets/product-disclaimer.js?v=1','./assets/pwa-polish.js?v=3','./assets/pwa-standalone.js?v=1','./assets/hero-cup.svg?v=2','./assets/modifier-price-ui.js?v=1','./assets/payments.js?v=8','./assets/personalization.js?v=2','./assets/current-order.js?v=2','./assets/growth-suite.js?v=2','./assets/push.js?v=1','./assets/legal.js?v=3','./assets/redesign-v1.js?v=2','./assets/redesign-v3-fixes.js?v=1','./assets/icon.svg'];
+const SHELL=['./','./index.html','./legal.html','./payment-return.html','./config.js?v=13','./assets/app.css?v=5','./assets/variants.css?v=1','./assets/pwa-v2.css?v=1','./assets/pwa-v3.css?v=1','./assets/contrast-fix.css?v=1','./assets/pwa-polish.css?v=2','./assets/modifiers.css?v=3','./assets/payments.css?v=1','./assets/legal.css?v=2','./assets/redesign-v1.css?v=1','./assets/redesign-v2.css?v=2','./assets/redesign-v2-modules.css?v=2','./assets/redesign-v3-fixes.css?v=1','./assets/redesign-v4-polish.css?v=1','./assets/auth-required.css?v=1','./assets/sixth-drink-checkout.css?v=3','./assets/product-disclaimer.css?v=1','./assets/app.js?v=11','./assets/profile-plus.js?v=2','./assets/profile-compact.js?v=2','./assets/loyalty-card.js?v=6','./assets/status-once.js?v=1','./assets/phone-mask.js?v=1','./assets/auth-required.js?v=1','./assets/sixth-drink-checkout.js?v=6','./assets/product-disclaimer.js?v=1','./assets/pwa-polish.js?v=3','./assets/pwa-standalone.js?v=1','./assets/hero-cup.svg?v=2','./assets/modifier-price-ui.js?v=1','./assets/payments.js?v=9','./assets/personalization.js?v=2','./assets/current-order.js?v=2','./assets/growth-suite.js?v=3','./assets/push.js?v=2','./assets/legal.js?v=4','./assets/redesign-v1.js?v=3','./assets/redesign-v3-fixes.js?v=1','./assets/icon.svg'];
 const SCOPE_PATH=new URL(self.registration.scope).pathname;
 const inAppScope=url=>url.origin===self.location.origin&&url.pathname.startsWith(SCOPE_PATH);
 const navShell=url=>url.pathname.endsWith('/legal.html')?'./legal.html':url.pathname.endsWith('/payment-return.html')?'./payment-return.html':'./index.html';

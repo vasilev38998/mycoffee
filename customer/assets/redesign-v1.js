@@ -8,6 +8,7 @@ const $=id=>document.getElementById(id);
 const themeMeta=document.querySelector('meta[name="theme-color"]');
 const quick=$('loyaltyQuickButton');
 const profileButton=document.querySelector('.bottom-nav [data-nav="profile"]');
+const wordForm=(value,one,few,many)=>{const n=Math.abs(Number(value)||0),n100=n%100,n10=n%10;if(n100>=11&&n100<=14)return many;if(n10===1)return one;if(n10>=2&&n10<=4)return few;return many};
 let loyaltyLoading=false,lastLoyaltyLoad=0;
 
 function ensureStyle(id,href){
@@ -117,11 +118,11 @@ function renderLoyaltyProgress(drink){
 
   const strong=copy.querySelector('strong'),span=copy.querySelector('span');
   if(available>0){
-    if(strong)strong.textContent=available>1?'Доступно подарков: '+available:'Подарок уже доступен';
+    if(strong)strong.textContent=available===1?'Подарок уже доступен':'Доступно '+available+' '+wordForm(available,'подарок','подарка','подарков');
     if(span)span.textContent='Покажите QR-карту бариста перед оплатой — бесплатный напиток уже ждёт.';
   }else{
     if(strong)strong.textContent='Каждый 6-й напиток — в подарок';
-    if(span)span.textContent='Сейчас '+progress+' из '+required+'. До подарка '+next+' '+(next===1?'напиток':'напитка')+'.';
+    if(span)span.textContent='Сейчас '+progress+' из '+required+'. До подарка '+next+' '+wordForm(next,'напиток','напитка','напитков')+'.';
   }
 }
 

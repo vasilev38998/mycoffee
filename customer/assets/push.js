@@ -9,7 +9,7 @@ function showError(message){error.textContent=message;error.classList.toggle('sh
 async function registration(){if(!('serviceWorker'in navigator))throw new Error('Этот браузер не поддерживает Service Worker.');return navigator.serviceWorker.ready;}
 async function currentSubscription(){const reg=await registration();return reg.pushManager.getSubscription();}
 async function render(){
-  showError('');if(!('PushManager'in window)||!('Notification'in window)){button.disabled=true;button.textContent='Push не поддерживается';text.textContent='На этом устройстве Web Push недоступен.';return;}
+  showError('');if(!('PushManager'in window)||!('Notification'in window)){button.disabled=true;button.textContent='Push-уведомления не поддерживаются';text.textContent='На этом устройстве push-уведомления недоступны.';return;}
   if(Notification.permission==='denied'){button.disabled=true;button.textContent='Уведомления запрещены';text.textContent='Разрешите уведомления для сайта в настройках браузера.';return;}
   try{const sub=await currentSubscription();if(sub){button.disabled=false;button.textContent='Отключить уведомления';text.textContent='Уведомления включены: готовность заказа, бонусы и важные новости.';}else{button.disabled=false;button.textContent='Включить уведомления';text.textContent='Получай уведомления, когда заказ готов и когда начислены бонусы.';}}catch(e){button.disabled=false;button.textContent='Включить уведомления';}
 }
