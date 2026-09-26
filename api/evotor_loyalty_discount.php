@@ -5,6 +5,7 @@ require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty_card.php';
 require_once dirname(__DIR__).'/inc/customer_drink_loyalty.php';
+require_once dirname(__DIR__).'/inc/customer_loyalty_runtime.php';
 require_once dirname(__DIR__).'/inc/evotor_customer_loyalty.php';
 
 customer_api_headers();
@@ -46,7 +47,10 @@ try{
 
     $code=trim((string)($data['code']??''));if(strlen($code)>200)throw new RuntimeException('Некорректная карта Kapouch.');
     $customerId=customer_loyalty_card_customer_id($code);if($customerId===null)throw new RuntimeException('Карта Kapouch недействительна.');
-    customer_drink_loyalty_refresh_customer($customerId,100);
+    // Discount calculation is called repeatedly while Evotor edits/recalculates a receipt.
+    // Reconcile history at most once per short interval and under a local lock instead of
+    // re-reading up to 100 historical orders/sales on every quote request.
+    customer_loyalty_refresh_customer_if_due($customerId,20,15);
     $summary=customer_drink_loyalty_summary($customerId);
     $positions=$data['positions']??[];if(!is_array($positions))$positions=[];
     $eligibleMap=customer_drink_loyalty_product_map();$eligibleUnits=0;$candidate=null;
