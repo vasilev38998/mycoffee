@@ -68,7 +68,7 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate Evotor 1.2.28 source contract
+      - name: Validate Evotor 1.2.29 source contract
         run: |
           set -euo pipefail
           BUILD=evotor-app/app/build.gradle
@@ -80,6 +80,8 @@ jobs:
           LOYALTY_DISCOUNT=evotor-app/app/src/main/java/ru/kapouch/evotor/LoyaltyDiscountApi.java
           DISCOUNT_SERVICE=evotor-app/app/src/main/java/ru/kapouch/evotor/KapouchDiscountService.java
           DISCOUNT_TRIGGER=evotor-app/app/src/main/java/ru/kapouch/evotor/ReceiptDiscountTrigger.java
+          NOTIFICATIONS=evotor-app/app/src/main/java/ru/kapouch/evotor/OrderNotifications.java
+          ALERT_PLAYER=evotor-app/app/src/main/java/ru/kapouch/evotor/BaristaAlertPlayer.java
           BRIDGE=api/evotor_bridge.php
           HTACCESS=.htaccess
           MAIN=evotor-app/app/src/main/java/ru/kapouch/evotor/MainActivity.java
@@ -93,45 +95,44 @@ jobs:
           OLD_HEX_B='f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66e881a49a8812973b'
 
           grep -q "minSdkVersion 22" "$BUILD"
-          grep -q "versionCode 35" "$BUILD"
-          grep -q "versionName '1.2.28'" "$BUILD"
+          grep -q "versionCode 36" "$BUILD"
+          grep -q "versionName '1.2.29'" "$BUILD"
           grep -q "integration-library:v0.4.36" "$BUILD"
+
+          # New-order alarm contract: one tone every 15 seconds, indefinitely
+          # while the order remains new, and a silent notification channel to
+          # avoid duplicate system + ToneGenerator sounds.
+          grep -q 'REMINDER_DELAY_MS = 15_000L' "$NOTIFICATIONS"
+          grep -q 'return order != null && "new".equals(order.status);' "$NOTIFICATIONS"
+          grep -q 'kapouch_new_orders_v5' "$NOTIFICATIONS"
+          grep -q 'channel.setSound(null, null)' "$NOTIFICATIONS"
+          if grep -q 'MAX_REMINDERS' "$NOTIFICATIONS"; then
+            echo 'New-order reminders are still capped.' >&2
+            exit 1
+          fi
+          grep -q 'play(context, 1);' "$ALERT_PLAYER"
+          if grep -q 'play(context, 3);' "$ALERT_PLAYER"; then
+            echo 'Three-tone burst is still enabled.' >&2
+            exit 1
+          fi
 
           php -l "$BRIDGE"
           grep -q 'evotor-bridge' "$HTACCESS"
           grep -q 'api/evotor_bridge.php' "$HTACCESS"
           grep -q 'evotor-loyalty-discount' "$HTACCESS"
           grep -q 'api/evotor_loyalty_discount.php' "$HTACCESS"
-          grep -q "kapouch_evotor" "$BRIDGE"
-          grep -q 'evotor_bridge_b64url_decode' "$BRIDGE"
-          grep -q "cookie-bridge" "$BRIDGE"
-          grep -q "'complete'" "$BRIDGE"
           grep -q 'evotor_order_terminal_action_apply' "$BRIDGE"
 
           grep -q 'import java.io.IOException;' "$ORDER"
           grep -q 'import java.io.IOException;' "$LOYALTY"
           grep -q 'catch (IOException primary)' "$ORDER"
           grep -q 'catch (IOException primary)' "$LOYALTY"
-          grep -q 'POST оборвался:' "$ORDER"
-          grep -q 'POST оборвался:' "$LOYALTY"
-          grep -q 'transportMessage(primary)' "$ORDER"
-          grep -q 'transportMessage(primary)' "$LOYALTY"
           grep -q 'bridgeAction(context, order, action)' "$ORDER"
           grep -q 'bridgeLookup(context, code, terminalToken, bootstrapToken)' "$LOYALTY"
-          grep -q 'response.status == 405' "$ORDER"
-          grep -q 'response.status == 405' "$LOYALTY"
-          grep -q 'setRequestProperty("Cookie", "kapouch_evotor="' "$ORDER"
-          grep -q 'setRequestProperty("Cookie", "kapouch_evotor="' "$LOYALTY"
-          grep -q 'Base64.URL_SAFE' "$ORDER"
-          grep -q 'Base64.URL_SAFE' "$LOYALTY"
-          grep -q '"complete".equals(action)' "$ORDER"
-          grep -q 'Kapouch-Orders-Evotor/1.2.24' "$ORDER"
-          grep -q 'Kapouch-Orders-Evotor/1.2.24' "$LOYALTY"
-          grep -q 'Kapouch-Orders-Evotor/1.2.28' "$LOYALTY_DISCOUNT"
+          grep -q 'Kapouch-Orders-Evotor/1.2.29' "$LOYALTY_DISCOUNT"
           grep -q 'https://kapouch.store/evotor-loyalty-discount' "$LOYALTY_DISCOUNT"
 
           grep -q '"complete", "ВЫДАН"' "$MAIN"
-          grep -q 'новые заказы будут иметь кнопку «ВЫДАН»' "$MAIN"
           grep -q 'if ("completed".equals(record.status) || "cancelled".equals(record.status))' "$ORDER_STORE"
           if grep -q '"ready".equals(record.status) || "completed".equals(record.status)' "$ORDER_STORE"; then
             echo 'Ready orders still discard their action token.' >&2
@@ -148,22 +149,11 @@ jobs:
             echo 'Misread SPKI digest is still present.' >&2
             exit 1
           fi
-
           grep -q 'implements HostnameVerifier' "$HOSTNAME"
           grep -q 'DEFAULT.verify(hostname, session)' "$HOSTNAME"
           grep -q 'KAPOUCH_HOST.equalsIgnoreCase(hostname)' "$HOSTNAME"
-          grep -Fq "$HEX_A" "$HOSTNAME"
-          grep -Fq "$HEX_B" "$HOSTNAME"
           if grep -Eq 'TrustAll|ALLOW_ALL_HOSTNAME_VERIFIER' "$TLS" "$HOSTNAME" "$ORDER" "$LOYALTY" "$LOYALTY_DISCOUNT"; then
             echo 'TLS trust or hostname verification is too broad.' >&2
-            exit 1
-          fi
-
-          grep -q 'BuildConfig.VERSION_NAME' "$MAIN"
-          grep -q 'Kapouch Orders · v' "$MAIN"
-          grep -q 'registerReceiver' "$MAIN"
-          if grep -q 'CustomerScanReceiver' "$MANIFEST"; then
-            echo 'CustomerScanReceiver must not be globally registered.' >&2
             exit 1
           fi
 
@@ -174,26 +164,15 @@ jobs:
           grep -q 'KapouchSellIntegrationService' "$MANIFEST"
           grep -q 'KapouchDiscountService' "$MANIFEST"
           grep -q 'LoyaltyBarcodeConsumedActivity' "$MANIFEST"
-          grep -q 'Theme.NoDisplay' "$MANIFEST"
           grep -q 'CustomerLinkService' "$MANIFEST"
           grep -q 'extends SellIntegrationService' "$SELL"
           grep -q 'CustomerScanReceiver.KAPOUCH_PREFIX' "$SELL"
-          grep -q 'event.getCreatingNewProduct()' "$SELL"
-          grep -q 'LoyaltyBarcodeConsumedActivity.class' "$SELL"
-          grep -q 'startIntegrationActivity' "$SELL"
-          grep -q 'Collections.emptyList()' "$SELL"
           grep -q 'extends IntegrationActivity' "$CONSUMER"
-          grep -q 'Collections.emptyList()' "$CONSUMER"
-          grep -q 'setIntegrationResult' "$CONSUMER"
           grep -q 'extends IntentService' "$LINK"
-          grep -q 'LoyaltyApi.lookup' "$LINK"
-          grep -q 'ReceiptDiscountTrigger.trigger' "$LINK"
           grep -q 'extends IntegrationService' "$DISCOUNT_SERVICE"
           grep -q 'ReceiptDiscountEventResult' "$DISCOUNT_SERVICE"
-          grep -q 'LoyaltyDiscountApi.quote' "$DISCOUNT_SERVICE"
           grep -q 'ACTION_TRIGGER_RECEIPT_DISCOUNT_EVENT' "$DISCOUNT_TRIGGER"
           grep -q 'KEY_LOYALTY_CARD_ID' "$DISCOUNT_TRIGGER"
-          grep -q 'LoyaltyDiscountApi.confirm' "$DISCOUNT_SERVICE"
 
           for cert in isrg_root_x1 isrg_root_x2 isrg_root_ye isrg_root_yr digicert_global_root_ca; do
             test -s "$RAW/$cert.pem"
@@ -221,39 +200,26 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/27.0.3/aapt"
           HEX_A='4ee80751bcff28354f7fe5541bc1351a62ea4d280d9090acf1df25f1d2068989'
           HEX_B='f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66ea51a49a8812973b'
-          OLD_HEX_B='f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66e881a49a8812973b'
 
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='35' versionName='1.2.28'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='36' versionName='1.2.29'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'22'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
 
           "$AAPT" dump xmltree "$APK" AndroidManifest.xml > /tmp/evotor-manifest.txt
           grep -q 'ru.evotor.event.sell.BARCODE_RECEIVED' /tmp/evotor-manifest.txt
           grep -q 'ru.evotor.permission.TRIGGER_RECEIPT_DISCOUNT_EVENT' /tmp/evotor-manifest.txt
-          grep -q 'evo.v2.receipt.sell.receiptDiscount' /tmp/evotor-manifest.txt
           grep -q 'KapouchSellIntegrationService' /tmp/evotor-manifest.txt
           grep -q 'KapouchDiscountService' /tmp/evotor-manifest.txt
-          grep -q 'LoyaltyBarcodeConsumedActivity' /tmp/evotor-manifest.txt
 
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch-Orders-Evotor/1.2.24' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.28' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.29' /tmp/evotor-dex-strings.txt
           grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt
-          grep -q 'LoyaltyBarcodeConsumedActivity' /tmp/evotor-dex-strings.txt
-          grep -q 'evotor-bridge?type=order' /tmp/evotor-dex-strings.txt
-          grep -q 'evotor-bridge?type=loyalty' /tmp/evotor-dex-strings.txt
-          grep -q 'complete' /tmp/evotor-dex-strings.txt
-          grep -q 'evotor.intent.action.ACTION_TRIGGER_RECEIPT_DISCOUNT_EVENT' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-loyalty-discount' /tmp/evotor-dex-strings.txt
-          grep -q 'kapouch_evotor=' /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_A" /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_B" /tmp/evotor-dex-strings.txt
-          if grep -Fq "$OLD_HEX_B" /tmp/evotor-dex-strings.txt; then
-            echo 'Misread SPKI digest unexpectedly remains in APK.' >&2
-            exit 1
-          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

@@ -13,9 +13,9 @@ echo json_encode([
     'scope'=>'../customer/',
     'display'=>'standalone',
     'orientation'=>'portrait',
-    'background_color'=>$s['background'],
-    'theme_color'=>$s['background'],
+    'background_color'=>'#ffd523',
+    'theme_color'=>'#ffd523',
     'icons'=>[
-        ['src'=>'../customer/assets/icon.svg','sizes'=>'any','type'=>'image/svg+xml','purpose'=>'any maskable'],
+        ['src'=>'../customer/assets/icon.svg?v=2','sizes'=>'any','type'=>'image/svg+xml','purpose'=>'any'],
     ],
 ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);

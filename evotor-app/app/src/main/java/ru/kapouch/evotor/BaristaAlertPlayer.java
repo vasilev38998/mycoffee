@@ -8,7 +8,7 @@ final class BaristaAlertPlayer {
     private BaristaAlertPlayer() {}
 
     static void playNewOrder(Context context) {
-        play(context, 3);
+        play(context, 1);
     }
 
     static void playTest(Context context) {

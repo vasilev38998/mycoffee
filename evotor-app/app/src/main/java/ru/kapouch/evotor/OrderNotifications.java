@@ -8,17 +8,13 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
-import android.media.AudioAttributes;
-import android.media.RingtoneManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.SystemClock;
 
 final class OrderNotifications {
-    static final String CHANNEL_ID = "kapouch_new_orders_v4";
+    static final String CHANNEL_ID = "kapouch_new_orders_v5";
     private static final long[] VIBRATION = new long[]{0, 350, 140, 350, 140, 650};
-    private static final long REMINDER_DELAY_MS = 45_000L;
-    private static final int MAX_REMINDERS = 3;
+    private static final long REMINDER_DELAY_MS = 15_000L;
 
     private OrderNotifications() {}
 
@@ -49,13 +45,14 @@ final class OrderNotifications {
                 .setTicker("НОВЫЙ ЗАКАЗ KAPOUCH")
                 .setOnlyAlertOnce(false)
                 .setVibrate(VIBRATION)
-                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
+                .setSound(null);
         builder.addAction(android.R.drawable.ic_menu_send, "ПРИНЯТЬ", accept);
         builder.addAction(android.R.drawable.ic_menu_view, "ОТКРЫТЬ", open);
         manager.notify(notificationId(order.orderId), builder.build());
 
-        // Some Evotor Android builds suppress the sound attached to Notification.Builder.
-        // Play a short alarm-stream sequence explicitly as a compatibility fallback.
+        // Use one explicit alarm-stream tone per reminder cycle so the Evotor
+        // does not produce a three-tone burst or a duplicate channel sound.
+        // The next cycle is scheduled 15 seconds later until status leaves "new".
         BaristaAlertPlayer.playNewOrder(context.getApplicationContext());
     }
 
@@ -113,7 +110,7 @@ final class OrderNotifications {
                 .setPriority(Notification.PRIORITY_HIGH)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setColor(Color.rgb(245, 185, 63))
-                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                .setSound(null)
                 .setVibrate(new long[]{0, 250, 120, 250});
         manager.notify(id, builder.build());
         BaristaAlertPlayer.playTest(context.getApplicationContext());
@@ -134,7 +131,7 @@ final class OrderNotifications {
     }
 
     static boolean shouldRepeat(OrderRecord order) {
-        return order != null && "new".equals(order.status) && order.reminderCount < MAX_REMINDERS;
+        return order != null && "new".equals(order.status);
     }
 
     static void cancelReminder(Context context, String orderId) {
@@ -157,18 +154,13 @@ final class OrderNotifications {
     private static void ensureChannel(NotificationManager manager) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Новые заказы Kapouch", NotificationManager.IMPORTANCE_HIGH);
-        channel.setDescription("Громкие уведомления и действия по новым PWA-заказам");
+        channel.setDescription("Повторный сигнал каждые 15 секунд до принятия PWA-заказа");
         channel.enableVibration(true);
         channel.setVibrationPattern(VIBRATION);
         channel.enableLights(true);
         channel.setLightColor(Color.rgb(245, 185, 63));
         channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-        Uri sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-        AudioAttributes attributes = new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ALARM)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build();
-        channel.setSound(sound, attributes);
+        channel.setSound(null, null);
         manager.createNotificationChannel(channel);
     }
 

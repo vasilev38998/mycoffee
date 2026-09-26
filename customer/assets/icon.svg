@@ -1,1 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#111111"/><circle cx="256" cy="256" r="156" fill="#F5B93F"/><path d="M176 120h64v112l86-112h78L302 249l110 143h-82l-90-120v120h-64z" fill="#111111"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 830" role="img" aria-labelledby="title desc">
+<title id="title">Kapouch</title>
+<desc id="desc">Фирменный жёлтый логотип Kapouch со стаканом и кофейным зерном.</desc>
+<rect width="830" height="830" fill="#ffd523"/>
+<g opacity=".15" fill="#fff36a">
+  <path d="M164 0h76l145 102-32 61-119-43z"/><path d="M0 590l154 58-47 78L0 686z"/><path d="M404 199l89 6 43 38-137-17z"/>
+</g>
+<g fill="#7e3a2d" opacity=".72">
+  <path d="M744 214c29 5 42 20 39 39-4 20-28 18-48 9-15-7-12-27 9-48z"/><path d="M799 286c22 4 34 17 31 33-3 15-21 15-37 7-12-6-10-22 6-40z"/><path d="M731 351c25 4 36 18 34 35-3 16-23 16-40 8-13-6-11-24 6-43z"/><path d="M795 405c26 4 39 18 36 37-4 18-25 17-43 9-14-7-12-25 7-46z"/><path d="M36 531c28 5 42 21 38 40-4 18-27 17-46 8-14-7-12-26 8-48z"/><path d="M0 461c22 4 34 17 31 33-3 15-21 15-37 7z"/>
+</g>
+<g fill="none" stroke="#5a2d29" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M242 111 292 45h250l50 66"/>
+  <path d="M221 111h388c27 0 47 16 47 38s-20 38-47 38H221c-27 0-47-16-47-38s20-38 47-38z"/>
+  <path d="M230 188l72 404h220l72-404"/>
+  <ellipse cx="415" cy="356" rx="72" ry="99"/>
+  <path d="M432 261c16 49 10 81-18 110-31 32-34 66-20 82"/>
+</g>
+<text x="415" y="715" text-anchor="middle" font-family="Arial Black,Arial,Helvetica,sans-serif" font-size="88" font-weight="900" letter-spacing="5" fill="#5a2d29">KAPOUCH</text>
+<text x="415" y="792" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="52" font-weight="500" fill="#5a2d29">КОФЕ С СОБОЙ</text>
+</svg>
