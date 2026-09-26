@@ -11,8 +11,10 @@ function ensureV4Style(){
     link=document.createElement('link');
     link.id='kapouchRedesignV4';
     link.rel='stylesheet';
-    link.href='assets/redesign-v4-polish.css?v=1';
+    link.href='assets/redesign-v4-polish.css?v=2';
     document.head.appendChild(link);
+  }else if(!String(link.href||'').includes('v=2')){
+    link.href='assets/redesign-v4-polish.css?v=2';
   }
   return link;
 }
@@ -44,6 +46,48 @@ function upgradeCup(node){
 
 function upgradeLoyaltyCups(root=document){
   root.querySelectorAll?.('.loyalty-cup').forEach(upgradeCup);
+}
+
+function locationPinSvg(){
+  return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21s6-5.2 6-11a6 6 0 1 0-12 0c0 5.8 6 11 6 11Z"/><circle cx="12" cy="10" r="2.35"/></svg>';
+}
+
+function decorateLocationPin(){
+  const pin=document.querySelector('.location-pin');
+  if(!pin||pin.dataset.pinV5==='1')return;
+  pin.dataset.pinV5='1';
+  pin.innerHTML=locationPinSvg();
+}
+
+function refreshHeroCup(){
+  const img=document.getElementById('heroDrinkImage');
+  if(!img)return;
+  const wanted='assets/hero-cup.svg?v=3';
+  const current=String(img.getAttribute('src')||'');
+  if(current!==wanted)img.setAttribute('src',wanted);
+}
+
+function normalizeLoyaltyText(value){
+  return String(value||'')
+    .replace(/за покупку на\s+эвоторе/gi,'за покупку в кофейне')
+    .replace(/покупка на\s+эвоторе/gi,'покупка в кофейне');
+}
+
+function decorateLoyaltyHistory(){
+  const box=document.getElementById('profileLoyalty');
+  if(!box)return;
+  box.querySelectorAll('strong').forEach(node=>{
+    const next=normalizeLoyaltyText(node.textContent);
+    if(next!==node.textContent)node.textContent=next;
+  });
+}
+
+function compactHomeContent(){
+  const personal=document.getElementById('personalOffer');
+  const repeat=document.getElementById('quickRepeatCard');
+  if(!repeat)return;
+  const hasPersonal=Boolean(personal&&!personal.hidden&&String(personal.textContent||'').trim());
+  repeat.hidden=hasPersonal;
 }
 
 function socialSvg(kind){
@@ -138,15 +182,34 @@ function watchDynamicUi(){
     decorateSocialLinks();
     new MutationObserver(decorateSocialLinks).observe(links,{childList:true,subtree:false});
   }
+  const history=document.getElementById('profileLoyalty');
+  if(history){
+    decorateLoyaltyHistory();
+    new MutationObserver(decorateLoyaltyHistory).observe(history,{childList:true,subtree:true,characterData:true});
+  }
+  const personal=document.getElementById('personalOffer');
+  const repeat=document.getElementById('quickRepeatCard');
+  if(personal&&repeat){
+    compactHomeContent();
+    new MutationObserver(compactHomeContent).observe(personal,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','style','class']});
+  }
 }
 
 document.addEventListener('error',onImageError,true);
 ensureV4Style();
 upgradeLoyaltyCups();
 decorateSocialLinks();
+decorateLocationPin();
+decorateLoyaltyHistory();
+refreshHeroCup();
+compactHomeContent();
 
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{
   promoteFinalStyle();
+  decorateLocationPin();
+  refreshHeroCup();
+  decorateLoyaltyHistory();
+  compactHomeContent();
   watchDynamicUi();
   requestAnimationFrame(promoteFinalStyle);
 },{once:true});
@@ -155,6 +218,6 @@ else{
   watchDynamicUi();
 }
 
-window.addEventListener('kapouch:catalog',()=>setTimeout(()=>{decorateSocialLinks();upgradeLoyaltyCups()},0));
-window.addEventListener('load',()=>{promoteFinalStyle();upgradeLoyaltyCups();decorateSocialLinks()});
+window.addEventListener('kapouch:catalog',()=>setTimeout(()=>{decorateSocialLinks();upgradeLoyaltyCups();decorateLocationPin();decorateLoyaltyHistory();refreshHeroCup();compactHomeContent()},0));
+window.addEventListener('load',()=>{promoteFinalStyle();upgradeLoyaltyCups();decorateSocialLinks();decorateLocationPin();decorateLoyaltyHistory();refreshHeroCup();compactHomeContent()});
 })();
