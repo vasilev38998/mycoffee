@@ -1,54 +1,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 300" role="img" aria-labelledby="title desc">
-<title id="title">Стакан кофе Kapouch</title>
-<desc id="desc">Аккуратный бумажный стакан кофе навынос в стиле программы шестого напитка.</desc>
+<title id="title">Кофейное зерно Kapouch</title>
+<desc id="desc">Крупное кофейное зерно в тёплых фирменных оттенках Kapouch.</desc>
 <defs>
-  <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
-    <stop offset="0" stop-color="#fffaf2"/>
-    <stop offset=".58" stop-color="#f2dfcc"/>
-    <stop offset="1" stop-color="#dfc1a6"/>
+  <linearGradient id="bean" x1="46" y1="48" x2="194" y2="248" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#8a4e2f"/>
+    <stop offset=".5" stop-color="#5d301f"/>
+    <stop offset="1" stop-color="#321910"/>
   </linearGradient>
-  <linearGradient id="band" x1="0" y1="0" x2="1" y2="1">
-    <stop offset="0" stop-color="#8a5033"/>
-    <stop offset="1" stop-color="#5e3223"/>
+  <linearGradient id="beanGlow" x1="76" y1="64" x2="150" y2="214" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#d99a62" stop-opacity=".62"/>
+    <stop offset=".5" stop-color="#b66a3c" stop-opacity=".16"/>
+    <stop offset="1" stop-color="#7f4229" stop-opacity="0"/>
   </linearGradient>
-  <linearGradient id="lid" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#49291f"/>
-    <stop offset="1" stop-color="#24140f"/>
+  <linearGradient id="crease" x1="106" y1="52" x2="139" y2="244" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#2a140d"/>
+    <stop offset=".52" stop-color="#3b1d13"/>
+    <stop offset="1" stop-color="#160b07"/>
   </linearGradient>
-  <filter id="softShadow" x="-40%" y="-40%" width="180%" height="210%">
-    <feGaussianBlur in="SourceAlpha" stdDeviation="8" result="blur"/>
-    <feOffset dy="10" result="offset"/>
-    <feColorMatrix in="offset" type="matrix" values="0 0 0 0 0.12 0 0 0 0 0.05 0 0 0 0 0.02 0 0 0 .28 0" result="shadow"/>
+  <filter id="beanShadow" x="-45%" y="-35%" width="190%" height="195%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="9" result="blur"/>
+    <feOffset dy="12" result="offset"/>
+    <feColorMatrix in="offset" type="matrix" values="0 0 0 0 0.09 0 0 0 0 0.035 0 0 0 0 0.015 0 0 0 .34 0" result="shadow"/>
     <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
   </filter>
 </defs>
 
-<ellipse cx="120" cy="263" rx="61" ry="11" fill="#1f0f09" opacity=".18"/>
+<ellipse cx="122" cy="254" rx="66" ry="13" fill="#1f0d07" opacity=".2"/>
 
-<g fill="none" stroke="#f2d0ac" stroke-width="5" stroke-linecap="round" opacity=".86">
-  <path d="M82 50c-12-14 12-23 2-36"/>
-  <path d="M120 43c-11-14 12-22 3-34"/>
-  <path d="M158 50c-10-13 12-22 4-34"/>
+<g transform="rotate(-13 120 151)" filter="url(#beanShadow)">
+  <path id="bean-shape" d="M122 44c-42-7-77 25-91 67-15 45-3 96 30 128 27 27 68 34 102 17 38-19 58-66 49-112-9-47-45-92-90-100Z" fill="url(#bean)"/>
+  <path d="M81 63c-30 15-48 49-49 85-1 38 16 73 42 94 18 14 39 20 58 17-31-18-48-42-50-73-3-43 23-80 58-105-17-10-38-14-59-18Z" fill="url(#beanGlow)"/>
+  <path d="M143 51c25 18 40 43 43 71 4 37-11 69-42 95-14 12-21 25-18 40" fill="none" stroke="url(#crease)" stroke-width="15" stroke-linecap="round"/>
+  <path d="M143 55c19 17 29 38 30 61 2 31-10 58-37 82-13 12-19 23-18 36" fill="none" stroke="#9b5a37" stroke-opacity=".45" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M68 101c10-21 27-34 46-39" fill="none" stroke="#f1bd88" stroke-opacity=".28" stroke-width="7" stroke-linecap="round"/>
+  <path d="M62 122c-7 30-1 58 15 80" fill="none" stroke="#f7c899" stroke-opacity=".13" stroke-width="5" stroke-linecap="round"/>
 </g>
 
-<g filter="url(#softShadow)">
-  <path d="M62 92h116l-12 142c-1.5 17-15 29-32 29H106c-17 0-30.5-12-32-29L62 92Z" fill="url(#paper)"/>
-  <path d="M72 112h96l-3 34H75l-3-34Z" fill="#f8ecdf" opacity=".78"/>
-  <path d="M77 153h86l-4.6 55H81.6L77 153Z" fill="url(#band)"/>
-  <path d="M84 160h5.5l-2.6 40h-3.4l.5-40Z" fill="#fff" opacity=".12"/>
-  <path d="M65 91c1.7-12 11.5-21 23.7-21h62.6c12.2 0 22 9 23.7 21H65Z" fill="#3b2118"/>
-  <rect x="55" y="88" width="130" height="21" rx="10.5" fill="url(#lid)"/>
-  <rect x="64" y="84" width="112" height="10" rx="5" fill="#5a3528"/>
-  <path d="M77 96h86" stroke="#7f5a48" stroke-width="3" stroke-linecap="round" opacity=".45"/>
-
-  <rect x="92" y="165" width="56" height="31" rx="10" fill="#f5dfc7" opacity=".96"/>
-  <text x="120" y="186" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="900" fill="#3d2117">K</text>
-  <path d="M104 203c4 7 8 10 16 10s12-3 16-10" fill="none" stroke="#f0c69c" stroke-width="3" stroke-linecap="round" opacity=".6"/>
-
-  <path d="M75 105 86 230c1 10 8 18 17 21" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".32"/>
-  <path d="M161 111 152 225" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".22"/>
-</g>
-
-<circle cx="188" cy="132" r="4" fill="#ffd77b" opacity=".85"/>
-<circle cx="51" cy="171" r="3" fill="#ffd77b" opacity=".55"/>
+<circle cx="190" cy="109" r="4" fill="#f2c46e" opacity=".82"/>
+<circle cx="55" cy="193" r="2.7" fill="#f2c46e" opacity=".5"/>
 </svg>

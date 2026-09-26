@@ -16,8 +16,8 @@ $checks=[
     'runtime hero keeps SVG fallback and supports admin image'=>str_contains($polish,'assets/hero-cup.svg?v=2')&&str_contains($polish,"d.shop?.hero_image")&&str_contains($polish,'custom-hero-image'),
     'hero no longer scans catalog product photos'=>!str_contains($polish,'bestCoffeeImage')&&!str_contains($polish,'img.product-photo'),
     'polish assets are cache-busted'=>str_contains($config,'assets/pwa-polish.css?v=2')&&str_contains($config,'assets/pwa-polish.js?v=3'),
-    'SVG has accessible title and no external image/script'=>str_contains($svg,'<title id="title">')&&!preg_match('/<(?:image|script)\b[^>]*(?:href|src)=["\']https?:\/\//i',$svg),
-    'SVG renders paper takeaway cup and Kapouch mark'=>str_contains($svg,'id="paper"')&&str_contains($svg,'id="band"')&&str_contains($svg,'id="lid"')&&str_contains($svg,'>K</text>'),
+    'SVG has accessible title and no external image/script'=>str_contains($svg,'<title id="title">Кофейное зерно Kapouch</title>')&&!preg_match('/<(?:image|script)\b[^>]*(?:href|src)=["\']https?:\/\//i',$svg),
+    'SVG renders branded coffee bean rather than takeaway cup'=>str_contains($svg,'id="bean"')&&str_contains($svg,'id="bean-shape"')&&str_contains($svg,'id="crease"')&&!str_contains($svg,'>K</text>'),
     'service worker caches polished SVG hero'=>str_contains($sw,"kapouch-pwa-v41")&&str_contains($sw,'./assets/hero-cup.svg?v=2')&&str_contains($sw,'./assets/hero-cup.svg?v=3')&&str_contains($sw,'./assets/pwa-polish.js?v=3'),
 ];
 foreach($checks as $label=>$ok){
