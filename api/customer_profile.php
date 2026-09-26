@@ -18,9 +18,15 @@ try{
         $data=customer_api_json();
         $name=trim((string)($data['name']??$customer['name']??''));
         $email=mb_strtolower(trim((string)($data['email']??'')));
+        $birthDate=trim((string)($data['birth_date']??''));
         if(mb_strlen($name)>160)customer_api_reply(422,['ok'=>false,'error'=>'Имя слишком длинное.']);
         if($email!==''&&(mb_strlen($email)>254||!filter_var($email,FILTER_VALIDATE_EMAIL)))customer_api_reply(422,['ok'=>false,'error'=>'Укажите корректную электронную почту.']);
-        db()->prepare('UPDATE customer_accounts SET name=?,email=? WHERE id=?')->execute([$name!==''?$name:null,$email!==''?$email:null,(int)$customer['id']]);
+        if($birthDate!==''){
+            $birth=DateTimeImmutable::createFromFormat('!Y-m-d',$birthDate);
+            $valid=$birth&&$birth->format('Y-m-d')===$birthDate&&$birthDate>='1900-01-01'&&$birthDate<=date('Y-m-d');
+            if(!$valid)customer_api_reply(422,['ok'=>false,'error'=>'Укажите корректную дату рождения.']);
+        }
+        db()->prepare('UPDATE customer_accounts SET name=?,email=?,birth_date=? WHERE id=?')->execute([$name!==''?$name:null,$email!==''?$email:null,$birthDate!==''?$birthDate:null,(int)$customer['id']]);
         $customer['name']=$name;
     }
     $customerId=(int)$customer['id'];
@@ -29,9 +35,10 @@ try{
     // for the neighbouring requests instead of replaying dozens of old orders.
     customer_loyalty_refresh_customer_if_due($customerId,30,20);
     $profile=customer_auth_profile($customer);
-    $stmt=db()->prepare('SELECT email,name FROM customer_accounts WHERE id=? LIMIT 1');$stmt->execute([$customerId]);$account=$stmt->fetch()?:[];
+    $stmt=db()->prepare('SELECT email,name,birth_date FROM customer_accounts WHERE id=? LIMIT 1');$stmt->execute([$customerId]);$account=$stmt->fetch()?:[];
     $profile['customer']['email']=trim((string)($account['email']??''));
     $profile['customer']['name']=trim((string)($account['name']??''));
+    $profile['customer']['birth_date']=trim((string)($account['birth_date']??''));
 
     $stmt=db()->prepare("SELECT COUNT(*) completed_orders,COALESCE(SUM(o.total_amount),0) completed_spend FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.customer_id=? AND o.status='completed' AND COALESCE(o.payment_status,'')<>'refunded'");
     $stmt->execute([$customerId]);$orderStats=$stmt->fetch()?:[];
