@@ -3,7 +3,6 @@ body.k-redesign-v2 .loyalty-teaser{grid-template-columns:minmax(0,1fr) auto!impo
 body.k-redesign-v2 .loyalty-cups{display:flex!important;align-items:flex-end!important;gap:5px!important;min-width:0!important}
 body.k-redesign-v2 .loyalty-cup{position:relative!important;width:31px!important;height:43px!important;display:grid!important;place-items:center!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important;font-style:normal!important}
 body.k-redesign-v2 .loyalty-cup:before{display:none!important}
-/* Override legacy .loyalty-cup.done/.gift box fills: only SVG cup paths may be coloured. */
 body.k-redesign-v2 .loyalty-cup.done,
 body.k-redesign-v2 .loyalty-cup.gift,
 body.k-redesign-v2 .loyalty-cup.gift.done{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important}
@@ -63,6 +62,54 @@ body.k-redesign-v2 .modifier-group.uniform-price .modifier-option{grid-template-
 body.k-redesign-v2 .modifier-group.uniform-price .modifier-option b{display:none!important}
 body.k-redesign-v2 .modifier-error{margin-top:1px!important;padding:10px 12px!important;border-radius:13px!important;background:#fbe9e6!important;color:#8e463e!important;font-size:10px!important;font-weight:700!important}
 
+/* V5: compact, calmer home screen. */
+body.k-redesign-v2 .view[data-view="home"] .home-greeting{padding:11px 3px 9px!important;gap:12px!important}
+body.k-redesign-v2 .view[data-view="home"] .home-greeting h1{font-size:28px!important;line-height:1!important}
+body.k-redesign-v2 .view[data-view="home"] .home-greeting p{margin-top:5px!important;font-size:11px!important}
+body.k-redesign-v2 .view[data-view="home"] .home-avatar{width:46px!important;height:46px!important;border-radius:16px!important;font-size:21px!important}
+body.k-redesign-v2 .view[data-view="home"] .hero-v2{min-height:205px!important;grid-template-columns:minmax(0,1fr) 112px!important;margin-bottom:10px!important;padding:19px 18px!important;border-radius:27px!important}
+body.k-redesign-v2 .view[data-view="home"] .hero-v2 h2{margin:6px 0 8px!important;max-width:300px!important;font-size:27px!important;line-height:1!important}
+body.k-redesign-v2 .view[data-view="home"] .hero-v2 p{font-size:10px!important;line-height:1.4!important}
+body.k-redesign-v2 .view[data-view="home"] .hero-menu-button{margin-top:12px!important;padding:10px 13px!important}
+body.k-redesign-v2 .view[data-view="home"] .hero-facts{margin-top:8px!important;gap:5px!important}
+body.k-redesign-v2 .view[data-view="home"] .hero-fact{padding:5px 7px!important;font-size:7px!important}
+body.k-redesign-v2 .view[data-view="home"] .hero-fact:nth-child(n+3){display:none!important}
+body.k-redesign-v2 .view[data-view="home"] .hero-art{min-height:150px!important}
+body.k-redesign-v2 .view[data-view="home"] .hero-drink-frame{width:112px!important;height:154px!important}
+body.k-redesign-v2 .view[data-view="home"] .hero-drink-image{width:112px!important;height:150px!important;filter:drop-shadow(0 14px 14px rgba(20,8,3,.20))!important}
+body.k-redesign-v2 .view[data-view="home"] .hero-drink-frame:after{bottom:9px!important;width:82px!important;height:12px!important}
+body.k-redesign-v2 .view[data-view="home"] .balance-card{min-height:103px!important;padding:15px 18px!important;border-radius:25px!important}
+body.k-redesign-v2 .view[data-view="home"] .balance-copy strong{font-size:39px!important}
+body.k-redesign-v2 .view[data-view="home"] .balance-copy>span{font-size:10px!important}
+body.k-redesign-v2 .view[data-view="home"] .balance-copy>em{margin-top:4px!important;font-size:9px!important}
+body.k-redesign-v2 .view[data-view="home"] .balance-k{width:58px!important;height:58px!important;border-radius:18px!important;font-size:28px!important}
+body.k-redesign-v2 .view[data-view="home"] .loyalty-teaser{margin:9px 0 11px!important;padding:13px 14px!important;border-radius:21px!important;gap:12px!important}
+body.k-redesign-v2 .view[data-view="home"] .loyalty-teaser-copy strong{font-size:12px!important;line-height:1.22!important}
+body.k-redesign-v2 .view[data-view="home"] .loyalty-teaser-copy span{margin-top:3px!important;font-size:9px!important;line-height:1.35!important}
+body.k-redesign-v2 .view[data-view="home"] .home-perks{display:none!important}
+body.k-redesign-v2 .view[data-view="home"] #quickRepeatCard{margin-top:9px!important;padding:14px 16px!important;border-radius:21px!important}
+body.k-redesign-v2 .view[data-view="home"] #quickRepeatCard h2,
+body.k-redesign-v2 .view[data-view="home"] #quickRepeatCard strong{font-size:16px!important}
+body.k-redesign-v2 .view[data-view="home"] .section-title{margin:17px 2px 8px!important}
+body.k-redesign-v2 .view[data-view="home"] .popular-row{gap:9px!important}
+body.k-redesign-v2 .view[data-view="home"] .about-card{margin-top:18px!important}
+
+/* V5: compact floating bottom navigation. */
+body.k-redesign-v2 .pwa-app{padding-bottom:82px!important}
+body.k-redesign-v2 .bottom-nav{bottom:4px!important;width:min(600px,calc(100% - 10px))!important;min-height:0!important;height:auto!important;padding:4px 6px max(5px,env(safe-area-inset-bottom))!important;border-radius:21px!important;box-sizing:border-box!important}
+body.k-redesign-v2 .bottom-nav button{min-height:46px!important;height:46px!important;padding:3px 2px!important;gap:2px!important;border-radius:13px!important}
+body.k-redesign-v2 .bottom-nav button>span{width:21px!important;height:21px!important}
+body.k-redesign-v2 .bottom-nav button>span svg{width:20px!important;height:20px!important}
+body.k-redesign-v2 .bottom-nav small{font-size:7px!important;line-height:1!important}
+body.k-redesign-v2 .bottom-nav .nav-special{top:-3px!important;min-height:49px!important;height:49px!important}
+body.k-redesign-v2 .bottom-nav .nav-special>span{width:39px!important;height:39px!important;border-width:3px!important;border-radius:13px!important;box-shadow:0 6px 15px rgba(174,113,3,.16)!important}
+body.k-redesign-v2 .bottom-nav .nav-special .nav-icon{width:20px!important;height:20px!important}
+body.k-redesign-v2 .bottom-nav i{top:-1px!important;right:23%!important;min-width:16px!important;height:16px!important;font-size:7px!important}
+
+/* V5: cleaner pickup location mark. */
+body.k-redesign-v2 .location-pin{width:36px!important;height:36px!important;flex:0 0 36px!important;border-radius:13px!important;background:#f4e7db!important;color:#73462e!important;font-size:0!important;box-shadow:inset 0 0 0 1px rgba(91,52,31,.055)!important}
+body.k-redesign-v2 .location-pin svg{width:20px!important;height:20px!important;display:block!important;fill:none!important;stroke:currentColor!important;stroke-width:1.8!important;stroke-linecap:round!important;stroke-linejoin:round!important}
+
 @media(max-width:430px){
   body.k-redesign-v2 .loyalty-teaser{grid-template-columns:1fr!important;gap:13px!important;padding:17px 15px 16px!important}
   body.k-redesign-v2 .loyalty-cups{width:100%!important;justify-self:stretch!important;justify-content:space-between!important;gap:4px!important;padding:0 4px!important}
@@ -76,6 +123,18 @@ body.k-redesign-v2 .modifier-error{margin-top:1px!important;padding:10px 12px!im
   body.k-redesign-v2 .modifier-options{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
   body.k-redesign-v2 .modifier-option{min-height:56px!important;padding:9px 10px!important;gap:8px!important;border-radius:15px!important}
   body.k-redesign-v2 .modifier-option strong{font-size:11px!important}
+
+  body.k-redesign-v2 .view[data-view="home"] .hero-v2{grid-template-columns:minmax(0,1fr) 100px!important;min-height:190px!important;padding:17px 15px!important}
+  body.k-redesign-v2 .view[data-view="home"] .hero-v2 h2{font-size:25px!important}
+  body.k-redesign-v2 .view[data-view="home"] .hero-art{min-height:135px!important}
+  body.k-redesign-v2 .view[data-view="home"] .hero-drink-frame{width:100px!important;height:140px!important}
+  body.k-redesign-v2 .view[data-view="home"] .hero-drink-image{width:100px!important;height:137px!important}
+  body.k-redesign-v2 .view[data-view="home"] .loyalty-teaser{grid-template-columns:minmax(0,1fr) auto!important;gap:9px!important;padding:12px 12px!important}
+  body.k-redesign-v2 .view[data-view="home"] .loyalty-cups{width:auto!important;justify-self:end!important;justify-content:flex-end!important;gap:2px!important;padding:0!important}
+  body.k-redesign-v2 .view[data-view="home"] .loyalty-cup{width:23px!important;height:33px!important}
+  body.k-redesign-v2 .view[data-view="home"] .loyalty-cup.gift{width:27px!important;height:38px!important}
+  body.k-redesign-v2 .view[data-view="home"] .loyalty-cup>span{font-size:7px!important;margin-top:5px!important}
+  body.k-redesign-v2 .view[data-view="home"] .loyalty-cup.gift>span{font-size:11px!important}
 }
 
 @media(max-width:350px){
@@ -86,4 +145,7 @@ body.k-redesign-v2 .modifier-error{margin-top:1px!important;padding:10px 12px!im
   body.k-redesign-v2 .loyalty-cups{gap:3px!important;padding:0!important}
   body.k-redesign-v2 .loyalty-cup{width:28px!important;height:40px!important}
   body.k-redesign-v2 .loyalty-cup.gift{width:32px!important;height:45px!important}
+  body.k-redesign-v2 .view[data-view="home"] .loyalty-cups{gap:1px!important}
+  body.k-redesign-v2 .view[data-view="home"] .loyalty-cup{width:21px!important;height:31px!important}
+  body.k-redesign-v2 .view[data-view="home"] .loyalty-cup.gift{width:25px!important;height:36px!important}
 }

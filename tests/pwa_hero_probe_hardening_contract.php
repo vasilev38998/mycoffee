@@ -17,8 +17,8 @@ $checks=[
     'hero no longer scans catalog product photos'=>!str_contains($polish,'bestCoffeeImage')&&!str_contains($polish,'img.product-photo'),
     'polish assets are cache-busted'=>str_contains($config,'assets/pwa-polish.css?v=2')&&str_contains($config,'assets/pwa-polish.js?v=3'),
     'SVG has accessible title and no external image/script'=>str_contains($svg,'<title id="title">')&&!preg_match('/<(?:image|script)\b[^>]*(?:href|src)=["\']https?:\/\//i',$svg),
-    'SVG renders layered latte and Kapouch branding'=>str_contains($svg,'id="coffee"')&&str_contains($svg,'id="foam"')&&str_contains($svg,'>KAPOUCH</text>'),
-    'service worker caches polished SVG hero'=>str_contains($sw,"kapouch-pwa-v41")&&str_contains($sw,'./assets/hero-cup.svg?v=2')&&str_contains($sw,'./assets/pwa-polish.js?v=3'),
+    'SVG renders paper takeaway cup and Kapouch mark'=>str_contains($svg,'id="paper"')&&str_contains($svg,'id="band"')&&str_contains($svg,'id="lid"')&&str_contains($svg,'>K</text>'),
+    'service worker caches polished SVG hero'=>str_contains($sw,"kapouch-pwa-v41")&&str_contains($sw,'./assets/hero-cup.svg?v=2')&&str_contains($sw,'./assets/hero-cup.svg?v=3')&&str_contains($sw,'./assets/pwa-polish.js?v=3'),
 ];
 foreach($checks as $label=>$ok){
     if(!$ok){fwrite(STDERR,"PWA hero/probe hardening contract failed: {$label}\n");exit(1);}
