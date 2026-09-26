@@ -1,7 +1,10 @@
 <?php
 declare(strict_types=1);
 
-@ini_set('log_errors','1');
+date_default_timezone_set('Asia/Irkutsk');
+require_once __DIR__.'/runtime_log.php';
+kapouch_configure_php_error_log();
+
 if(empty($GLOBALS['kapouch_fatal_logger_registered'])){
     $GLOBALS['kapouch_fatal_logger_registered']=true;
     register_shutdown_function(static function(): void {
@@ -13,6 +16,7 @@ if(empty($GLOBALS['kapouch_fatal_logger_registered'])){
         $file=basename((string)($error['file']??''));
         $line=(int)($error['line']??0);
         error_log('[Kapouch fatal] '.$message.' · '.$file.':'.$line.($path!==''?' · '.$path:''));
+        kapouch_runtime_log('php','fatal',['type'=>(int)($error['type']??0),'message'=>$message,'file'=>$file,'line'=>$line]);
     });
 }
 
@@ -23,7 +27,6 @@ if(!file_exists($configFile)){
 }
 $config=require $configFile;
 
-date_default_timezone_set('Asia/Irkutsk');
 require_once __DIR__.'/db.php';
 require_once __DIR__.'/access.php';
 require_once __DIR__.'/security.php';
@@ -37,6 +40,13 @@ if(PHP_SAPI!=='cli'&&empty($GLOBALS['kapouch_exception_handler_registered'])){
     set_exception_handler(static function(Throwable $e): void {
         $capacity=function_exists('db_capacity_error')&&db_capacity_error($e);
         error_log(($capacity?'[Kapouch DB capacity uncaught] ':'[Kapouch uncaught] ').mb_substr($e->getMessage(),0,1200));
+        kapouch_runtime_log($capacity?'db':'php',$capacity?'uncaught_capacity':'uncaught_exception',[
+            'class'=>get_class($e),
+            'code'=>(string)$e->getCode(),
+            'message'=>mb_substr($e->getMessage(),0,1200),
+            'file'=>basename($e->getFile()),
+            'line'=>$e->getLine(),
+        ]);
 
         if(!headers_sent()){
             if($capacity){
@@ -94,6 +104,7 @@ try{
     if(db_capacity_error($e))throw $e;
     $GLOBALS['kapouch_update_error']=$e->getMessage();
     error_log('[Kapouch migration bootstrap] '.$e->getMessage());
+    kapouch_runtime_log('migration','bootstrap_error',['class'=>get_class($e),'message'=>mb_substr($e->getMessage(),0,1200)]);
 }
 
 require_once __DIR__.'/settings.php';
