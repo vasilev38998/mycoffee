@@ -4,6 +4,7 @@ require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_phone.php';
+require_once dirname(__DIR__).'/inc/customer_welcome.php';
 
 customer_api_headers();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))==='OPTIONS'){http_response_code(204);exit;}
@@ -15,6 +16,16 @@ try{
     $data=customer_api_json();$rawPhone=customer_phone_canonical_ru((string)($data['phone']??''));$phoneKey=preg_replace('/\D+/','',$rawPhone)??'';
     if($phoneKey!==''){$phoneLimit=kapouch_rate_limit_hit('customer_auth_verify_phone',$phoneKey,15,900);if(!$phoneLimit['allowed']){header('Retry-After: '.(int)$phoneLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много попыток для этого номера. Запросите новый код позже.']);}}
     $auth=customer_auth_verify_code($rawPhone,(string)($data['code']??''));
+    $customerId=(int)($auth['customer']['id']??0);
+    if($customerId>0){
+        try{
+            $welcome=customer_welcome_bonus_grant($customerId);
+            if($welcome>0)$auth['welcome_bonus']=$welcome;
+            $auth['customer']['loyalty_balance']=customer_loyalty_balance($customerId);
+        }catch(Throwable $welcomeError){
+            error_log('[Kapouch welcome bonus] '.$welcomeError->getMessage());
+        }
+    }
     if($phoneKey!=='')kapouch_rate_limit_reset('customer_auth_verify_phone',$phoneKey);
     customer_api_reply(200,['ok'=>true,'auth'=>$auth]);
 }catch(JsonException $e){customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);}
