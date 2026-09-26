@@ -72,6 +72,9 @@ jobs:
       - name: PWA saved order and pickup countdown contract
         run: php tests/pwa_saved_order_contract.php
 
+      - name: Customer lifecycle features contract
+        run: php tests/customer_lifecycle_features_contract.php
+
       - name: Evotor order push queue contract
         run: php tests/evotor_order_push_queue_contract.php
 
