@@ -1,6 +1,6 @@
-const CACHE='kapouch-pwa-v50';
-const PREVIOUS_CACHE='kapouch-pwa-v49';
-const PREVIOUS_PREVIOUS_CACHE='kapouch-pwa-v48';
+const CACHE='kapouch-pwa-v51';
+const PREVIOUS_CACHE='kapouch-pwa-v50';
+const PREVIOUS_PREVIOUS_CACHE='kapouch-pwa-v49';
 const SIXTH_DRINK_CONTRACT_CACHE='kapouch-pwa-v44';
 const LOCAL_NAMES_CONTRACT_CACHE='kapouch-pwa-v43';
 const LOCAL_NAMES_CACHE='kapouch-pwa-v41';
