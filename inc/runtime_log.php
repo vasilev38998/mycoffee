@@ -26,7 +26,9 @@ function kapouch_runtime_request_id(): string
 function kapouch_runtime_redact($value,$key='')
 {
     $key=mb_strtolower((string)$key);
-    foreach(['password','passwd','pass','secret','token','authorization','cookie','code','phone','email','cipher','iv','tag'] as $needle){
+    $exact=['password','passwd','pass','secret','token','authorization','cookie','code','phone','email','iv','tag'];
+    if($key!==''&&in_array($key,$exact,true))return '[redacted]';
+    foreach(['password','passwd','secret','token','authorization','cookie','phone','email','cipher'] as $needle){
         if($key!==''&&str_contains($key,$needle))return '[redacted]';
     }
     if(is_array($value)){
