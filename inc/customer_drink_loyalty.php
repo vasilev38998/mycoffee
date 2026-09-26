@@ -38,6 +38,7 @@ function customer_drink_loyalty_product_rows(bool $activeOnly=true): array
     if(isset($GLOBALS['kapouch_drink_loyalty_rows_cache'][$key])&&is_array($GLOBALS['kapouch_drink_loyalty_rows_cache'][$key]))return $GLOBALS['kapouch_drink_loyalty_rows_cache'][$key];
     $where=$activeOnly?'WHERE p.active=1 AND p.sale_price>0':'';
     $rows=db()->query("SELECT p.id,p.name,p.category,p.sale_price,p.active,
+        (SELECT COUNT(*) FROM evotor_products ep WHERE ep.local_product_id=p.id) evotor_links,
         (SELECT c.slug FROM customer_product_settings cps JOIN customer_categories c ON c.id=cps.category_id WHERE cps.product_id=p.id LIMIT 1) direct_slug,
         (SELECT c.name FROM customer_product_settings cps JOIN customer_categories c ON c.id=cps.category_id WHERE cps.product_id=p.id LIMIT 1) direct_category,
         (SELECT gc.slug FROM customer_product_group_variants gv JOIN customer_product_groups g ON g.id=gv.group_id LEFT JOIN customer_categories gc ON gc.id=g.category_id WHERE gv.product_id=p.id LIMIT 1) group_slug,
@@ -75,17 +76,19 @@ function customer_drink_loyalty_reference_product(): ?array
     if(!empty($GLOBALS['kapouch_drink_loyalty_reference_loaded']))return $GLOBALS['kapouch_drink_loyalty_reference_cache']??null;
     $settings=customer_drink_loyalty_settings();$rows=customer_drink_loyalty_product_rows(true);$best=null;
     if($settings['reference_product_id']>0){
-        foreach($rows as $row)if((int)$row['id']===$settings['reference_product_id']){$best=['id'=>(int)$row['id'],'name'=>(string)$row['name'],'variant'=>(string)($row['variant_label']??''),'price'=>round((float)$row['sale_price'],2),'auto'=>false];break;}
+        foreach($rows as $row)if((int)$row['id']===$settings['reference_product_id']){$best=['id'=>(int)$row['id'],'name'=>(string)$row['name'],'variant'=>(string)($row['variant_label']??''),'price'=>round((float)$row['sale_price'],2),'auto'=>false,'mapped'=>!empty($row['evotor_links'])];break;}
     }
     if($best===null){
-        $bestScore=-1;
+        $bestScore=-1;$bestMapped=-1;
         foreach($rows as $row){
             $name=mb_strtolower((string)$row['name'].' '.(string)($row['group_name']??''));if(!str_contains($name,'капуч'))continue;
             $variant=mb_strtolower(trim((string)($row['variant_label']??'')));$hay=$name.' '.$variant;$score=100;
             if(preg_match('/(^|[^0-9])(0[\.,]2|200)(\s*(мл|ml))?([^0-9]|$)/u',$hay))$score+=60;
             elseif(preg_match('/(^|[^0-9])(0[\.,]25|250)(\s*(мл|ml))?([^0-9]|$)/u',$hay))$score+=20;
             $price=(float)$row['sale_price'];if($price<=0)continue;
-            if($best===null||$score>$bestScore||($score===$bestScore&&$price<(float)$best['price'])){$best=['id'=>(int)$row['id'],'name'=>(string)$row['name'],'variant'=>(string)($row['variant_label']??''),'price'=>round($price,2),'auto'=>true];$bestScore=$score;}
+            $mapped=!empty($row['evotor_links'])?1:0;$id=(int)$row['id'];
+            $better=$best===null||$score>$bestScore||($score===$bestScore&&$mapped>$bestMapped)||($score===$bestScore&&$mapped===$bestMapped&&$price>(float)$best['price'])||($score===$bestScore&&$mapped===$bestMapped&&abs($price-(float)$best['price'])<0.001&&$id>(int)$best['id']);
+            if($better){$best=['id'=>$id,'name'=>(string)$row['name'],'variant'=>(string)($row['variant_label']??''),'price'=>round($price,2),'auto'=>true,'mapped'=>$mapped===1];$bestScore=$score;$bestMapped=$mapped;}
         }
     }
     $GLOBALS['kapouch_drink_loyalty_reference_loaded']=true;
@@ -186,6 +189,46 @@ function customer_drink_loyalty_credit_sale(PDO $pdo,int $customerId,int $saleId
     return $added;
 }
 
+function customer_drink_loyalty_refund_evotor_sale(PDO $pdo,int $customerId,int $originalSaleId,string $originalDocumentId,int $refundSaleId,string $paybackDocumentId,bool $restoreGift): array
+{
+    $result=['reversed_stamps'=>0,'gift_restored'=>false];
+    if($customerId<=0||$originalSaleId<=0||$refundSaleId<=0||$originalDocumentId===''||$paybackDocumentId==='')return $result;
+
+    $returnedStmt=$pdo->prepare('SELECT product_id,SUM(ABS(quantity)) quantity FROM sale_items WHERE sale_id=? AND quantity<0 GROUP BY product_id');
+    $returnedStmt->execute([$refundSaleId]);$returned=[];
+    foreach($returnedStmt->fetchAll() as $row){$productId=(int)$row['product_id'];$units=max(0,(int)floor((float)$row['quantity']+0.00001));if($productId>0&&$units>0)$returned[$productId]=$units;}
+
+    if($returned){
+        $creditedStmt=$pdo->prepare("SELECT product_id,COALESCE(SUM(stamp_delta),0) units FROM customer_drink_loyalty_ledger WHERE customer_id=? AND source_type='evotor_sale' AND source_id=? AND stamp_delta>0 GROUP BY product_id");
+        $creditedStmt->execute([$customerId,$originalDocumentId]);$credited=[];
+        foreach($creditedStmt->fetchAll() as $row)$credited[(int)$row['product_id']]=(int)$row['units'];
+
+        $priorStmt=$pdo->prepare("SELECT product_id,COALESCE(-SUM(stamp_delta),0) units FROM customer_drink_loyalty_ledger WHERE customer_id=? AND source_type='evotor_refund' AND source_line_id=? AND stamp_delta<0 GROUP BY product_id");
+        $priorStmt->execute([$customerId,$originalDocumentId]);$prior=[];
+        foreach($priorStmt->fetchAll() as $row)$prior[(int)$row['product_id']]=(int)$row['units'];
+
+        foreach($returned as $productId=>$units){
+            $remaining=max(0,(int)($credited[$productId]??0)-(int)($prior[$productId]??0));$reverse=min($units,$remaining);if($reverse<=0)continue;
+            $key=mb_substr('refund:evotor_payback:'.$paybackDocumentId.':'.$productId,0,255);$note=mb_substr('Возврат напитка по чеку Эвотора '.$paybackDocumentId,0,255);
+            $stmt=$pdo->prepare("INSERT IGNORE INTO customer_drink_loyalty_ledger(customer_id,operation_key,source_type,source_id,source_line_id,product_id,stamp_delta,reward_delta,reward_value,note) VALUES(?,?,?,?,?,?,?,0,0,?)");
+            $stmt->execute([$customerId,$key,'evotor_refund',mb_substr($paybackDocumentId,0,190),mb_substr($originalDocumentId,0,190),$productId,-$reverse,$note]);
+            if($stmt->rowCount()>0)$result['reversed_stamps']+=$reverse;
+        }
+    }
+
+    if($restoreGift){
+        $rewardStmt=$pdo->prepare("SELECT product_id,stamp_delta,reward_value FROM customer_drink_loyalty_ledger WHERE operation_key=? AND reward_delta=-1 LIMIT 1");
+        $rewardStmt->execute(['redeem:evotor_sale:'.$originalSaleId]);$reward=$rewardStmt->fetch();
+        if($reward){
+            $key='restore:evotor_sale:'.$originalSaleId;$restoreStamp=max(0,-(int)($reward['stamp_delta']??0));
+            $stmt=$pdo->prepare("INSERT IGNORE INTO customer_drink_loyalty_ledger(customer_id,operation_key,source_type,source_id,source_line_id,product_id,stamp_delta,reward_delta,reward_value,note) VALUES(?,?,?,?,?,?,?,?,0,?)");
+            $stmt->execute([$customerId,$key,'evotor_refund',mb_substr($paybackDocumentId,0,190),mb_substr($originalDocumentId,0,190),(int)($reward['product_id']??0)?:null,$restoreStamp,1,'Подарок «6-й напиток» восстановлен после возврата']);
+            $result['gift_restored']=$stmt->rowCount()>0;
+        }
+    }
+    return $result;
+}
+
 function customer_drink_loyalty_reverse_source(int $customerId,string $sourceType,string $sourceId,string $reason): int
 {
     if($customerId<=0||$sourceId==='')return 0;$pdo=db();$pdo->beginTransaction();
@@ -211,6 +254,6 @@ function customer_drink_loyalty_refresh_customer(int $customerId,int $limit=100)
 {
     if($customerId<=0)return ['orders'=>0,'sales'=>0,'stamps'=>0];$limit=max(1,min(300,$limit));$pdo=db();$stamps=0;$orders=0;$sales=0;
     $stmt=$pdo->prepare("SELECT a.order_id FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.customer_id=? AND o.status='completed' AND COALESCE(o.payment_status,'')<>'refunded' ORDER BY o.completed_at DESC,o.id DESC LIMIT {$limit}");$stmt->execute([$customerId]);foreach($stmt->fetchAll() as $row){$orders++;$stamps+=customer_drink_loyalty_credit_online_order((int)$row['order_id'],$customerId);}
-    $stmt=$pdo->prepare("SELECT cs.evotor_document_id,cs.sale_id FROM evotor_customer_sales cs WHERE cs.customer_id=? AND cs.sale_id IS NOT NULL ORDER BY cs.id DESC LIMIT {$limit}");$stmt->execute([$customerId]);foreach($stmt->fetchAll() as $row){$sales++;$stamps+=customer_drink_loyalty_credit_sale($pdo,$customerId,(int)$row['sale_id'],(string)$row['evotor_document_id']);}
+    $stmt=$pdo->prepare("SELECT cs.evotor_document_id,cs.sale_id FROM evotor_customer_sales cs WHERE cs.customer_id=? AND cs.sale_id IS NOT NULL AND cs.gross_amount>0 ORDER BY cs.id DESC LIMIT {$limit}");$stmt->execute([$customerId]);foreach($stmt->fetchAll() as $row){$sales++;$stamps+=customer_drink_loyalty_credit_sale($pdo,$customerId,(int)$row['sale_id'],(string)$row['evotor_document_id']);}
     return ['orders'=>$orders,'sales'=>$sales,'stamps'=>$stamps];
 }
