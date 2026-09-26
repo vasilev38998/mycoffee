@@ -3,6 +3,7 @@ require __DIR__.'/inc/bootstrap.php';
 require __DIR__.'/inc/layout.php';
 require_auth();
 require_once __DIR__.'/inc/customer_push.php';
+require_once __DIR__.'/inc/customer_birthday.php';
 require_once __DIR__.'/inc/customer_pwa.php';
 
 if($_SERVER['REQUEST_METHOD']==='POST'){
@@ -15,18 +16,27 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
             audit_write('customer_push_campaign','Создана push-рассылка #'.$r['id'].' для '.$r['recipients'].' клиентов','customer_push_campaign',(string)$r['id']);
             flash('success','Рассылка поставлена в очередь: '.$r['recipients'].' клиентов. Отправка пойдёт через минутный cron без удержания веб-запроса.');
         }elseif($action==='process'){
-            // Keep manual processing deliberately small: push providers are external
-            // networks and a large synchronous batch would occupy a PHP worker.
             $r=customer_push_process_queue(10);flash('success','Очередь обработана: '.$r['processed'].', отправлено '.$r['sent'].', ошибок '.$r['failed'].'. Остаток продолжит минутный cron.');
         }elseif($action==='subject'){
             $subject=trim((string)($_POST['vapid_subject']??''));if($subject!==''&&!preg_match('#^(mailto:|https://)#i',$subject))throw new RuntimeException('Контакт VAPID должен начинаться с mailto: или https://');set_app_setting('customer_push_vapid_subject',$subject);flash('success','Контакт VAPID сохранён.');
+        }elseif($action==='birthday_settings'){
+            $time=trim((string)($_POST['birthday_time']??'10:00'));if(!preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/',$time))throw new RuntimeException('Укажите корректное время поздравления.');
+            $title=trim((string)($_POST['birthday_title']??''));$body=trim((string)($_POST['birthday_body']??''));
+            if($title===''||mb_strlen($title)>120)throw new RuntimeException('Заголовок поздравления должен содержать от 1 до 120 символов.');
+            if($body===''||mb_strlen($body)>500)throw new RuntimeException('Текст поздравления должен содержать от 1 до 500 символов.');
+            set_app_setting('customer_birthday_push_enabled',isset($_POST['birthday_enabled'])?'1':'0');
+            set_app_setting('customer_birthday_push_time',$time);
+            set_app_setting('customer_birthday_push_title',$title);
+            set_app_setting('customer_birthday_push_body',$body);
+            audit_write('customer_birthday_push_settings','Обновлены настройки автоматического поздравления клиентов');
+            flash('success','Настройки поздравлений сохранены.');
         }
     }catch(Throwable $e){flash('danger',$e->getMessage());}
     redirect('push_notifications.php');
 }
 
 $stats=customer_push_stats();$categories=customer_pwa_categories(true);$campaigns=db()->query('SELECT c.*,cc.name category_name FROM customer_push_campaigns c LEFT JOIN customer_categories cc ON cc.id=c.category_id ORDER BY c.id DESC LIMIT 30')->fetchAll();
-$subject=customer_push_vapid_subject();
+$subject=customer_push_vapid_subject();$birthday=customer_birthday_push_settings();
 page_header('Push-уведомления');
 ?>
 <div class="three-col">
@@ -34,6 +44,14 @@ page_header('Push-уведомления');
   <div class="insight-card"><div class="kicker">Клиенты с push</div><strong><?=$stats['customers']?></strong><p>Уникальные подтверждённые клиенты.</p></div>
   <div class="insight-card"><div class="kicker">В очереди</div><strong><?=$stats['queued']?></strong><p>Будут обработаны минутным cron.</p></div>
 </div>
+
+<div class="card section"><div class="chart-head"><div><h2>Поздравление с днём рождения</h2><p>Если клиент указал дату рождения и разрешил push, Kapouch автоматически поздравит его один раз в год после указанного времени.</p></div><span class="pill <?=$birthday['enabled']?'connected':''?>"><?=$birthday['enabled']?'Включено':'Выключено'?></span></div>
+<form method="post" class="form-grid"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="birthday_settings">
+<label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="birthday_enabled" value="1" style="width:auto" <?=$birthday['enabled']?'checked':''?>> Включить автоматические поздравления</label>
+<label>Время отправки<input type="time" name="birthday_time" value="<?=e($birthday['time'])?>" required><small class="muted">По часовому поясу Kapouch. Если cron был временно недоступен, поздравление уйдёт позже в этот же день.</small></label>
+<label>Заголовок<input name="birthday_title" maxlength="120" value="<?=e($birthday['title'])?>" required></label>
+<label style="grid-column:1/-1">Текст<textarea name="birthday_body" maxlength="500" rows="3" required><?=e($birthday['body'])?></textarea><small class="muted">Можно использовать {name}, {date}, {coffee}. Push отправляется только устройствам, где клиент сам разрешил уведомления.</small></label>
+<div><button class="btn primary">Сохранить поздравление</button></div></form></div>
 
 <div class="card section"><div class="chart-head"><div><h2>Новая push-рассылка</h2><p>Отправка идёт подписанным клиентам. Сегмент «Категория» строится по фактической истории покупок.</p></div></div>
 <form method="post" class="form-grid"><input type="hidden" name="csrf" value="<?=csrf_token()?>"><input type="hidden" name="action" value="campaign">
