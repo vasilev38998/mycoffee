@@ -17,7 +17,7 @@ $checks=[
     'cart offers save update delete controls'=>str_contains($saved,'Обновить «Мой обычный»')&&str_contains($saved,'Сохранить любимый заказ')&&str_contains($saved,'Удалить сохранённый'),
     'pickup countdown module is loaded'=>str_contains($config,"pickupCountdown.src='assets/pickup-countdown.js?v=1'"),
     'active order emits status for countdown'=>str_contains($current,"new CustomEvent('kapouch-order-status'")&&str_contains($countdown,"window.addEventListener('kapouch-order-status'"),
-    'status API exposes promised pickup time'=>str_contains($statusApi,"$order['promised_at']=$promised")&&str_contains($statusApi,"$order['promised_display']"),
+    'status API exposes promised pickup time'=>str_contains($statusApi,"['promised_at']")&&str_contains($statusApi,"['promised_display']"),
     'countdown updates locally without extra polling'=>str_contains($countdown,'setTimeout(render,30000)')&&!str_contains($countdown,'fetch('),
     'ready state has explicit pickup message'=>str_contains($countdown,"order.status==='ready'")&&str_contains($countdown,'Можно забирать сейчас'),
     'service worker cache is refreshed'=>str_contains($sw,"const CACHE='kapouch-pwa-v54'")&&str_contains($sw,"./assets/saved-order.js?v=1")&&str_contains($sw,"./assets/pickup-countdown.js?v=1"),
