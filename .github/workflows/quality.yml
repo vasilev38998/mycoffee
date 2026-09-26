@@ -69,6 +69,9 @@ jobs:
       - name: PWA local names, no-zoom and MAX contract
         run: php tests/pwa_local_names_nozoom_max_contract.php
 
+      - name: PWA saved order and pickup countdown contract
+        run: php tests/pwa_saved_order_contract.php
+
       - name: Evotor order push queue contract
         run: php tests/evotor_order_push_queue_contract.php
 
