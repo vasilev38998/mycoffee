@@ -4,6 +4,7 @@ require __DIR__.'/inc/layout.php';
 require_auth();
 require_once __DIR__.'/inc/customer_loyalty.php';
 require_once __DIR__.'/inc/customer_drink_loyalty.php';
+require_once __DIR__.'/inc/customer_welcome.php';
 
 $user=current_user();if(!in_array($user['role']??'',['owner','manager'],true)){http_response_code(403);exit('Недостаточно прав.');}
 
@@ -12,37 +13,39 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     try{
         $percent=(float)str_replace(',','.',(string)($_POST['customer_loyalty_percent']??'0'));if($percent<0||$percent>50)throw new RuntimeException('Процент бонусов должен быть от 0 до 50.');
         $spendPercent=(float)str_replace(',','.',(string)($_POST['customer_loyalty_spend_percent']??'100'));if($spendPercent<0||$spendPercent>100)throw new RuntimeException('Процент списания бонусов должен быть от 0 до 100.');
+        $welcome=(float)str_replace(',','.',(string)($_POST['customer_welcome_bonus']??'100'));if(!is_finite($welcome)||$welcome<0||$welcome>100000)throw new RuntimeException('Приветственный бонус должен быть от 0 до 100 000.');
         $required=(int)($_POST['customer_sixth_drink_paid_count']??5);if($required<1||$required>20)throw new RuntimeException('Количество оплаченных напитков должно быть от 1 до 20.');
         $mode=isset($_POST['customer_sixth_drink_auto_products'])?'auto':'selected';$ids=[];foreach((array)($_POST['drink_product_ids']??[]) as $raw){$id=(int)$raw;if($id>0)$ids[$id]=true;}
         $reference=(int)($_POST['customer_sixth_drink_reference_product_id']??0);
         if($reference>0){$stmt=db()->prepare('SELECT COUNT(*) FROM products WHERE id=? AND active=1 AND sale_price>0');$stmt->execute([$reference]);if(!(int)$stmt->fetchColumn())throw new RuntimeException('Выбранный эталонный напиток больше недоступен.');}
         set_app_setting('customer_loyalty_percent',(string)round($percent,2));
         set_app_setting('customer_loyalty_spend_percent',(string)round($spendPercent,2));
+        set_app_setting('customer_welcome_bonus',(string)round($welcome,2));
         set_app_setting('customer_sixth_drink_enabled',isset($_POST['customer_sixth_drink_enabled'])?'1':'0');
         set_app_setting('customer_sixth_drink_paid_count',(string)$required);
         set_app_setting('customer_sixth_drink_products_mode',$mode);
         set_app_setting('customer_sixth_drink_product_ids',implode(',',array_keys($ids)));
         set_app_setting('customer_sixth_drink_reference_product_id',(string)max(0,$reference));
         if(trim((string)app_setting('customer_sixth_drink_started_at',''))==='')set_app_setting('customer_sixth_drink_started_at',date('Y-m-d H:i:s'));
-        audit_write('customer_loyalty_settings_updated','Обновлены начисление/списание бонусов и программа «6-й напиток»');flash('success','Настройки лояльности сохранены.');
+        audit_write('customer_loyalty_settings_updated','Обновлены бонусы, приветственный бонус и программа «6-й напиток»');flash('success','Настройки лояльности сохранены.');
     }catch(Throwable $e){flash('danger',$e->getMessage());}
     redirect('customer_loyalty_settings.php');
 }
 
-$settings=customer_drink_loyalty_settings();$rows=customer_drink_loyalty_product_rows(true);$eligible=customer_drink_loyalty_product_map();$reference=customer_drink_loyalty_reference_product();$percent=customer_loyalty_rate();$spendPercent=customer_loyalty_spend_percent();
+$settings=customer_drink_loyalty_settings();$rows=customer_drink_loyalty_product_rows(true);$eligible=customer_drink_loyalty_product_map();$reference=customer_drink_loyalty_reference_product();$percent=customer_loyalty_rate();$spendPercent=customer_loyalty_spend_percent();$welcome=customer_welcome_bonus_amount();
 $ledgerStats=['customers'=>0,'stamps'=>0,'redemptions'=>0];try{$ledgerStats=db()->query("SELECT COUNT(DISTINCT customer_id) customers,COALESCE(SUM(CASE WHEN stamp_delta>0 THEN stamp_delta ELSE 0 END),0) stamps,COALESCE(SUM(CASE WHEN reward_delta<0 THEN -reward_delta ELSE 0 END),0) redemptions FROM customer_drink_loyalty_ledger")->fetch()?:$ledgerStats;}catch(Throwable $e){}
 page_header('Лояльность клиентов');
 ?>
-<div class="card"><div class="chart-head"><div><h2>Лояльность клиентов</h2><p>Две программы работают одновременно: процентные бонусы и «каждый 6-й напиток в подарок».</p></div><a class="btn ghost" href="customer_app.php">← Клиентское PWA</a></div></div>
+<div class="card"><div class="chart-head"><div><h2>Лояльность клиентов</h2><p>Процентные бонусы, приветственный баланс и «каждый 6-й напиток в подарок».</p></div><a class="btn ghost" href="customer_app.php">← Клиентское PWA</a></div></div>
 
 <div class="three-col section">
   <div class="metric-card"><span>Бонусы</span><strong><?=number_format($percent,2,',',' ')?>% / <?=number_format($spendPercent,2,',',' ')?>%</strong><small>Начисление / максимум списания</small></div>
-  <div class="metric-card"><span>Отметок по напиткам</span><strong><?=(int)$ledgerStats['stamps']?></strong><small>С момента запуска программы</small></div>
+  <div class="metric-card"><span>Приветственный бонус</span><strong><?=number_format($welcome,2,',',' ')?> ★</strong><small>Один раз новому клиенту</small></div>
   <div class="metric-card"><span>Подарков использовано</span><strong><?=(int)$ledgerStats['redemptions']?></strong><small>История хранится отдельно</small></div>
 </div>
 
 <form method="post" class="stack section"><input type="hidden" name="csrf" value="<?=csrf_token()?>">
-<div class="card"><div class="chart-head"><div><h2>Процентные бонусы</h2><p>Настройте отдельно процент начисления и какую долю заказа клиент может оплатить уже накопленными бонусами в PWA.</p></div></div><div class="form-grid"><label>Начислять с покупки, %<input type="number" name="customer_loyalty_percent" min="0" max="50" step="0.01" value="<?=e((string)$percent)?>"></label><label>Максимум списания от суммы заказа, %<input type="number" name="customer_loyalty_spend_percent" min="0" max="100" step="0.01" value="<?=e((string)$spendPercent)?>"><small class="muted">Например, 30% означает: с заказа на 500 ₽ можно списать не больше 150 бонусов.</small></label></div></div>
+<div class="card"><div class="chart-head"><div><h2>Процентные и приветственные бонусы</h2><p>Настройте начисление с покупок, максимум списания и стартовый баланс для новых клиентов.</p></div></div><div class="form-grid"><label>Начислять с покупки, %<input type="number" name="customer_loyalty_percent" min="0" max="50" step="0.01" value="<?=e((string)$percent)?>"></label><label>Максимум списания от суммы заказа, %<input type="number" name="customer_loyalty_spend_percent" min="0" max="100" step="0.01" value="<?=e((string)$spendPercent)?>"><small class="muted">Например, 30% означает: с заказа на 500 ₽ можно списать не больше 150 бонусов.</small></label><label>Приветственный бонус, ★<input type="number" name="customer_welcome_bonus" min="0" max="100000" step="0.01" value="<?=e((string)$welcome)?>"><small class="muted">Выдаётся один раз клиентам, впервые зарегистрированным после запуска функции. Значение 0 отключает начисление.</small></label></div></div>
 
 <div class="card"><div class="chart-head"><div><h2>Каждый 6-й напиток</h2><p>После пяти оплаченных подходящих напитков клиент получает один подарок. Если выбранный напиток дороже лимита — оплачивается только разница.</p></div><span class="pill <?=$settings['enabled']?'connected':''?>"><?=$settings['enabled']?'Включено':'Выключено'?></span></div>
 <div class="form-grid section" style="margin-top:14px">
