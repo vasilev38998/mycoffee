@@ -19,7 +19,7 @@ function customer_welcome_bonus_grant(int $customerId): float
 
         $amount=customer_welcome_bonus_amount();
         if($amount>0){
-            $pdo->prepare("INSERT INTO customer_loyalty_ledger(customer_id,order_id,amount,operation_type,note) VALUES(?,NULL,?,'adjust',?)")
+            $pdo->prepare("INSERT INTO customer_loyalty_ledger(customer_id,order_id,amount,operation_type,note) VALUES(?,NULL,?,'earn',?)")
                 ->execute([$customerId,$amount,'Приветственные бонусы Kapouch']);
             $pdo->prepare('UPDATE customer_accounts SET loyalty_balance=ROUND(loyalty_balance+?,2),welcome_bonus_granted_at=NOW() WHERE id=?')
                 ->execute([$amount,$customerId]);
