@@ -6,6 +6,8 @@ $db=file_get_contents($root.'/inc/db.php');
 $access=file_get_contents($root.'/inc/access.php');
 $htaccess=file_get_contents($root.'/.htaccess');
 $discount=file_get_contents($root.'/evotor-app/app/src/main/java/ru/kapouch/evotor/LoyaltyDiscountApi.java');
+$notifications=file_get_contents($root.'/evotor-app/app/src/main/java/ru/kapouch/evotor/OrderNotifications.java');
+$alertPlayer=file_get_contents($root.'/evotor-app/app/src/main/java/ru/kapouch/evotor/BaristaAlertPlayer.java');
 $discountApi=file_get_contents($root.'/api/evotor_loyalty_discount.php');
 $drink=file_get_contents($root.'/inc/customer_drink_loyalty.php');
 $evotorLoyalty=file_get_contents($root.'/inc/evotor_customer_loyalty.php');
@@ -22,6 +24,8 @@ $checks=[
     'Evotor discount has extensionless Apache route'=>str_contains($htaccess,'evotor-loyalty-discount')&&str_contains($htaccess,'api/evotor_loyalty_discount.php'),
     'Evotor APK uses extensionless discount transport'=>str_contains($discount,'https://kapouch.store/evotor-loyalty-discount')&&!str_contains($discount,'https://kapouch.store/api/evotor_loyalty_discount.php'),
     'Evotor APK bumped for terminal install'=>str_contains($build,'versionCode 36')&&str_contains($build,"versionName '1.2.29'")&&str_contains($discount,'Kapouch-Orders-Evotor/1.2.29'),
+    'Evotor alert repeats every 15 seconds until accepted'=>str_contains($notifications,'REMINDER_DELAY_MS = 15_000L')&&str_contains($notifications,'return order != null && "new".equals(order.status);')&&!str_contains($notifications,'MAX_REMINDERS'),
+    'Evotor alert uses one explicit tone per reminder'=>str_contains($alertPlayer,'play(context, 1);')&&!str_contains($alertPlayer,'play(context, 3);')&&str_contains($notifications,'channel.setSound(null, null)'),
     'Evotor discount quote coalesces loyalty refresh'=>str_contains($discountApi,'customer_loyalty_refresh_customer_if_due($customerId,20,15)')&&!str_contains($discountApi,'customer_drink_loyalty_refresh_customer($customerId,100)'),
     'automatic gift reference prefers current Evotor product'=>str_contains($drink,'evotor_links')&&str_contains($drink,'$mapped>$bestMapped')&&str_contains($drink,'$price>(float)$best[\'price\']'),
     'PAYBACK base document is parsed'=>str_contains($evotorLoyalty,'base_document_id')&&str_contains($evotorLoyalty,'evotor_customer_loyalty_payback_base_document_id'),
