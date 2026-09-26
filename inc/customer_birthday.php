@@ -11,7 +11,7 @@ function customer_birthday_push_settings(): array
         'enabled'=>(string)app_setting('customer_birthday_push_enabled','1')==='1',
         'time'=>$time,
         'title'=>trim((string)app_setting('customer_birthday_push_title','С днём рождения! 🎉'))?:'С днём рождения! 🎉',
-        'body'=>trim((string)app_setting('customer_birthday_push_body','{name}, поздравляем с днём рождения! Ждём вас в Kapouch ☕'))?:'{name}, поздравляем с днём рождения! Ждём вас в Kapouch ☕',
+        'body'=>trim((string)app_setting('customer_birthday_push_body','Поздравляем с днём рождения! Ждём вас в Kapouch ☕'))?:'Поздравляем с днём рождения! Ждём вас в Kapouch ☕',
     ];
 }
 
@@ -19,7 +19,7 @@ function customer_birthday_push_text(string $template,array $customer): string
 {
     $name=trim((string)($customer['name']??''));
     return strtr($template,[
-        '{name}'=>$name!==''?$name:'Поздравляем вас',
+        '{name}'=>$name!==''?$name:'Друг',
         '{date}'=>date('d.m.Y'),
         '{coffee}'=>(string)app_setting('coffee_name','Kapouch'),
     ]);
