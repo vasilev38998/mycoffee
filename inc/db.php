@@ -26,6 +26,7 @@ function db_capacity_mark_busy(int $seconds=20): void
     $seconds=max(5,min(60,$seconds));
     $GLOBALS['kapouch_db_capacity_active']=true;
     @file_put_contents(db_capacity_cooldown_file(),(string)(time()+$seconds),LOCK_EX);
+    if(function_exists('kapouch_runtime_log'))kapouch_runtime_log('db','capacity_cooldown_set',['seconds'=>$seconds]);
 }
 
 function db_capacity_clear_busy(): void
@@ -67,6 +68,7 @@ function db(): PDO
     $remaining=db_capacity_cooldown_remaining();
     if($remaining>0){
         $GLOBALS['kapouch_db_capacity_active']=true;
+        if(function_exists('kapouch_runtime_log'))kapouch_runtime_log('db','capacity_gate',['remaining_seconds'=>$remaining]);
         throw new KapouchDatabaseBusyException('MySQL capacity cooldown active for '.$remaining.'s');
     }
 
@@ -85,6 +87,11 @@ function db(): PDO
         if(db_capacity_error($e)){
             db_capacity_mark_busy(20);
             error_log('[Kapouch DB capacity] '.$e->getMessage());
+            if(function_exists('kapouch_runtime_log'))kapouch_runtime_log('db','capacity_exception',[
+                'driver_code'=>(int)($e->errorInfo[1]??0),
+                'sql_state'=>(string)($e->errorInfo[0]??$e->getCode()),
+                'message'=>mb_substr($e->getMessage(),0,800),
+            ]);
         }
         throw $e;
     }
