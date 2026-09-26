@@ -20,24 +20,42 @@ ensure_automatic_expense_tables();ensure_inventory_tables();ensure_cash_register
 
 $connections=db()->query('SELECT * FROM evotor_connections WHERE enabled=1 ORDER BY id')->fetchAll();$failed=false;
 foreach($connections as $connection){
+    $syncStarted=microtime(true);$connectionId=(int)($connection['id']??0);
+    kapouch_runtime_log('evotor_sync','connection_start',['connection_id'=>$connectionId]);
     try{
         $result=evotor_run_sync($connection,'full');
-        $fresh=evotor_connection((int)$connection['id'])??$connection;
+        $fresh=evotor_connection($connectionId)??$connection;
         $loyalty=evotor_customer_loyalty_attach_synced_sales($fresh,200);
         $cash=sync_evotor_cash_register($fresh);
+        kapouch_runtime_log('evotor_sync','connection_result',[
+            'connection_id'=>$connectionId,
+            'documents_processed'=>(int)($result['processed']??0),
+            'cash_documents'=>(int)$cash,
+            'loyalty_links'=>(int)($loyalty['linked']??0),
+            'loyalty_earned'=>(float)($loyalty['earned']??0),
+            'refunds'=>(int)($loyalty['refunds']??0),
+            'loyalty_reversed'=>(float)($loyalty['loyalty_reversed']??0),
+            'drink_stamps_reversed'=>(int)($loyalty['drink_stamps_reversed']??0),
+            'gifts_restored'=>(int)($loyalty['gifts_restored']??0),
+            'duration_ms'=>(int)round((microtime(true)-$syncStarted)*1000),
+        ]);
         echo sprintf("[%s] %s: processed %d, cash documents %d, loyalty links %d, bonuses +%.2f\n",date('c'),$connection['store_id'],$result['processed'],$cash,$loyalty['linked'],$loyalty['earned']);
-    }catch(Throwable $e){$failed=true;fwrite(STDERR,sprintf("[%s] %s: %s\n",date('c'),$connection['store_id'],$e->getMessage()));}
+    }catch(Throwable $e){
+        $failed=true;
+        kapouch_runtime_log('evotor_sync','connection_error',['connection_id'=>$connectionId,'class'=>get_class($e),'message'=>mb_substr($e->getMessage(),0,1200),'duration_ms'=>(int)round((microtime(true)-$syncStarted)*1000)]);
+        fwrite(STDERR,sprintf("[%s] %s: %s\n",date('c'),$connection['store_id'],$e->getMessage()));
+    }
 }
-try{$cashflow=cashflow_sync_evotor_payments();echo sprintf("[%s] cash flow payments created: %d, electron net %.2f, cash net %.2f\n",date('c'),$cashflow['processed'],$cashflow['electron'],$cashflow['cash']);}catch(Throwable $e){$failed=true;fwrite(STDERR,sprintf("[%s] cash flow: %s\n",date('c'),$e->getMessage()));}
-try{$inventoryMovements=sync_inventory_from_sales(date('Y-m-01'));echo sprintf("[%s] inventory movements created: %d\n",date('c'),$inventoryMovements);}catch(Throwable $e){$failed=true;fwrite(STDERR,sprintf("[%s] inventory: %s\n",date('c'),$e->getMessage()));}
-try{$accruals=refresh_automatic_expenses(date('Y-m-01'),date('Y-m-d'));echo sprintf("[%s] automatic expenses refreshed: %d accruals\n",date('c'),$accruals);}catch(Throwable $e){$failed=true;fwrite(STDERR,sprintf("[%s] automatic expenses: %s\n",date('c'),$e->getMessage()));}
+try{$cashflow=cashflow_sync_evotor_payments();echo sprintf("[%s] cash flow payments created: %d, electron net %.2f, cash net %.2f\n",date('c'),$cashflow['processed'],$cashflow['electron'],$cashflow['cash']);}catch(Throwable $e){$failed=true;kapouch_runtime_log('evotor_sync','cashflow_error',['class'=>get_class($e),'message'=>mb_substr($e->getMessage(),0,1200)]);fwrite(STDERR,sprintf("[%s] cash flow: %s\n",date('c'),$e->getMessage()));}
+try{$inventoryMovements=sync_inventory_from_sales(date('Y-m-01'));echo sprintf("[%s] inventory movements created: %d\n",date('c'),$inventoryMovements);}catch(Throwable $e){$failed=true;kapouch_runtime_log('evotor_sync','inventory_error',['class'=>get_class($e),'message'=>mb_substr($e->getMessage(),0,1200)]);fwrite(STDERR,sprintf("[%s] inventory: %s\n",date('c'),$e->getMessage()));}
+try{$accruals=refresh_automatic_expenses(date('Y-m-01'),date('Y-m-d'));echo sprintf("[%s] automatic expenses refreshed: %d accruals\n",date('c'),$accruals);}catch(Throwable $e){$failed=true;kapouch_runtime_log('evotor_sync','expenses_error',['class'=>get_class($e),'message'=>mb_substr($e->getMessage(),0,1200)]);fwrite(STDERR,sprintf("[%s] automatic expenses: %s\n",date('c'),$e->getMessage()));}
 try{
     $alerts=evaluate_business_control();echo sprintf("[%s] business control: %d active alerts\n",date('c'),count($alerts));
     if((string)app_setting('control_telegram_critical','1')==='1'){
         $critical=db()->query("SELECT * FROM control_alerts WHERE severity='critical' AND status<>'resolved' AND (last_notified_at IS NULL OR last_notified_at<DATE_SUB(NOW(),INTERVAL 12 HOUR)) ORDER BY last_seen_at DESC LIMIT 10")->fetchAll();$telegram=telegram_notification_settings();
         if($critical&&$telegram&&(int)$telegram['enabled']){$lines=[(string)app_setting('coffee_name','Kapouch').' · критичные сигналы'];foreach($critical as $a){$lines[]='';$lines[]='⚠ '.$a['title'];$lines[]=$a['message'];if($a['recommendation'])$lines[]='Что сделать: '.$a['recommendation'];}send_telegram_message(implode("\n",$lines));$ids=array_map('intval',array_column($critical,'id'));if($ids)db()->exec('UPDATE control_alerts SET last_notified_at=NOW() WHERE id IN ('.implode(',',$ids).')');echo sprintf("[%s] critical control alert sent to Telegram\n",date('c'));}
     }
-}catch(Throwable $e){$failed=true;fwrite(STDERR,sprintf("[%s] business control: %s\n",date('c'),$e->getMessage()));}
-try{$push=evotor_order_push_retry_pending(20);echo sprintf("[%s] Evotor order push retries: %d processed, %d sent\n",date('c'),$push['processed'],$push['sent']);}catch(Throwable $e){fwrite(STDERR,sprintf("[%s] Evotor order push retry: %s\n",date('c'),$e->getMessage()));}
+}catch(Throwable $e){$failed=true;kapouch_runtime_log('evotor_sync','control_error',['class'=>get_class($e),'message'=>mb_substr($e->getMessage(),0,1200)]);fwrite(STDERR,sprintf("[%s] business control: %s\n",date('c'),$e->getMessage()));}
+try{$push=evotor_order_push_retry_pending(20);echo sprintf("[%s] Evotor order push retries: %d processed, %d sent\n",date('c'),$push['processed'],$push['sent']);}catch(Throwable $e){kapouch_runtime_log('evotor_sync','push_error',['class'=>get_class($e),'message'=>mb_substr($e->getMessage(),0,1200)]);fwrite(STDERR,sprintf("[%s] Evotor order push retry: %s\n",date('c'),$e->getMessage()));}
 if(!$connections)echo "No enabled Evotor connections. Warehouse, expenses, cash flow and business control still refreshed.\n";
 flock($lock,LOCK_UN);fclose($lock);exit($failed?1:0);

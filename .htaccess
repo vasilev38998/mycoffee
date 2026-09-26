@@ -28,6 +28,10 @@ DirectoryIndex index.php index.html
   # diagnostics rely on it being explicit.
   RewriteRule ^(?:inc|database|docs|cron)(?:/|$) - [F,L,NC]
 
+  # Runtime diagnostics contain internal operational details and must never be
+  # downloadable over HTTP. They remain available through Beget file manager.
+  RewriteRule ^storage(?:/|$) - [F,L,NC]
+
   # CI, tests, APK sources and dependency trees are deployment assets, not
   # public web content.
   RewriteRule ^(?:tests|\.github|evotor-app|node_modules|vendor)(?:/|$) - [F,L,NC]
@@ -36,7 +40,7 @@ DirectoryIndex index.php index.html
 <FilesMatch "^(config\.php|config\.example\.php|README\.md)$">
   Require all denied
 </FilesMatch>
-<FilesMatch "\.(?:sql|md|gradle|properties|keystore|jks)$">
+<FilesMatch "\.(?:sql|md|gradle|properties|keystore|jks|log)$">
   Require all denied
 </FilesMatch>
 <FilesMatch "(?i)(?:^\.|\.(?:bak|old|orig|save|swp)$|~$)">

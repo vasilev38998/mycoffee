@@ -91,6 +91,9 @@ jobs:
       - name: Database connection pressure contract
         run: php tests/database_connection_pressure_contract.php
 
+      - name: Runtime diagnostics contract
+        run: php tests/runtime_diagnostics_contract.php
+
       - name: Runtime stability and Evotor discount contract
         run: php tests/runtime_stability_evotor_contract.php
 
