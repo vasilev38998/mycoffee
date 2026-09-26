@@ -13,6 +13,7 @@ if(!cartList||!totalEl)return;
 const money=v=>Number(v||0).toLocaleString('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:2})+' ₽';
 const points=v=>Number(v||0).toLocaleString('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:2});
 const percent=v=>Number(v||0).toLocaleString('ru-RU',{minimumFractionDigits:0,maximumFractionDigits:2});
+const wordForm=(value,one,few,many)=>{const n=Math.abs(Number(value)||0);if(!Number.isInteger(n))return few;const n100=n%100,n10=n%10;if(n100>=11&&n100<=14)return many;if(n10===1)return one;if(n10>=2&&n10<=4)return few;return many};
 let timer=0,requestSeq=0,lastQuote=null;
 function token(){return String(localStorage.getItem(TOKEN_KEY)||'')}
 function loyaltyMode(){const value=String(localStorage.getItem(MODE_KEY)||'gift');return ['gift','points','none'].includes(value)?value:'gift'}
@@ -22,7 +23,7 @@ function saveSpend(value){const n=Math.max(0,Math.round(Number(value||0)*100)/10
 function cart(){try{const raw=JSON.parse(localStorage.getItem(CART_KEY)||'[]');if(!Array.isArray(raw))return [];return raw.map(x=>({product_id:Number(x.product_id||0),quantity:Math.max(1,Number(x.quantity||1)),modifiers:Array.isArray(x.modifiers)?x.modifiers.map(option_id=>({option_id:Number(option_id)})).filter(x=>x.option_id>0):[]})).filter(x=>x.product_id>0)}catch(e){return []}}
 function ensureBox(){let box=document.getElementById('sixthDrinkCheckout');if(box)return box;box=document.createElement('section');box.id='sixthDrinkCheckout';box.className='sixth-drink-checkout';box.hidden=true;const hint=loyaltyHint||document.getElementById('checkoutError');if(hint)hint.insertAdjacentElement('beforebegin',box);return box}
 function clear(){lastQuote=null;const box=ensureBox();box.hidden=true;box.innerHTML=''}
-function renderCashback(q){if(!loyaltyHint)return;const total=Math.max(0,Number(q?.total||0)),rate=Math.max(0,Number(q?.loyalty_percent||0)),expected=Math.max(0,Number(q?.loyalty_expected||0));if(rate<=0){loyaltyHint.textContent='Бонусы за этот заказ не начисляются.';return}if(total<=0){loyaltyHint.textContent='К оплате 0 ₽ — бонусы за этот заказ не начисляются.';return}loyaltyHint.textContent='После выдачи начислим примерно '+money(expected)+' бонусами ('+percent(rate)+'% от суммы к оплате).'}
+function renderCashback(q){if(!loyaltyHint)return;const total=Math.max(0,Number(q?.total||0)),rate=Math.max(0,Number(q?.loyalty_percent||0)),expected=Math.max(0,Number(q?.loyalty_expected||0));if(rate<=0){loyaltyHint.textContent='Бонусы за этот заказ не начисляются.';return}if(total<=0){loyaltyHint.textContent='К оплате 0 ₽ — бонусы за этот заказ не начисляются.';return}loyaltyHint.textContent='После выдачи начислим примерно '+points(expected)+' '+wordForm(expected,'бонус','бонуса','бонусов')+' ('+percent(rate)+'% от суммы к оплате).'}
 function choiceMax(q){const balance=Math.max(0,Number(q?.loyalty_balance||0)),subtotal=Math.max(0,Number(q?.subtotal||0)),rate=Math.max(0,Math.min(100,Number(q?.loyalty_spend_percent??100)));return Math.max(0,Math.round(Math.min(balance,subtotal,subtotal*rate/100)*100)/100)}
 function bindChoiceControls(q,giftOffer){
   document.querySelectorAll('[data-loyalty-mode]').forEach(button=>button.onclick=()=>{
