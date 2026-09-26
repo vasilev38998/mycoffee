@@ -17,8 +17,7 @@ import android.os.SystemClock;
 final class OrderNotifications {
     static final String CHANNEL_ID = "kapouch_new_orders_v4";
     private static final long[] VIBRATION = new long[]{0, 350, 140, 350, 140, 650};
-    private static final long REMINDER_DELAY_MS = 45_000L;
-    private static final int MAX_REMINDERS = 3;
+    private static final long REMINDER_DELAY_MS = 15_000L;
 
     private OrderNotifications() {}
 
@@ -55,7 +54,8 @@ final class OrderNotifications {
         manager.notify(notificationId(order.orderId), builder.build());
 
         // Some Evotor Android builds suppress the sound attached to Notification.Builder.
-        // Play a short alarm-stream sequence explicitly as a compatibility fallback.
+        // Play one explicit alarm-stream tone per reminder cycle. The next cycle is
+        // scheduled 15 seconds later and continues until the order leaves status "new".
         BaristaAlertPlayer.playNewOrder(context.getApplicationContext());
     }
 
@@ -134,7 +134,7 @@ final class OrderNotifications {
     }
 
     static boolean shouldRepeat(OrderRecord order) {
-        return order != null && "new".equals(order.status) && order.reminderCount < MAX_REMINDERS;
+        return order != null && "new".equals(order.status);
     }
 
     static void cancelReminder(Context context, String orderId) {
