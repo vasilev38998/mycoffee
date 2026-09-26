@@ -20,7 +20,7 @@ $checks=[
     'status API exposes promised pickup time'=>str_contains($statusApi,"['promised_at']")&&str_contains($statusApi,"['promised_display']"),
     'countdown updates locally without extra polling'=>str_contains($countdown,'setTimeout(render,30000)')&&!str_contains($countdown,'fetch('),
     'ready state has explicit pickup message'=>str_contains($countdown,"order.status==='ready'")&&str_contains($countdown,'Можно забирать сейчас'),
-    'service worker cache is refreshed'=>str_contains($sw,"const CACHE='kapouch-pwa-v54'")&&str_contains($sw,"./assets/saved-order.js?v=1")&&str_contains($sw,"./assets/pickup-countdown.js?v=1"),
+    'service worker cache is refreshed'=>str_contains($sw,"const CACHE='kapouch-pwa-v55'")&&str_contains($sw,"./assets/saved-order.js?v=1")&&str_contains($sw,"./assets/pickup-countdown.js?v=1"),
     'convenience assets are network first'=>str_contains($sw,"url.pathname.endsWith('/config.js')")&&str_contains($sw,"url.pathname.endsWith('/assets/saved-order.js')")&&str_contains($sw,"url.pathname.endsWith('/assets/pickup-countdown.js')"),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"PWA convenience contract failed: {$label}\n");exit(1);}echo "OK: {$label}\n";}
