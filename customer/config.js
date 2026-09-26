@@ -138,7 +138,7 @@ window.addEventListener('DOMContentLoaded',function(){
   document.body.appendChild(authRequired);
 
   var giftCheckout=document.createElement('script');
-  giftCheckout.src='assets/sixth-drink-checkout.js?v=5';
+  giftCheckout.src='assets/sixth-drink-checkout.js?v=6';
   giftCheckout.defer=true;
   document.body.appendChild(giftCheckout);
 
