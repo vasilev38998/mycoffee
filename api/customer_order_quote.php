@@ -8,6 +8,7 @@ require_once dirname(__DIR__).'/inc/customer_loyalty_runtime.php';
 require_once dirname(__DIR__).'/inc/customer_drink_loyalty.php';
 require_once dirname(__DIR__).'/inc/customer_same_order_gift.php';
 require_once dirname(__DIR__).'/inc/customer_checkout_loyalty.php';
+require_once dirname(__DIR__).'/inc/customer_wheel.php';
 
 customer_api_headers();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))==='OPTIONS'){http_response_code(204);exit;}
@@ -22,16 +23,24 @@ try{
     // it at most once per short customer window across quote/profile/card.
     customer_loyalty_refresh_customer_if_due($customerId,30,20);
 
-    // Always calculate the possible sixth-drink gift once so the PWA can show
-    // it as an alternative. If points are selected, the gift discount is not
-    // included in the payable base and the reward stays untouched.
+    // Gift, points and wheel voucher are deliberately exclusive. Calculate all
+    // offers once so the client can present the choice, then include only the
+    // selected mode in the payable total.
     $mode=customer_checkout_loyalty_mode($data);
     $quote=customer_same_order_gift_quote($customerId,$items);
     $giftOffer=$quote['gift']??null;
+    $wheelOffer=customer_wheel_discount_quote($customerId,$items,(int)($data['wheel_reward_id']??0));
+    $subtotal=round(max(0,(float)($quote['subtotal']??0)),2);
     if($mode!=='gift'){
         $quote['discount']=0.0;
         $quote['gift']=null;
-        $quote['total']=round(max(0,(float)($quote['subtotal']??0)),2);
+        $quote['total']=$subtotal;
+    }
+
+    $wheelDiscount=0.0;
+    if($mode==='wheel'&&$wheelOffer){
+        $wheelDiscount=round(min($subtotal,max(0,(float)$wheelOffer['discount'])),2);
+        $quote['total']=round(max(0,$subtotal-$wheelDiscount),2);
     }
 
     $beforePoints=round(max(0,(float)($quote['total']??0)),2);
@@ -39,6 +48,9 @@ try{
     $points=customer_loyalty_quote_spend($customerId,$beforePoints,$requestedSpend);
     $quote['gift_offer']=$giftOffer;
     $quote['gift_available']=is_array($giftOffer)&&!empty($giftOffer);
+    $quote['wheel_offer']=$wheelOffer;
+    $quote['wheel_available']=is_array($wheelOffer)&&!empty($wheelOffer);
+    $quote['wheel_discount']=$wheelDiscount;
     $quote['loyalty_mode']=$mode;
     $quote['total_before_points']=$beforePoints;
     $quote['loyalty_balance']=$points['balance'];
