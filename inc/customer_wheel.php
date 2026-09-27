@@ -57,7 +57,27 @@ function customer_wheel_expire_discounts(int $customerId=0,?PDO $pdo=null): int
 
 function customer_wheel_latest_spin(int $customerId,?PDO $pdo=null): ?array
 {
-    if($customerId<=0)return null;$pdo=$pdo??db();$stmt=$pdo->prepare('SELECT id,created_at FROM customer_wheel_spins WHERE customer_id=? ORDER BY id DESC LIMIT 1');$stmt->execute([$customerId]);$row=$stmt->fetch();return $row?:null;
+    if($customerId<=0)return null;$pdo=$pdo??db();$stmt=$pdo->prepare('SELECT id,created_at FROM customer_wheel_spins WHERE customer_id=? AND source_order_id IS NOT NULL ORDER BY id DESC LIMIT 1');$stmt->execute([$customerId]);$row=$stmt->fetch();return $row?:null;
+}
+
+function customer_wheel_manual_attempts(int $customerId,?PDO $pdo=null): int
+{
+    if($customerId<=0)return 0;$pdo=$pdo??db();$stmt=$pdo->prepare('SELECT COALESCE(SUM(attempts_remaining),0) FROM customer_wheel_attempt_grants WHERE customer_id=? AND attempts_remaining>0');$stmt->execute([$customerId]);return max(0,(int)$stmt->fetchColumn());
+}
+
+function customer_wheel_grant_manual_attempts(int $customerId,int $attempts,int $grantedByUserId=0,string $note='',?PDO $pdo=null): int
+{
+    if($customerId<=0)throw new RuntimeException('Клиент не найден.');
+    $attempts=max(1,min(50,$attempts));$note=trim($note);if(mb_strlen($note)>255)$note=mb_substr($note,0,255);$pdo=$pdo??db();
+    $check=$pdo->prepare('SELECT id FROM customer_accounts WHERE id=?');$check->execute([$customerId]);if(!$check->fetchColumn())throw new RuntimeException('Клиент не найден.');
+    $stmt=$pdo->prepare('INSERT INTO customer_wheel_attempt_grants(customer_id,attempts_total,attempts_remaining,granted_by_user_id,note) VALUES(?,?,?,?,?)');
+    $stmt->execute([$customerId,$attempts,$attempts,$grantedByUserId>0?$grantedByUserId:null,$note!==''?$note:null]);return (int)$pdo->lastInsertId();
+}
+
+function customer_wheel_take_manual_attempt(PDO $pdo,int $customerId): ?int
+{
+    $stmt=$pdo->prepare('SELECT id FROM customer_wheel_attempt_grants WHERE customer_id=? AND attempts_remaining>0 ORDER BY id ASC LIMIT 1 FOR UPDATE');$stmt->execute([$customerId]);$grantId=(int)($stmt->fetchColumn()?:0);if($grantId<=0)return null;
+    $upd=$pdo->prepare('UPDATE customer_wheel_attempt_grants SET attempts_remaining=attempts_remaining-1 WHERE id=? AND attempts_remaining>0');$upd->execute([$grantId]);if($upd->rowCount()!==1)return null;return $grantId;
 }
 
 function customer_wheel_eligible_order(int $customerId,?PDO $pdo=null): ?array
@@ -92,12 +112,12 @@ function customer_wheel_recent_wins(int $customerId,int $limit=5,?PDO $pdo=null)
 
 function customer_wheel_public_status(int $customerId): array
 {
-    $settings=customer_wheel_settings();$pdo=db();customer_wheel_expire_discounts($customerId,$pdo);$next=customer_wheel_next_available_at($customerId,$pdo);$eligible=$next===null?customer_wheel_eligible_order($customerId,$pdo):null;$discount=customer_wheel_active_discount($customerId,0,$pdo);
+    $settings=customer_wheel_settings();$pdo=db();customer_wheel_expire_discounts($customerId,$pdo);$manual=customer_wheel_manual_attempts($customerId,$pdo);$next=$manual>0?null:customer_wheel_next_available_at($customerId,$pdo);$eligible=$manual>0?null:($next===null?customer_wheel_eligible_order($customerId,$pdo):null);$discount=customer_wheel_active_discount($customerId,0,$pdo);
     $reason='order';
-    if(!$settings['enabled'])$reason='disabled';elseif($next!==null)$reason='cooldown';elseif($eligible!==null)$reason='ready';
+    if(!$settings['enabled'])$reason='disabled';elseif($manual>0)$reason='manual';elseif($next!==null)$reason='cooldown';elseif($eligible!==null)$reason='ready';
     return [
         'enabled'=>$settings['enabled'],'title'=>$settings['title'],'subtitle'=>$settings['subtitle'],'min_order'=>$settings['min_order'],'cooldown_hours'=>$settings['cooldown_hours'],
-        'can_spin'=>$settings['enabled']&&$next===null&&$eligible!==null,'reason'=>$reason,'available_at'=>$next,
+        'can_spin'=>$settings['enabled']&&($manual>0||($next===null&&$eligible!==null)),'reason'=>$reason,'available_at'=>$next,'manual_attempts'=>$manual,
         'eligible_order'=>$eligible?['order_number'=>$eligible['order_number'],'total_amount'=>$eligible['total_amount'],'completed_at'=>$eligible['completed_at']]:null,
         'prizes'=>customer_wheel_public_prizes($pdo),'active_discount'=>$discount,'recent'=>customer_wheel_recent_wins($customerId,5,$pdo),
     ];
@@ -142,14 +162,17 @@ function customer_wheel_spin(int $customerId): array
         $pdo=db();$pdo->beginTransaction();
         try{
             $customerLock=$pdo->prepare('SELECT id FROM customer_accounts WHERE id=? FOR UPDATE');$customerLock->execute([$customerId]);if(!$customerLock->fetchColumn())throw new RuntimeException('Профиль клиента не найден.');
-            $next=customer_wheel_next_available_at($customerId,$pdo);if($next!==null)throw new RuntimeException('Следующее вращение будет доступно позже.');
-            $order=customer_wheel_eligible_order($customerId,$pdo);if(!$order)throw new RuntimeException('Завершите подходящий заказ, чтобы открыть вращение.');
+            $manualGrantId=customer_wheel_take_manual_attempt($pdo,$customerId);$order=null;
+            if($manualGrantId===null){
+                $next=customer_wheel_next_available_at($customerId,$pdo);if($next!==null)throw new RuntimeException('Следующее вращение будет доступно позже.');
+                $order=customer_wheel_eligible_order($customerId,$pdo);if(!$order)throw new RuntimeException('Завершите подходящий заказ, чтобы открыть вращение.');
+            }
             $prize=customer_wheel_pick_prize($pdo);$uuid=customer_wheel_uuid();
-            $insert=$pdo->prepare("INSERT INTO customer_wheel_spins(spin_uuid,customer_id,source_order_id,prize_id,prize_title,prize_type,prize_value,prize_cap,reward_status) VALUES(?,?,?,?,?,?,?,?, 'granted')");
-            $insert->execute([$uuid,$customerId,$order['id'],$prize['id'],$prize['title'],$prize['prize_type'],$prize['value'],$prize['cap_value']]);$spinId=(int)$pdo->lastInsertId();
+            $insert=$pdo->prepare("INSERT INTO customer_wheel_spins(spin_uuid,customer_id,source_order_id,attempt_grant_id,prize_id,prize_title,prize_type,prize_value,prize_cap,reward_status) VALUES(?,?,?,?,?,?,?,?,?, 'granted')");
+            $insert->execute([$uuid,$customerId,$order['id']??null,$manualGrantId,$prize['id'],$prize['title'],$prize['prize_type'],$prize['value'],$prize['cap_value']]);$spinId=(int)$pdo->lastInsertId();
             $grant=customer_wheel_grant_prize($pdo,$spinId,$uuid,$customerId,$prize);$pdo->commit();
             $public=customer_wheel_public_prizes();$index=0;foreach($public as $i=>$segment)if((int)$segment['id']===(int)$prize['id']){$index=$i;break;}
-            return ['spin_id'=>$spinId,'spin_uuid'=>$uuid,'prize'=>['id'=>(int)$prize['id'],'title'=>(string)$prize['title'],'subtitle'=>(string)($prize['subtitle']??''),'type'=>(string)$prize['prize_type'],'value'=>(float)$prize['value'],'cap'=>(float)$prize['cap_value'],'icon'=>(string)$prize['icon'],'accent'=>(string)$prize['accent'],'status'=>$grant['status'],'expires_at'=>$grant['expires_at']],'prize_index'=>$index,'segment_count'=>count($public),'source_order_number'=>$order['order_number']];
+            return ['spin_id'=>$spinId,'spin_uuid'=>$uuid,'source'=>$manualGrantId!==null?'manual':'order','prize'=>['id'=>(int)$prize['id'],'title'=>(string)$prize['title'],'subtitle'=>(string)($prize['subtitle']??''),'type'=>(string)$prize['prize_type'],'value'=>(float)$prize['value'],'cap'=>(float)$prize['cap_value'],'icon'=>(string)$prize['icon'],'accent'=>(string)$prize['accent'],'status'=>$grant['status'],'expires_at'=>$grant['expires_at']],'prize_index'=>$index,'segment_count'=>count($public),'source_order_number'=>$order['order_number']??null];
         }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
     }finally{if(is_resource($lock)&&function_exists('kapouch_local_unlock'))kapouch_local_unlock($lock);}
 }
