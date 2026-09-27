@@ -58,7 +58,8 @@ function customer_auth_smsru_self_call_status(string $checkId): int
 function customer_auth_request_self_call(string $rawPhone): array
 {
     $phone=customer_order_normalize_phone($rawPhone);$pdo=db();$ip=customer_auth_client_ip();
-    $stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE phone=? AND created_at>DATE_SUB(NOW(),INTERVAL 60 SECOND)');$stmt->execute([$phone]);if((int)$stmt->fetchColumn()>0)throw new RuntimeException('Подтверждение уже запрошено. Повторите через минуту.');
+    // Self-call is the fallback for a missed incoming call, so it must be usable
+    // immediately. The hourly cap below still prevents repeated provider calls.
     $stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE phone=? AND created_at>=DATE_SUB(NOW(),INTERVAL 1 HOUR)');$stmt->execute([$phone]);if((int)$stmt->fetchColumn()>=5)throw new RuntimeException('Слишком много запросов для этого номера. Попробуйте позже.');
     $stmt=null;$pdo=null;db_disconnect();$provider=customer_auth_smsru_self_call_start($phone);$checkId=(string)$provider['check_id'];
     $pdo=db();$hash=customer_auth_code_hash($phone,'callcheck:'.$checkId);$stmt=$pdo->prepare('INSERT INTO customer_auth_codes(phone,code_hash,request_ip,expires_at) VALUES(?,?,?,DATE_ADD(NOW(),INTERVAL 5 MINUTE))');$stmt->execute([$phone,$hash,$ip?:null]);$rowId=(int)$pdo->lastInsertId();
