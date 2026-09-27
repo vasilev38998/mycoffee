@@ -78,6 +78,9 @@ jobs:
       - name: Customer wheel contract
         run: php tests/customer_wheel_contract.php
 
+      - name: Customer wheel visual contract
+        run: php tests/customer_wheel_visual_contract.php
+
       - name: Evotor order push queue contract
         run: php tests/evotor_order_push_queue_contract.php
 
