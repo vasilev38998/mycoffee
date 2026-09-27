@@ -7,7 +7,7 @@ $manifest=file_get_contents($root.'/scripts/beget_delta_manifest.py');
 $docs=file_get_contents($root.'/docs/BEGET_DEPLOY.md');
 
 $checks=[
-    'deploy waits for successful quality workflow'=>str_contains($workflow,'workflows: ["Project quality"]')&&str_contains($workflow,"github.event.workflow_run.conclusion == 'success'")&&str_contains($workflow,"github.event.workflow_run.head_branch == 'main'"),
+    'deploy waits for successful quality push on main'=>str_contains($workflow,'workflows: ["Project quality"]')&&str_contains($workflow,"github.event.workflow_run.event == 'push'")&&str_contains($workflow,"github.event.workflow_run.conclusion == 'success'")&&str_contains($workflow,"github.event.workflow_run.head_branch == 'main'")&&str_contains($workflow,'github.event.workflow_run.head_repository.full_name == github.repository'),
     'deploy additionally waits for runtime regression'=>str_contains($workflow,'runtime-regression.yml/runs?head_sha=')&&str_contains($workflow,'Runtime regression passed'),
     'required Beget secrets are explicit'=>str_contains($workflow,'secrets.BEGET_HOST')&&str_contains($workflow,'secrets.BEGET_USER')&&str_contains($workflow,'secrets.BEGET_SSH_KEY')&&str_contains($workflow,'secrets.BEGET_PATH'),
     'missing secrets cause safe skip'=>str_contains($workflow,'configured=false')&&str_contains($workflow,'workflow is intentionally skipped'),
