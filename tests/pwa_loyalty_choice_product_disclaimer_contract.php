@@ -20,11 +20,11 @@ $checks=[
     'disclaimer is not shown for fallback art'=>str_contains($disclaimer,"image.getAttribute('src')&&!image.hidden")&&str_contains($disclaimer,"hero.querySelector('.product-image-disclaimer.detail')?.remove()"),
     'disclaimer assets are styled'=>str_contains($disclaimerCss,'.product-image-disclaimer')&&str_contains($disclaimerCss,'.product-disclaimer-line'),
     'PWA loads disclaimer assets'=>str_contains($config,'product-disclaimer.css?v=1')&&str_contains($config,'product-disclaimer.js?v=1'),
-    'service worker caches disclaimer assets'=>str_contains($sw,"kapouch-pwa-v44")&&str_contains($sw,'./assets/product-disclaimer.css?v=1')&&str_contains($sw,'./assets/product-disclaimer.js?v=1'),
-    'checkout mode supports exclusive loyalty benefits'=>str_contains($choice,"['gift','points','none']")&&str_contains($orders,"if(\$loyaltyMode==='gift')")&&str_contains($orders,"elseif(\$loyaltyMode==='points')"),
-    'points mode preserves same-order gift'=>str_contains($sameOrder,"customer_checkout_loyalty_mode(\$data)!=='gift'")&&str_contains($ui,'Подарок «6-й напиток» сохранён'),
-    'quote exposes gift as an alternative when points selected'=>str_contains($quote,"\$quote['gift_offer']=\$giftOffer")&&str_contains($quote,"\$quote['gift']=null")&&str_contains($quote,"\$requestedSpend=\$mode==='points'"),
-    'PWA presents an explicit either-or choice'=>str_contains($ui,'Как использовать лояльность?')&&str_contains($ui,'Можно выбрать только один вариант на заказ')&&str_contains($ui,'data-loyalty-mode="gift"')&&str_contains($ui,'data-loyalty-mode="points"'),
+    'service worker caches disclaimer assets'=>str_contains($sw,"kapouch-pwa-v56")&&str_contains($sw,'./assets/product-disclaimer.css?v=1')&&str_contains($sw,'./assets/product-disclaimer.js?v=1'),
+    'checkout mode supports exclusive loyalty benefits'=>str_contains($choice,"['gift','points','wheel','none']")&&str_contains($orders,"if(\$loyaltyMode==='gift')")&&str_contains($orders,"elseif(\$loyaltyMode==='points')")&&str_contains($orders,"elseif(\$loyaltyMode==='wheel')"),
+    'non-gift modes preserve same-order gift'=>str_contains($sameOrder,"customer_checkout_loyalty_mode(\$data)!=='gift'")&&str_contains($ui,'Подарок «6-й напиток» сохранён'),
+    'quote exposes gift and wheel as alternatives'=>str_contains($quote,"\$quote['gift_offer']=\$giftOffer")&&str_contains($quote,"\$quote['wheel_offer']=\$wheelOffer")&&str_contains($quote,"\$requestedSpend=\$mode==='points'"),
+    'PWA presents an explicit exclusive choice'=>str_contains($ui,'Как использовать лояльность?')&&str_contains($ui,'На один заказ можно выбрать только один вариант')&&str_contains($ui,'data-loyalty-mode="gift"')&&str_contains($ui,'data-loyalty-mode="points"')&&str_contains($ui,'data-loyalty-mode="wheel"'),
 ];
 
 foreach($checks as $label=>$ok){
