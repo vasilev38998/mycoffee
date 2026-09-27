@@ -23,8 +23,10 @@ try{
     try{$auth=$method==='self_call'?customer_auth_request_self_call($phone):customer_auth_request_code($phone,'call');}finally{kapouch_local_unlock($lock);}
     customer_api_reply(200,['ok'=>true,'auth'=>$auth]);
 }catch(JsonException $e){customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);}
-catch(RuntimeException $e){customer_api_reply(422,['ok'=>false,'error'=>$e->getMessage()]);}
-catch(Throwable $e){
+catch(RuntimeException $e){
+    $message=str_replace('или используйте SMS','или выберите «Позвонить самому»',$e->getMessage());
+    customer_api_reply(422,['ok'=>false,'error'=>$message]);
+}catch(Throwable $e){
     if(function_exists('db_capacity_error')&&db_capacity_error($e)){header('Retry-After: 20');customer_api_reply(503,['ok'=>false,'error'=>'Сервис временно перегружен. Повторите через несколько секунд.']);}
     error_log('[Kapouch customer auth request] '.$e->getMessage());
     customer_api_reply(500,['ok'=>false,'error'=>'Не удалось подтвердить номер. Попробуйте позже.']);
