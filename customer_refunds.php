@@ -3,6 +3,7 @@ require __DIR__.'/inc/bootstrap.php';
 require_auth();
 require_once __DIR__.'/inc/customer_payments.php';
 require_once __DIR__.'/inc/customer_loyalty.php';
+require_once __DIR__.'/inc/customer_wheel.php';
 
 $user=current_user();
 if(!in_array($user['role']??'',['owner','manager'],true)){
@@ -19,8 +20,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
             $result=customer_payment_yookassa_refund_full($orderId);
             $state=(string)($result['status']??'');
             if($state==='succeeded'){
-                $reversed=customer_loyalty_reverse_order($orderId);
-                flash('success','Полный возврат выполнен. ЮKassa автоматически сформирует чек возврата на основе исходного чека.'.($reversed>0?' Начисленные бонусы отменены: '.number_format($reversed,2,',',' ').'.':''));
+                $reversed=customer_loyalty_reverse_order($orderId);$wheelRestored=customer_wheel_restore_order_discount($orderId,'полный возврат ЮKassa');
+                flash('success','Полный возврат выполнен. ЮKassa автоматически сформирует чек возврата на основе исходного чека.'.($reversed>0?' Начисленные бонусы отменены: '.number_format($reversed,2,',',' ').'.':'').($wheelRestored?' Приз колеса возвращён клиенту.':''));
             }elseif($state==='pending')flash('warning','Возврат принят ЮKassa и ещё обрабатывается. Статус обновится по webhook.');
             else flash('warning','ЮKassa вернула статус возврата: '.$state.'.');
         }elseif($action==='sync_refund'){
@@ -30,7 +31,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
             $result=customer_payment_yookassa_sync_refund($refundId);
             if(!$result)throw new RuntimeException('Не удалось получить статус возврата.');
             $state=(string)($result['status']??'');
-            if($state==='succeeded')customer_loyalty_reverse_order($orderId);
+            if($state==='succeeded'){customer_loyalty_reverse_order($orderId);customer_wheel_restore_order_discount($orderId,'синхронизация полного возврата ЮKassa');}
             flash('success','Статус возврата обновлён: '.($state!==''?$state:'неизвестно').'.');
         }else throw new RuntimeException('Неизвестное действие.');
     }catch(Throwable $e){flash('danger',$e->getMessage());}
