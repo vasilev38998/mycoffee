@@ -28,15 +28,18 @@ function ensureBox(){let box=document.getElementById('sixthDrinkCheckout');if(bo
 function clear(){lastQuote=null;const box=ensureBox();box.hidden=true;box.innerHTML=''}
 function renderCashback(q){if(!loyaltyHint)return;const total=Math.max(0,Number(q?.total||0)),rate=Math.max(0,Number(q?.loyalty_percent||0)),expected=Math.max(0,Number(q?.loyalty_expected||0));if(rate<=0){loyaltyHint.textContent='Бонусы за этот заказ не начисляются.';return}if(total<=0){loyaltyHint.textContent='К оплате 0 ₽ — бонусы за этот заказ не начисляются.';return}loyaltyHint.textContent='После выдачи начислим примерно '+points(expected)+' '+wordForm(expected,'бонус','бонуса','бонусов')+' ('+percent(rate)+'% от суммы к оплате).'}
 function choiceMax(q){const balance=Math.max(0,Number(q?.loyalty_balance||0)),subtotal=Math.max(0,Number(q?.subtotal||0)),rate=Math.max(0,Math.min(100,Number(q?.loyalty_spend_percent??100)));return Math.max(0,Math.round(Math.min(balance,subtotal,subtotal*rate/100)*100)/100)}
+function useWheel(wheelOffer){if(!wheelOffer)return;saveMode('wheel');saveSpend(0);if(wheelOffer.reward_id)saveWheelReward(wheelOffer.reward_id);schedule()}
 function bindChoiceControls(q,giftOffer,wheelOffer){
   document.querySelectorAll('[data-loyalty-mode]').forEach(button=>button.onclick=()=>{
     const mode=String(button.dataset.loyaltyMode||'gift');
     if(mode==='gift'){saveMode('gift');saveSpend(0)}
     else if(mode==='points'){const max=choiceMax(q);saveMode('points');saveSpend(max)}
-    else if(mode==='wheel'){saveMode('wheel');saveSpend(0);if(wheelOffer?.reward_id)saveWheelReward(wheelOffer.reward_id)}
+    else if(mode==='wheel')useWheel(wheelOffer);
     else{saveMode('none');saveSpend(0)}
-    schedule();
+    if(mode!=='wheel')schedule();
   });
+  const wheelUse=document.getElementById('wheelRewardUse');
+  if(wheelUse)wheelUse.onclick=()=>useWheel(wheelOffer);
   const wheelReset=document.getElementById('wheelRewardReset');
   if(wheelReset)wheelReset.onclick=()=>{saveMode(giftOffer?'gift':'none');saveSpend(0);schedule()};
   bindSpendControls(q,giftOffer,wheelOffer);
@@ -80,7 +83,7 @@ function render(q){
     if(wheelDiscount>0)blocks.push('<div class="sixth-drink-checkout-row gift-row"><span>'+String(wheelOffer.title||'Приз колеса')+'</span><strong>−'+money(wheelDiscount)+'</strong></div><small>Скидка '+percent(wheelOffer.percent)+'% применяется к одному подходящему напитку «'+String(wheelOffer.product_name||'')+'». Добавки оплачиваются отдельно. <button type="button" class="loyalty-inline-reset" id="wheelRewardReset">Оставить приз на потом</button></small>');
     else blocks.push('<div class="sixth-drink-checkout-row gift-row saved"><span>Приз колеса сохранён</span><strong>✦</strong></div><small>В корзине пока нет напитка, к которому можно применить скидку.</small>');
   }else if(wheelOffer){
-    blocks.push('<div class="sixth-drink-checkout-row gift-row saved"><span>'+String(wheelOffer.title||'Приз колеса')+' сохранён</span><strong>✦</strong></div><small>Выберите «Приз колеса», чтобы применить −'+percent(wheelOffer.percent)+'% к подходящему напитку.</small>');
+    blocks.push('<div class="sixth-drink-checkout-row gift-row saved"><span>'+String(wheelOffer.title||'Приз колеса')+' сохранён</span><strong>✦</strong></div><small>Можно применить −'+percent(wheelOffer.percent)+'% к подходящему напитку. <button type="button" class="loyalty-inline-reset" id="wheelRewardUse">Применить приз</button></small>');
   }
 
   const showPoints=canPoints&&((!giftOffer&&!wheelOffer)||selected==='points');
