@@ -33,15 +33,21 @@ function customer_auth_smsru_configured(): bool{return (string)app_setting('smsr
 function customer_auth_code_hash(string $phone,string $code): string{return hash_hmac('sha256',$phone.'|'.$code,customer_auth_secret_key());}
 function customer_auth_client_ip(): string{return mb_substr(trim((string)($_SERVER['REMOTE_ADDR']??'')),0,64);}
 function customer_auth_session_days(): int{return 180;}
+function customer_auth_test_mode(): bool{return (string)app_setting('smsru_test_mode','0')==='1';}
 
-function customer_auth_send_smsru(string $phone,string $code): void
+function customer_auth_smsru_api_id(): string
 {
     $encrypted=(string)app_setting('smsru_api_id','');
     if($encrypted==='')throw new RuntimeException('SMS.ru ещё не настроен в Kapouch.');
-    $apiId=customer_auth_decrypt($encrypted);
+    return customer_auth_decrypt($encrypted);
+}
+
+function customer_auth_send_smsru(string $phone,string $code): void
+{
+    $apiId=customer_auth_smsru_api_id();
     $digits=preg_replace('/\D+/','',$phone)??'';
     $sender=trim((string)app_setting('smsru_sender',''));
-    $testMode=(string)app_setting('smsru_test_mode','0')==='1';
+    $testMode=customer_auth_test_mode();
     $params=['api_id'=>$apiId,'to'=>$digits,'msg'=>'Код входа Kapouch: '.$code.'. Никому не сообщайте этот код.','json'=>1,'ip'=>customer_auth_client_ip()];
     if($sender!=='')$params['from']=$sender;
     if($testMode)$params['test']=1;
@@ -58,39 +64,72 @@ function customer_auth_send_smsru(string $phone,string $code): void
     if(!is_array($sms)||(int)($sms['status_code']??0)!==100)throw new RuntimeException('SMS.ru не принял сообщение'.(!empty($sms['status_text'])?': '.$sms['status_text']:'.'));
 }
 
-function customer_auth_request_code(string $rawPhone): array
+function customer_auth_send_call_smsru(string $phone): array
 {
-    $phone=customer_order_normalize_phone($rawPhone);$pdo=db();$ip=customer_auth_client_ip();
-    $stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE phone=? AND created_at>DATE_SUB(NOW(),INTERVAL 60 SECOND)');$stmt->execute([$phone]);
-    if((int)$stmt->fetchColumn()>0)throw new RuntimeException('Код уже отправлен. Повторите через минуту.');
-    $stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE phone=? AND created_at>=DATE_SUB(NOW(),INTERVAL 1 HOUR)');$stmt->execute([$phone]);
-    if((int)$stmt->fetchColumn()>=5)throw new RuntimeException('Слишком много кодов для этого номера. Попробуйте позже.');
-    if($ip!==''){$stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE request_ip=? AND created_at>=DATE_SUB(NOW(),INTERVAL 1 HOUR)');$stmt->execute([$ip]);if((int)$stmt->fetchColumn()>=20)throw new RuntimeException('Слишком много запросов. Попробуйте позже.');}
-    $testMode=(string)app_setting('smsru_test_mode','0')==='1';
-    $code=$testMode?'999999':(string)random_int(100000,999999);
+    if(customer_auth_test_mode())return ['code'=>'9999','call_id'=>'test'];
+    $apiId=customer_auth_smsru_api_id();
+    $digits=preg_replace('/\D+/','',$phone)??'';
+    $ip=customer_auth_client_ip();
+    $params=['api_id'=>$apiId,'phone'=>$digits,'ip'=>$ip!==''?$ip:'-1'];
 
-    // PDOStatement keeps its owning connection alive, so release both local
-    // references before the external SMS request and then reconnect only when
-    // the code must be persisted.
+    db_disconnect();
+    $ch=curl_init('https://sms.ru/code/call');
+    curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>http_build_query($params),CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>4,CURLOPT_TIMEOUT=>9,CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded']]);
+    $body=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
+    if($body===false||$error!=='')throw new RuntimeException('Не удалось связаться с SMS.ru для звонка.');
+    if($http<200||$http>=300)throw new RuntimeException('SMS.ru вернул HTTP '.$http.'.');
+    $data=json_decode((string)$body,true);
+    if(!is_array($data)||strtoupper((string)($data['status']??''))!=='OK')throw new RuntimeException('SMS.ru не смог выполнить звонок'.(!empty($data['status_text'])?': '.$data['status_text']:'.'));
+    $code=trim((string)($data['code']??''));
+    if(!preg_match('/^\d{4}$/',$code))throw new RuntimeException('SMS.ru не вернул код звонка. Повторите попытку.');
+    return ['code'=>$code,'call_id'=>trim((string)($data['call_id']??''))];
+}
+
+function customer_auth_request_code(string $rawPhone,string $method='call'): array
+{
+    $phone=customer_order_normalize_phone($rawPhone);$method=strtolower(trim($method));
+    if(!in_array($method,['call','sms'],true))throw new RuntimeException('Неизвестный способ подтверждения номера.');
+    $pdo=db();$ip=customer_auth_client_ip();
+    // The call is the primary method. SMS is intentionally allowed immediately
+    // as a fallback when the incoming call is delayed or blocked by the carrier.
+    if($method==='call'){
+        $stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE phone=? AND created_at>DATE_SUB(NOW(),INTERVAL 60 SECOND)');$stmt->execute([$phone]);
+        if((int)$stmt->fetchColumn()>0)throw new RuntimeException('Подтверждение уже запрошено. Повторите через минуту или используйте SMS.');
+    }
+    $stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE phone=? AND created_at>=DATE_SUB(NOW(),INTERVAL 1 HOUR)');$stmt->execute([$phone]);
+    if((int)$stmt->fetchColumn()>=5)throw new RuntimeException('Слишком много запросов для этого номера. Попробуйте позже.');
+    if($ip!==''){$stmt=$pdo->prepare('SELECT COUNT(*) FROM customer_auth_codes WHERE request_ip=? AND created_at>=DATE_SUB(NOW(),INTERVAL 1 HOUR)');$stmt->execute([$ip]);if((int)$stmt->fetchColumn()>=20)throw new RuntimeException('Слишком много запросов. Попробуйте позже.');}
+    $testMode=customer_auth_test_mode();
+
+    // PDOStatement keeps its owning connection alive, so release all DB
+    // references before the external SMS.ru request.
     $stmt=null;$pdo=null;db_disconnect();
-    customer_auth_send_smsru($phone,$code);
+    if($method==='call'){
+        $provider=customer_auth_send_call_smsru($phone);
+        $code=(string)$provider['code'];
+    }else{
+        $code=$testMode?'999999':(string)random_int(100000,999999);
+        customer_auth_send_smsru($phone,$code);
+    }
 
     $pdo=db();
     $stmt=$pdo->prepare('INSERT INTO customer_auth_codes(phone,code_hash,request_ip,expires_at) VALUES(?,?,?,DATE_ADD(NOW(),INTERVAL 5 MINUTE))');
     $stmt->execute([$phone,customer_auth_code_hash($phone,$code),$ip?:null]);
-    $result=['phone'=>$phone,'expires_in'=>300,'resend_in'=>60];
-    if($testMode)$result['test_code']='999999';
+    $newId=(int)$pdo->lastInsertId();
+    if($newId>0)$pdo->prepare('UPDATE customer_auth_codes SET consumed_at=NOW() WHERE phone=? AND id<>? AND consumed_at IS NULL')->execute([$phone,$newId]);
+    $result=['phone'=>$phone,'delivery'=>$method,'code_length'=>$method==='call'?4:6,'expires_in'=>300,'resend_in'=>60];
+    if($testMode)$result['test_code']=$code;
     return $result;
 }
 
 function customer_auth_verify_code(string $rawPhone,string $code): array
 {
     $phone=customer_order_normalize_phone($rawPhone);$code=trim($code);
-    if(!preg_match('/^\d{6}$/',$code))throw new RuntimeException('Введите 6 цифр из SMS.');
+    if(!preg_match('/^\d{4}(?:\d{2})?$/',$code))throw new RuntimeException('Введите 4 цифры со звонка или 6 цифр из SMS.');
     $pdo=db();$pdo->beginTransaction();
     try{
         $stmt=$pdo->prepare('SELECT *,CASE WHEN expires_at<=NOW() THEN 1 ELSE 0 END AS is_expired FROM customer_auth_codes WHERE phone=? AND consumed_at IS NULL ORDER BY id DESC LIMIT 1 FOR UPDATE');$stmt->execute([$phone]);$row=$stmt->fetch();
-        if(!$row)throw new RuntimeException('Запросите новый код.');
+        if(!$row)throw new RuntimeException('Запросите новый код подтверждения.');
         if((int)$row['is_expired']===1)throw new RuntimeException('Код истёк. Запросите новый.');
         if((int)$row['attempts']>=5)throw new RuntimeException('Превышено число попыток. Запросите новый код.');
         if(!hash_equals((string)$row['code_hash'],customer_auth_code_hash($phone,$code))){$pdo->prepare('UPDATE customer_auth_codes SET attempts=attempts+1 WHERE id=?')->execute([(int)$row['id']]);$pdo->commit();throw new RuntimeException('Неверный код.');}

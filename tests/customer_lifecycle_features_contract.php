@@ -6,6 +6,10 @@ $player=file_get_contents($root.'/evotor-app/app/src/main/java/ru/kapouch/evotor
 $gradle=file_get_contents($root.'/evotor-app/app/build.gradle');
 $welcome=file_get_contents($root.'/inc/customer_welcome.php');
 $auth=file_get_contents($root.'/api/customer_auth_verify.php');
+$authCore=file_get_contents($root.'/inc/customer_auth.php');
+$authRequest=file_get_contents($root.'/api/customer_auth_request.php');
+$authUi=file_get_contents($root.'/customer/assets/auth-call.js');
+$config=file_get_contents($root.'/customer/config.js');
 $loyaltyAdmin=file_get_contents($root.'/customer_loyalty_settings.php');
 $birthday=file_get_contents($root.'/inc/customer_birthday.php');
 $pushAdmin=file_get_contents($root.'/push_notifications.php');
@@ -36,6 +40,12 @@ $checks=[
  'Kapouch logo replaces generic icon'=>str_contains($icon,'Фирменный жёлтый логотип Kapouch')&&str_contains($icon,'>KAPOUCH</text>')&&str_contains($icon,'КОФЕ С СОБОЙ'),
  'manifest uses refreshed Kapouch icon'=>str_contains($manifest,'assets/icon.svg?v=2')&&str_contains($manifest,"'theme_color'=>'#ffd523'"),
  'PWA cache refreshes profile and brand assets'=>str_contains($sw,"const CACHE='kapouch-pwa-v55'")&&str_contains($sw,"url.pathname.endsWith('/assets/profile-plus.js')")&&str_contains($sw,"url.pathname.endsWith('/assets/icon.svg')"),
+ 'SMS.ru call-code endpoint is primary auth transport'=>str_contains($authCore,"curl_init('https://sms.ru/code/call')")&&str_contains($authCore,"string \$method='call'")&&str_contains($authRequest,"\$data['method']??'call'"),
+ 'call auth sends phone user IP and API id'=>str_contains($authCore,"'api_id'=>\$apiId,'phone'=>\$digits,'ip'=>")&&str_contains($authCore,"preg_match('/^\\d{4}$/',\$code)"),
+ 'SMS remains available as fallback'=>str_contains($authCore,"curl_init('https://sms.ru/sms/send')")&&str_contains($authRequest,"['call','sms']")&&str_contains($authUi,"requestAuth('sms',true)"),
+ 'verification accepts call and SMS code lengths'=>str_contains($authCore,"/^\\d{4}(?:\\d{2})?$/")&&str_contains($authCore,'Введите 4 цифры со звонка или 6 цифр из SMS.'),
+ 'PWA explains that the call does not need answering'=>str_contains($authUi,'Отвечать не нужно')&&str_contains($authUi,'Последние 4 цифры номера')&&str_contains($authUi,'Получить звонок'),
+ 'PWA loads call auth enhancement'=>str_contains($config,"callAuth.src='assets/auth-call.js?v=1'"),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"Customer lifecycle contract failed: {$label}\n");exit(1);}echo "OK: {$label}\n";}
 echo "CUSTOMER LIFECYCLE FEATURES CONTRACT PASSED\n";
