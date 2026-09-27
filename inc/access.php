@@ -32,3 +32,4 @@ function require_page_access(): void{
     $user=current_user();
     if(!$user){header('Location: login.php');exit;}
     if(!can_access_page($page,$user)){http_response_code(403);exit('Недостаточно прав для этого раздела.');}
+}
