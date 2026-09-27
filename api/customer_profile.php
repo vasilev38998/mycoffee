@@ -6,6 +6,7 @@ require_once dirname(__DIR__).'/inc/customer_auth.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty_runtime.php';
 require_once dirname(__DIR__).'/inc/customer_drink_loyalty.php';
+require_once dirname(__DIR__).'/inc/customer_media.php';
 
 customer_api_headers();
 $method=strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'));
@@ -35,10 +36,13 @@ try{
     // for the neighbouring requests instead of replaying dozens of old orders.
     customer_loyalty_refresh_customer_if_due($customerId,30,20);
     $profile=customer_auth_profile($customer);
-    $stmt=db()->prepare('SELECT email,name,birth_date FROM customer_accounts WHERE id=? LIMIT 1');$stmt->execute([$customerId]);$account=$stmt->fetch()?:[];
+    $stmt=db()->prepare('SELECT email,name,birth_date,avatar_path FROM customer_accounts WHERE id=? LIMIT 1');$stmt->execute([$customerId]);$account=$stmt->fetch()?:[];
     $profile['customer']['email']=trim((string)($account['email']??''));
     $profile['customer']['name']=trim((string)($account['name']??''));
     $profile['customer']['birth_date']=trim((string)($account['birth_date']??''));
+    $avatarPath=customer_media_public_path($account['avatar_path']??null);
+    $profile['customer']['avatar_path']=$avatarPath??'';
+    $profile['customer']['avatar_url']=$avatarPath??'';
 
     $stmt=db()->prepare("SELECT COUNT(*) completed_orders,COALESCE(SUM(o.total_amount),0) completed_spend FROM customer_order_access a JOIN online_orders o ON o.id=a.order_id WHERE a.customer_id=? AND o.status='completed' AND COALESCE(o.payment_status,'')<>'refunded'");
     $stmt->execute([$customerId]);$orderStats=$stmt->fetch()?:[];
