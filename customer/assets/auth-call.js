@@ -8,10 +8,11 @@ let busy=false;
 
 function setError(message,inCodeForm=false){
   const phoneError=$('phoneError'),codeError=$('codeError');
-  if(phoneError)phoneError.classList.remove('show');
-  if(codeError)codeError.classList.remove('show');
+  if(phoneError){phoneError.classList.remove('show');phoneError.textContent='';}
+  if(codeError){codeError.classList.remove('show');codeError.textContent='';}
+  if(!message)return;
   const target=inCodeForm?codeError:phoneError;
-  if(target){target.textContent=String(message||'Не удалось подтвердить номер.');target.classList.add('show');}
+  if(target){target.textContent=String(message);target.classList.add('show');}
 }
 
 async function requestAuth(method,inCodeForm=false){
@@ -21,6 +22,7 @@ async function requestAuth(method,inCodeForm=false){
   const primary=$('sendCodeButton'),smsStart=$('smsStartButton'),smsFallback=$('smsFallbackButton');
   const pressed=method==='sms'?(inCodeForm?smsFallback:smsStart):primary;
   busy=true;
+  setError('',inCodeForm);
   if(pressed){pressed.disabled=true;pressed.textContent=method==='call'?'Звоним…':'Отправляем SMS…';}
   try{
     const response=await fetch(apiBase+'/customer_auth_request.php',{method:'POST',cache:'no-store',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({phone,method})});
