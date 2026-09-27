@@ -157,9 +157,14 @@ window.addEventListener('DOMContentLoaded',function(){
   document.body.appendChild(phoneMask);
 
   var callAuth=document.createElement('script');
-  callAuth.src='assets/auth-call.js?v=1';
+  callAuth.src='assets/auth-call.js?v=2';
   callAuth.defer=true;
   document.body.appendChild(callAuth);
+
+  var mapsReviews=document.createElement('script');
+  mapsReviews.src='assets/maps-reviews.js?v=1';
+  mapsReviews.defer=true;
+  document.body.appendChild(mapsReviews);
 
   var s=document.createElement('script');
   s.src='assets/push.js?v=2';
