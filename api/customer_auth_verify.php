@@ -25,9 +25,10 @@ try{
         customer_api_reply(200,['ok'=>true,'auth'=>$auth]);
     }
 
-    $rawPhone=customer_phone_canonical_ru((string)($data['phone']??''));$phoneKey=preg_replace('/\D+/','',$rawPhone)??'';
-    if($phoneKey!==''){$phoneLimit=kapouch_rate_limit_hit('customer_auth_verify_phone',$phoneKey,15,900);if(!$phoneLimit['allowed']){header('Retry-After: '.(int)$phoneLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много попыток для этого номера. Запросите новый код позже.']);}}
-    $auth=customer_auth_verify_code($rawPhone,(string)($data['code']??''));
+    $rawPhone=customer_phone_canonical_ru((string)($data['phone']??''));$phoneKey=preg_replace('/\D+/','',$rawPhone)??'';$code=trim((string)($data['code']??''));
+    if(!preg_match('/^\d{4}$/',$code))customer_api_reply(422,['ok'=>false,'error'=>'Введите последние 4 цифры номера, с которого поступил звонок.']);
+    if($phoneKey!==''){$phoneLimit=kapouch_rate_limit_hit('customer_auth_verify_phone',$phoneKey,15,900);if(!$phoneLimit['allowed']){header('Retry-After: '.(int)$phoneLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много попыток для этого номера. Запросите новый звонок позже.']);}}
+    $auth=customer_auth_verify_code($rawPhone,$code);
     $customerId=(int)($auth['customer']['id']??0);
     if($customerId>0){
         try{
