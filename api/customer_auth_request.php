@@ -3,6 +3,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
+require_once dirname(__DIR__).'/inc/customer_auth_self_call.php';
 require_once dirname(__DIR__).'/inc/customer_phone.php';
 
 customer_api_headers();
@@ -14,14 +15,12 @@ try{
     if(!$ipLimit['allowed']){header('Retry-After: '.(int)$ipLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много запросов подтверждения. Попробуйте позже.']);}
     $data=customer_api_json();$rawPhone=(string)($data['phone']??'');$phone=customer_phone_canonical_ru($rawPhone);
     $method=strtolower(trim((string)($data['method']??'call')));
-    if(!in_array($method,['call','sms'],true))customer_api_reply(422,['ok'=>false,'error'=>'Неизвестный способ подтверждения номера.']);
+    if(!in_array($method,['call','self_call'],true))customer_api_reply(422,['ok'=>false,'error'=>'Неизвестный способ подтверждения номера.']);
     $phoneLimit=kapouch_rate_limit_hit('customer_auth_request_phone',$phone,10,3600);
     if(!$phoneLimit['allowed']){header('Retry-After: '.(int)$phoneLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много запросов подтверждения для этого номера. Попробуйте позже.']);}
-    // Keep the external SMS.ru call outside MySQL connection lifetime. A
-    // host-local lock prevents duplicate simultaneous requests for one phone.
     $lock=kapouch_local_lock('customer_auth_code:'.$phone);
     if(!$lock){header('Retry-After: 2');customer_api_reply(429,['ok'=>false,'error'=>'Подтверждение для этого номера уже запрашивается. Повторите через несколько секунд.']);}
-    try{$auth=customer_auth_request_code($phone,$method);}finally{kapouch_local_unlock($lock);}
+    try{$auth=$method==='self_call'?customer_auth_request_self_call($phone):customer_auth_request_code($phone,'call');}finally{kapouch_local_unlock($lock);}
     customer_api_reply(200,['ok'=>true,'auth'=>$auth]);
 }catch(JsonException $e){customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);}
 catch(RuntimeException $e){customer_api_reply(422,['ok'=>false,'error'=>$e->getMessage()]);}
