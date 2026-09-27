@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS customer_wheel_spins (
     prize_cap DECIMAL(12,2) NOT NULL DEFAULT 0,
     reward_status ENUM('granted','available','redeemed','expired','restored') NOT NULL DEFAULT 'granted',
     redeemed_order_id BIGINT UNSIGNED DEFAULT NULL,
+    redeemed_discount DECIMAL(12,2) NOT NULL DEFAULT 0,
     expires_at DATETIME DEFAULT NULL,
     redeemed_at DATETIME DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
