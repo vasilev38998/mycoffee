@@ -39,7 +39,7 @@ $checks=[
  'admin exposes birthday notification settings'=>str_contains($pushAdmin,'name="birthday_time"')&&str_contains($pushAdmin,'name="birthday_title"')&&str_contains($pushAdmin,'name="birthday_body"'),
  'Kapouch logo replaces generic icon'=>str_contains($icon,'Фирменный жёлтый логотип Kapouch')&&str_contains($icon,'>KAPOUCH</text>')&&str_contains($icon,'КОФЕ С СОБОЙ'),
  'manifest uses refreshed Kapouch icon'=>str_contains($manifest,'assets/icon.svg?v=2')&&str_contains($manifest,"'theme_color'=>'#ffd523'"),
- 'PWA cache refreshes profile and brand assets'=>str_contains($sw,"const CACHE='kapouch-pwa-v55'")&&str_contains($sw,"url.pathname.endsWith('/assets/profile-plus.js')")&&str_contains($sw,"url.pathname.endsWith('/assets/icon.svg')"),
+ 'PWA cache refreshes profile and brand assets'=>str_contains($sw,"const CACHE='kapouch-pwa-v56'")&&str_contains($sw,"url.pathname.endsWith('/assets/profile-plus.js')")&&str_contains($sw,"url.pathname.endsWith('/assets/icon.svg')"),
  'SMS.ru call-code endpoint is primary auth transport'=>str_contains($authCore,"curl_init('https://sms.ru/code/call')")&&str_contains($authCore,"string \$method='call'")&&str_contains($authRequest,"\$data['method']??'call'"),
  'call auth sends phone user IP and API id'=>str_contains($authCore,"'api_id'=>\$apiId,'phone'=>\$digits,'ip'=>")&&str_contains($authCore,"preg_match('/^\\d{4}$/',\$code)"),
  'SMS remains available as fallback'=>str_contains($authCore,"curl_init('https://sms.ru/sms/send')")&&str_contains($authRequest,"['call','sms']")&&str_contains($authUi,"requestAuth('sms',true)"),

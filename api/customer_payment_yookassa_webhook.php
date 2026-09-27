@@ -4,6 +4,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_payments.php';
 require_once dirname(__DIR__).'/inc/customer_loyalty.php';
+require_once dirname(__DIR__).'/inc/customer_wheel.php';
 require_once dirname(__DIR__).'/inc/evotor_order_notifications.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -28,7 +29,9 @@ try{
         if(!$known->fetchColumn())throw new RuntimeException('refund not found');
         $result=customer_payment_yookassa_sync_refund($objectId);
         if(!$result)throw new RuntimeException('refund not found');
-        if((string)($result['status']??'')==='succeeded')customer_loyalty_reverse_order((int)($result['order_id']??0));
+        if((string)($result['status']??'')==='succeeded'){
+            $orderId=(int)($result['order_id']??0);customer_loyalty_reverse_order($orderId);customer_wheel_restore_order_discount($orderId,'refund.succeeded webhook');
+        }
     }elseif(str_starts_with($event,'payment.')){
         $result=customer_payment_yookassa_sync_by_provider_id($objectId);
         if(!$result)throw new RuntimeException('payment not found');

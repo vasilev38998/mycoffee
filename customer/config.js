@@ -24,13 +24,15 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
   function isProfileRequest(input){return requestUrl(input).indexOf('/customer_profile.php')!==-1;}
   function isCatalogRequest(input){return requestUrl(input).indexOf('/customer_catalog.php')!==-1;}
   function isOrderRequest(input){return requestUrl(input).indexOf('/customer_order.php')!==-1;}
-  function loyaltyMode(){var mode=String(localStorage.getItem('kapouch_loyalty_mode')||'gift');return ['gift','points','none'].indexOf(mode)!==-1?mode:'gift';}
+  function loyaltyMode(){var mode=String(localStorage.getItem('kapouch_loyalty_mode')||'gift');return ['gift','points','wheel','none'].indexOf(mode)!==-1?mode:'gift';}
+  function wheelRewardId(){var id=Number(localStorage.getItem('kapouch_wheel_reward_id')||0);return Number.isInteger(id)&&id>0?id:0;}
   function attachLoyaltyMode(input,init){
     if(!isOrderRequest(input)||requestMethod(init)!=='POST'||!init||typeof init.body!=='string')return init;
     try{
       var payload=JSON.parse(init.body);
       if(!payload||Array.isArray(payload)||typeof payload!=='object')return init;
       payload.loyalty_mode=loyaltyMode();
+      if(payload.loyalty_mode==='wheel')payload.wheel_reward_id=wheelRewardId();
       return Object.assign({},init,{body:JSON.stringify(payload)});
     }catch(e){return init}
   }
@@ -65,6 +67,8 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
   }
 
   window.fetch=function(input,init){
+    if(typeof input==='string'&&input.indexOf('/customer_wheel.php')!==-1)input=input.replace('/customer_wheel.php','/customer_wheel_api.php');
+    else if(input instanceof URL&&input.pathname.endsWith('/customer_wheel.php'))input=new URL(input.href.replace('/customer_wheel.php','/customer_wheel_api.php'));
     if(typeof input==='string'&&input.indexOf('../api/')===0)input=apiBase+'/'+input.slice('../api/'.length);
     else if(input instanceof URL&&input.href.indexOf(new URL('../api/',window.location.href).href)===0)input=new URL(apiBase+'/'+input.href.slice(new URL('../api/',window.location.href).href.length));
 
@@ -109,7 +113,7 @@ window.addEventListener('DOMContentLoaded',function(){
 
   var giftStyle=document.createElement('link');
   giftStyle.rel='stylesheet';
-  giftStyle.href='assets/sixth-drink-checkout.css?v=3';
+  giftStyle.href='assets/sixth-drink-checkout.css?v=4';
   document.head.appendChild(giftStyle);
 
   var disclaimerStyle=document.createElement('link');
@@ -138,7 +142,7 @@ window.addEventListener('DOMContentLoaded',function(){
   document.body.appendChild(authRequired);
 
   var giftCheckout=document.createElement('script');
-  giftCheckout.src='assets/sixth-drink-checkout.js?v=6';
+  giftCheckout.src='assets/sixth-drink-checkout.js?v=7';
   giftCheckout.defer=true;
   document.body.appendChild(giftCheckout);
 
@@ -181,6 +185,11 @@ window.addEventListener('DOMContentLoaded',function(){
   pickupCountdown.src='assets/pickup-countdown.js?v=1';
   pickupCountdown.defer=true;
   document.body.appendChild(pickupCountdown);
+
+  var wheel=document.createElement('script');
+  wheel.src='assets/wheel.js?v=1';
+  wheel.defer=true;
+  document.body.appendChild(wheel);
 
   var qr=document.createElement('script');
   qr.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
