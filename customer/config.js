@@ -191,6 +191,17 @@ window.addEventListener('DOMContentLoaded',function(){
   wheel.defer=true;
   document.body.appendChild(wheel);
 
+  var wheelStyle=document.createElement('link');
+  wheelStyle.rel='stylesheet';
+  wheelStyle.href='assets/wheel.css?v=2';
+  wheelStyle.dataset.kapouchWheelPremium='1';
+  document.head.appendChild(wheelStyle);
+
+  var wheelPremium=document.createElement('script');
+  wheelPremium.src='assets/wheel-premium.js?v=1';
+  wheelPremium.defer=true;
+  document.body.appendChild(wheelPremium);
+
   var qr=document.createElement('script');
   qr.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
   qr.integrity='sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==';
