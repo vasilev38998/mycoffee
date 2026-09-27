@@ -4,9 +4,7 @@ Workflow `.github/workflows/deploy-beget.yml` выкладывает production 
 
 ## Что именно загружается
 
-`script/beget_delta_manifest.py` не используется: актуальный генератор находится в `scripts/beget_delta_manifest.py`.
-
-Он строит разницу между последним успешно отмеченным production commit и новым `main`, после чего `rsync` передаёт только изменённые/новые deployable-файлы. Удалённые из Git deployable-файлы удаляются на Beget отдельным безопасным шагом.
+Генератор `scripts/beget_delta_manifest.py` строит разницу между последним успешно отмеченным production commit и новым `main`, после чего `rsync` передаёт только изменённые/новые deployable-файлы. Удалённые из Git deployable-файлы удаляются на Beget отдельным безопасным шагом.
 
 Разрешены:
 
@@ -72,6 +70,7 @@ Workflow хранит на сервере служебный файл `.kapouch-
 ## Защита процесса
 
 - workflow не делает ничего, пока обязательные Secrets не настроены;
+- автоматический запуск принимается только от `push`-проверки `Project quality` на `main` внутри этого же репозитория;
 - `Project quality` должен пройти успешно;
 - для автоматического запуска workflow ждёт `Runtime regression` того же commit;
 - используется SSH `BatchMode` + strict host key checking;
