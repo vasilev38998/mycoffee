@@ -176,6 +176,11 @@ window.addEventListener('DOMContentLoaded',function(){
   compact.defer=true;
   document.body.appendChild(compact);
 
+  var profileAvatar=document.createElement('script');
+  profileAvatar.src='assets/profile-avatar.js?v=1';
+  profileAvatar.defer=true;
+  document.body.appendChild(profileAvatar);
+
   var statusOnce=document.createElement('script');
   statusOnce.src='assets/status-once.js?v=1';
   statusOnce.defer=true;
@@ -195,6 +200,11 @@ window.addEventListener('DOMContentLoaded',function(){
   wheel.src='assets/wheel.js?v=1';
   wheel.defer=true;
   document.body.appendChild(wheel);
+
+  var wheelPolish=document.createElement('script');
+  wheelPolish.src='assets/wheel-polish.js?v=1';
+  wheelPolish.defer=true;
+  document.body.appendChild(wheelPolish);
 
   var qr=document.createElement('script');
   qr.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';

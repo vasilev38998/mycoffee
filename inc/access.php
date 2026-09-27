@@ -18,7 +18,7 @@ function kapouch_public_pages(): array{
     return [
       'login.php','logout.php','install.php','api_online_orders.php','receipt_proverkacheka_proxy.php',
       'customer_catalog.php','customer_product_image.php','customer_order.php','customer_order_quote.php','customer_order_status.php','customer_order_detail.php','customer_favorites.php','customer_reorder.php','customer_manifest.php','customer_legal.php','customer_maps_public.php','customer_wheel_api.php','customer_payment_yookassa_webhook.php','evotor_order_action.php','evotor_customer_lookup.php','evotor_loyalty_discount.php','evotor_bridge.php',
-      'customer_auth_request.php','customer_auth_verify.php','customer_profile.php','customer_loyalty_card.php','customer_logout.php',
+      'customer_auth_request.php','customer_auth_verify.php','customer_profile.php','customer_profile_avatar.php','customer_loyalty_card.php','customer_logout.php',
       'customer_push_config.php','customer_push_subscribe.php','customer_push_unsubscribe.php'
     ];
 }

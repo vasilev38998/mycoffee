@@ -30,6 +30,14 @@ try{
     $quote=customer_same_order_gift_quote($customerId,$items);
     $giftOffer=$quote['gift']??null;
     $wheelOffer=customer_wheel_discount_quote($customerId,$items,(int)($data['wheel_reward_id']??0));
+    if(is_array($wheelOffer)&&!empty($wheelOffer['product_id'])){
+        // The wheel engine works with local product IDs, but the raw products
+        // table can still contain Evotor/import names. Checkout must show the
+        // same edited name the customer already sees in the PWA catalog.
+        $nameStmt=db()->prepare("SELECT COALESCE(NULLIF(TRIM(g.name),''),NULLIF(TRIM(s.display_name),''),p.name) display_name FROM products p LEFT JOIN customer_product_settings s ON s.product_id=p.id LEFT JOIN customer_product_group_variants v ON v.product_id=p.id LEFT JOIN customer_product_groups g ON g.id=v.group_id AND g.visible=1 WHERE p.id=? ORDER BY COALESCE(v.is_default,0) DESC,COALESCE(v.sort_order,999),COALESCE(g.sort_order,999) LIMIT 1");
+        $nameStmt->execute([(int)$wheelOffer['product_id']]);$pwaName=trim((string)($nameStmt->fetchColumn()?:''));
+        if($pwaName!=='')$wheelOffer['product_name']=$pwaName;
+    }
     $subtotal=round(max(0,(float)($quote['subtotal']??0)),2);
     if($mode!=='gift'){
         $quote['discount']=0.0;
