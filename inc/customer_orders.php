@@ -5,6 +5,7 @@ require_once __DIR__.'/online_orders.php';
 require_once __DIR__.'/customer_loyalty.php';
 require_once __DIR__.'/customer_checkout_loyalty.php';
 require_once __DIR__.'/customer_drink_loyalty.php';
+require_once __DIR__.'/customer_wheel.php';
 require_once __DIR__.'/customer_modifiers.php';
 require_once __DIR__.'/customer_payments.php';
 
@@ -77,18 +78,20 @@ function customer_order_create(array $data,?array $authenticatedCustomer=null): 
     if($existingAccess){$token=(string)$existingAccess['tracking_token'];$customerId=(int)($existingAccess['customer_id']?:$customerId);}else{$token=bin2hex(random_bytes(32));try{db()->prepare('INSERT INTO customer_order_access(order_id,customer_id,tracking_token) VALUES(?,?,?)')->execute([$orderId,$customerId,$token]);}catch(PDOException $e){if((int)($e->errorInfo[1]??0)!==1062)throw $e;$findAccess->execute([$orderId]);$existingAccess=$findAccess->fetch();if(!$existingAccess)throw $e;$token=(string)$existingAccess['tracking_token'];$customerId=(int)($existingAccess['customer_id']?:$customerId);}}
 
     // A single order can use exactly one loyalty benefit. This is enforced on
-    // the server, not only in the PWA, so a crafted/repeated request cannot
-    // combine the sixth-drink reward with ordinary bonus points.
-    $gift=['applied'=>false,'discount'=>0.0];$points=['applied'=>0.0];
+    // the server, not only in the PWA, so crafted requests cannot combine a
+    // sixth-drink gift, ordinary points and a wheel voucher.
+    $gift=['applied'=>false,'discount'=>0.0];$points=['applied'=>0.0];$wheel=['applied'=>false,'discount'=>0.0];
     if(!$locked){
         if($loyaltyMode==='gift'){
             $gift=customer_drink_loyalty_apply_online_order_reward($orderId,$customerId);
         }elseif($loyaltyMode==='points'){
             $points=customer_loyalty_apply_order_spend($orderId,$customerId,$data['loyalty_spend']??0);
+        }elseif($loyaltyMode==='wheel'){
+            $wheel=customer_wheel_apply_order_discount($orderId,$customerId,(int)($data['wheel_reward_id']??0));
         }
     }
     $snapshot=customer_order_snapshot($orderId);$total=(float)$snapshot['total_amount'];
-    if($paymentMethod['id']==='sbp'&&round($total,2)<1){$paymentMethod=['id'=>'cash','label'=>'Бонусы/подарок — к оплате 0 ₽','enabled'=>true,'online'=>false];}
+    if($paymentMethod['id']==='sbp'&&round($total,2)<1){$paymentMethod=['id'=>'cash','label'=>'Лояльность — к оплате 0 ₽','enabled'=>true,'online'=>false];}
     $payment=null;
     try{
         if($paymentMethod['id']==='sbp'){
@@ -100,11 +103,11 @@ function customer_order_create(array $data,?array $authenticatedCustomer=null): 
             if(function_exists('db_disconnect'))db_disconnect();
             $payment=customer_payment_create_sbp($orderId,$orderNumber,round($total,2),$phone,$email);
         }elseif(!$locked||(string)($snapshot['payment_method']??'')==='')customer_payment_mark_cash($orderId);
-    }catch(Throwable $e){if($paymentMethod['id']==='sbp'){db()->prepare("UPDATE online_orders SET status='cancelled',cancelled_at=NOW(),payment_status='failed',payment_method='sbp',payment_provider='yookassa_sbp' WHERE id=? AND status IN ('new','awaiting_payment')")->execute([$orderId]);try{customer_loyalty_restore_order_spend($orderId,'платёж СБП не был создан');}catch(Throwable $restoreError){error_log('[Kapouch loyalty spend restore] '.$restoreError->getMessage());}try{customer_drink_loyalty_restore_online_order_reward($orderId,'Платёж не был создан, подарок возвращён');}catch(Throwable $restoreError){error_log('[Kapouch sixth drink restore] '.$restoreError->getMessage());}}throw $e;}
+    }catch(Throwable $e){if($paymentMethod['id']==='sbp'){db()->prepare("UPDATE online_orders SET status='cancelled',cancelled_at=NOW(),payment_status='failed',payment_method='sbp',payment_provider='yookassa_sbp' WHERE id=? AND status IN ('new','awaiting_payment')")->execute([$orderId]);try{customer_loyalty_restore_order_spend($orderId,'платёж СБП не был создан');}catch(Throwable $restoreError){error_log('[Kapouch loyalty spend restore] '.$restoreError->getMessage());}try{customer_drink_loyalty_restore_online_order_reward($orderId,'Платёж не был создан, подарок возвращён');}catch(Throwable $restoreError){error_log('[Kapouch sixth drink restore] '.$restoreError->getMessage());}try{customer_wheel_restore_order_discount($orderId,'платёж СБП не был создан');}catch(Throwable $restoreError){error_log('[Kapouch wheel restore] '.$restoreError->getMessage());}}throw $e;}
     $final=customer_order_snapshot($orderId);$orderNumber=(string)$final['order_number'];$total=(float)$final['total_amount'];$status=(string)$final['status'];$finalMethod=(string)($final['payment_method']??'');$paymentMethod=customer_order_payment_method_existing($finalMethod,$paymentMethod);$paymentStatus=(string)($final['payment_status']??'');
     if($paymentMethod['id']==='sbp'&&$payment===null){$existingPayment=customer_payment_status_for_order($orderId);if($existingPayment)$payment=['payment_url'=>(string)($existingPayment['payment_url']??''),'sbp_payload'=>(string)($existingPayment['sbp_payload']??''),'status'=>(string)($existingPayment['status']??$paymentStatus)];}
-    $reward=customer_drink_loyalty_online_reward($orderId);$rewardDiscount=(float)($reward['reward_value']??0);$spent=customer_loyalty_order_spend($orderId);$appliedMode=$rewardDiscount>0?'gift':($spent>0?'points':'none');
-    return ['order_id'=>$orderId,'order_number'=>$orderNumber,'tracking_token'=>$token,'total_amount'=>round($total,2),'status'=>$status,'status_label'=>$status==='awaiting_payment'?'Ожидает оплаты':online_orders_status_label($status),'payment_method'=>$paymentMethod['id'],'payment_label'=>$paymentMethod['label'],'payment_status'=>$paymentStatus,'payment_url'=>$payment['payment_url']??null,'sbp_payload'=>$payment['sbp_payload']??null,'drink_reward_discount'=>round($rewardDiscount,2),'loyalty_spent'=>round($spent,2),'loyalty_mode'=>$appliedMode,'loyalty_balance'=>customer_loyalty_balance($customerId),'loyalty_expected'=>customer_loyalty_preview($total),'loyalty_percent'=>customer_loyalty_rate()];
+    $reward=customer_drink_loyalty_online_reward($orderId);$rewardDiscount=(float)($reward['reward_value']??0);$spent=customer_loyalty_order_spend($orderId);$wheelOrder=customer_wheel_order_discount($orderId);$wheelDiscount=(float)($wheel['discount']??0);$appliedMode=$rewardDiscount>0?'gift':($spent>0?'points':($wheelOrder?'wheel':'none'));
+    return ['order_id'=>$orderId,'order_number'=>$orderNumber,'tracking_token'=>$token,'total_amount'=>round($total,2),'status'=>$status,'status_label'=>$status==='awaiting_payment'?'Ожидает оплаты':online_orders_status_label($status),'payment_method'=>$paymentMethod['id'],'payment_label'=>$paymentMethod['label'],'payment_status'=>$paymentStatus,'payment_url'=>$payment['payment_url']??null,'sbp_payload'=>$payment['sbp_payload']??null,'drink_reward_discount'=>round($rewardDiscount,2),'loyalty_spent'=>round($spent,2),'wheel_discount'=>round($wheelDiscount,2),'wheel_reward_id'=>(int)($wheelOrder['id']??0),'loyalty_mode'=>$appliedMode,'loyalty_balance'=>customer_loyalty_balance($customerId),'loyalty_expected'=>customer_loyalty_preview($total),'loyalty_percent'=>customer_loyalty_rate()];
 }
 function customer_order_public_status(string $token): ?array
 {
@@ -125,6 +128,6 @@ function customer_order_public_status(string $token): ?array
             }catch(Throwable $e){}
         }
     }
-    $items=db()->prepare('SELECT product_name,variant_name,quantity,unit_price,line_total,item_comment FROM online_order_items WHERE order_id=? ORDER BY sort_order,id');$items->execute([(int)$order['id']]);$customerId=(int)($order['customer_id']??0);$status=(string)$order['status'];$reward=customer_drink_loyalty_online_reward((int)$order['id']);$spent=customer_loyalty_order_spend((int)$order['id']);
-    return ['order_number'=>(string)$order['order_number'],'status'=>$status,'status_label'=>$status==='awaiting_payment'?'Ожидает оплаты':online_orders_status_label($status),'payment_status'=>(string)($order['payment_status']??''),'payment_method'=>(string)($order['payment_method']??''),'total_amount'=>(float)$order['total_amount'],'fulfillment_label'=>online_orders_fulfillment_label($order),'created_at'=>(string)($order['external_created_at']?:$order['created_at']),'updated_at'=>(string)$order['updated_at'],'items'=>$items->fetchAll(),'drink_reward_discount'=>round((float)($reward['reward_value']??0),2),'loyalty_spent'=>round($spent,2),'loyalty_balance'=>customer_loyalty_balance($customerId),'loyalty_expected'=>customer_loyalty_preview((float)$order['total_amount']),'loyalty_earned'=>(bool)$order['loyalty_earned_at'],'loyalty_percent'=>customer_loyalty_rate()];
+    $items=db()->prepare('SELECT product_name,variant_name,quantity,unit_price,line_total,item_comment FROM online_order_items WHERE order_id=? ORDER BY sort_order,id');$items->execute([(int)$order['id']]);$customerId=(int)($order['customer_id']??0);$status=(string)$order['status'];$reward=customer_drink_loyalty_online_reward((int)$order['id']);$spent=customer_loyalty_order_spend((int)$order['id']);$wheel=customer_wheel_order_discount((int)$order['id']);
+    return ['order_number'=>(string)$order['order_number'],'status'=>$status,'status_label'=>$status==='awaiting_payment'?'Ожидает оплаты':online_orders_status_label($status),'payment_status'=>(string)($order['payment_status']??''),'payment_method'=>(string)($order['payment_method']??''),'total_amount'=>(float)$order['total_amount'],'fulfillment_label'=>online_orders_fulfillment_label($order),'created_at'=>(string)($order['external_created_at']?:$order['created_at']),'updated_at'=>(string)$order['updated_at'],'items'=>$items->fetchAll(),'drink_reward_discount'=>round((float)($reward['reward_value']??0),2),'loyalty_spent'=>round($spent,2),'wheel_reward_id'=>(int)($wheel['id']??0),'loyalty_balance'=>customer_loyalty_balance($customerId),'loyalty_expected'=>customer_loyalty_preview((float)$order['total_amount']),'loyalty_earned'=>(bool)$order['loyalty_earned_at'],'loyalty_percent'=>customer_loyalty_rate()];
 }
