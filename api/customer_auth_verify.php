@@ -12,7 +12,7 @@ if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))==='OPTIONS'){http_res
 customer_api_guard_origin();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))!=='POST')customer_api_reply(405,['ok'=>false,'error'=>'Method not allowed']);
 try{
-    $ipLimit=kapouch_rate_limit_hit('customer_auth_verify_ip',kapouch_client_ip(),120,900);
+    $ipLimit=kapouch_rate_limit_hit('customer_auth_verify_ip',kapouch_client_ip(),180,900);
     if(!$ipLimit['allowed']){header('Retry-After: '.(int)$ipLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много попыток подтверждения. Попробуйте позже.']);}
     $data=customer_api_json();
     if(!empty($data['challenge'])){
