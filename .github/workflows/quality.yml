@@ -112,6 +112,11 @@ jobs:
       - name: Full-project checkup v2 contract
         run: php tests/full_project_checkup_v2_contract.php
 
+      - name: Beget delta deploy contract
+        run: |
+          php tests/beget_delta_deploy_contract.php
+          python3 scripts/beget_delta_manifest.py --self-test
+
       - name: JavaScript syntax
         run: |
           set -euo pipefail
