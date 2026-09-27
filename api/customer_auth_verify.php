@@ -3,6 +3,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/inc/bootstrap.php';
 require_once dirname(__DIR__).'/inc/customer_api.php';
 require_once dirname(__DIR__).'/inc/customer_auth.php';
+require_once dirname(__DIR__).'/inc/customer_auth_self_call.php';
 require_once dirname(__DIR__).'/inc/customer_phone.php';
 require_once dirname(__DIR__).'/inc/customer_welcome.php';
 
@@ -11,9 +12,20 @@ if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))==='OPTIONS'){http_res
 customer_api_guard_origin();
 if(strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'))!=='POST')customer_api_reply(405,['ok'=>false,'error'=>'Method not allowed']);
 try{
-    $ipLimit=kapouch_rate_limit_hit('customer_auth_verify_ip',kapouch_client_ip(),60,900);
+    $ipLimit=kapouch_rate_limit_hit('customer_auth_verify_ip',kapouch_client_ip(),120,900);
     if(!$ipLimit['allowed']){header('Retry-After: '.(int)$ipLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много попыток подтверждения. Попробуйте позже.']);}
-    $data=customer_api_json();$rawPhone=customer_phone_canonical_ru((string)($data['phone']??''));$phoneKey=preg_replace('/\D+/','',$rawPhone)??'';
+    $data=customer_api_json();
+    if(!empty($data['challenge'])){
+        $auth=customer_auth_verify_self_call((string)$data['challenge']);
+        if(!empty($auth['pending']))customer_api_reply(200,['ok'=>true,'auth'=>$auth]);
+        $customerId=(int)($auth['customer']['id']??0);
+        if($customerId>0){
+            try{$welcome=customer_welcome_bonus_grant($customerId);if($welcome>0)$auth['welcome_bonus']=$welcome;$auth['customer']['loyalty_balance']=customer_loyalty_balance($customerId);}catch(Throwable $welcomeError){error_log('[Kapouch welcome bonus self call] '.$welcomeError->getMessage());}
+        }
+        customer_api_reply(200,['ok'=>true,'auth'=>$auth]);
+    }
+
+    $rawPhone=customer_phone_canonical_ru((string)($data['phone']??''));$phoneKey=preg_replace('/\D+/','',$rawPhone)??'';
     if($phoneKey!==''){$phoneLimit=kapouch_rate_limit_hit('customer_auth_verify_phone',$phoneKey,15,900);if(!$phoneLimit['allowed']){header('Retry-After: '.(int)$phoneLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много попыток для этого номера. Запросите новый код позже.']);}}
     $auth=customer_auth_verify_code($rawPhone,(string)($data['code']??''));
     $customerId=(int)($auth['customer']['id']??0);
@@ -30,4 +42,4 @@ try{
     customer_api_reply(200,['ok'=>true,'auth'=>$auth]);
 }catch(JsonException $e){customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);}
 catch(RuntimeException $e){customer_api_reply(422,['ok'=>false,'error'=>$e->getMessage()]);}
-catch(Throwable $e){customer_api_reply(500,['ok'=>false,'error'=>'Не удалось подтвердить код. Попробуйте позже.']);}
+catch(Throwable $e){customer_api_reply(500,['ok'=>false,'error'=>'Не удалось подтвердить номер. Попробуйте позже.']);}
