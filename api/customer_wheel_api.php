@@ -17,12 +17,12 @@ try{
     $customer=customer_auth_require();$customerId=(int)$customer['id'];
     if($method==='GET')customer_api_reply(200,['ok'=>true,'wheel'=>customer_wheel_public_status($customerId)]);
 
-    $limit=kapouch_rate_limit_hit('customer_wheel_spin','customer:'.$customerId,12,3600);
+    $limit=kapouch_rate_limit_hit('customer_wheel_spin','customer:'.$customerId,60,3600);
     if(!$limit['allowed']){header('Retry-After: '.(int)$limit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много попыток вращения. Попробуйте позже.']);}
     $data=customer_api_json();$action=trim((string)($data['action']??'spin'));
     if($action!=='spin')customer_api_reply(422,['ok'=>false,'error'=>'Неизвестное действие.']);
     $spin=customer_wheel_spin($customerId);
-    kapouch_runtime_log('wheel','spin',['customer_id'=>$customerId,'spin_id'=>(int)$spin['spin_id'],'prize_id'=>(int)$spin['prize']['id'],'prize_type'=>(string)$spin['prize']['type']]);
+    kapouch_runtime_log('wheel','spin',['customer_id'=>$customerId,'spin_id'=>(int)$spin['spin_id'],'prize_id'=>(int)$spin['prize']['id'],'prize_type'=>(string)$spin['prize']['type'],'source'=>(string)($spin['source']??'order')]);
     customer_api_reply(200,['ok'=>true,'spin'=>$spin,'wheel'=>customer_wheel_public_status($customerId)]);
 }catch(JsonException $e){customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);}
 catch(RuntimeException $e){
