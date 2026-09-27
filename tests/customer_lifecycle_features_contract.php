@@ -50,7 +50,7 @@ $checks=[
  'primary call auth sends phone user IP and API id'=>str_contains($authCore,"'api_id'=>\$apiId,'phone'=>\$digits,'ip'=>")&&str_contains($authCore,"preg_match('/^\\d{4}$/',\$code)"),
  'fallback uses SMS.ru user-originated callcheck flow'=>str_contains($selfCall,"curl_init('https://sms.ru/callcheck/add')")&&str_contains($selfCall,"curl_init('https://sms.ru/callcheck/status')")&&str_contains($selfCall,'check_status')&&str_contains($authRequest,'customer_auth_request_self_call($phone)'),
  'self-call challenge is signed and expires'=>str_contains($selfCall,"hash_hmac('sha256',\$body,customer_auth_secret_key())")&&str_contains($selfCall,"'exp'=>\$exp")&&str_contains($selfCall,'customer_auth_self_call_decode'),
- 'self-call success issues normal customer session'=>str_contains($selfCall,'customer_sessions')&&str_contains($selfCall,'$status===401')&&str_contains($auth,'customer_auth_verify_self_call'),
+ 'self-call success issues normal customer session'=>str_contains($selfCall,'customer_sessions')&&str_contains($selfCall,'$status!==401')&&str_contains($selfCall,'customer_auth_self_call_issue_session')&&str_contains($auth,'customer_auth_verify_self_call'),
  'PWA fallback contains no SMS action'=>str_contains($authUi,'Позвонить самому')&&str_contains($authUi,'self_call')&&!str_contains($authUi,"requestAuth('sms'")&&!str_contains($authUi,'Получить код по SMS'),
  'PWA explains free outgoing verification call'=>str_contains($authUi,'деньги не спишутся')&&str_contains($authUi,'звонок автоматически сбрасывается')&&str_contains($authUi,'Ждём звонок'),
  'PWA loads refreshed call auth enhancement'=>str_contains($config,"callAuth.src='assets/auth-call.js?v=2'"),
