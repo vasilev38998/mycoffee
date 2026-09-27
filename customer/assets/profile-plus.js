@@ -5,7 +5,7 @@ const apiBase=String(cfg.apiBase||'../api').replace(/\/$/,'');
 const token=()=>localStorage.getItem('kapouch_customer_auth_token')||'';
 const profile=document.getElementById('profileUser');
 if(!profile)return;
-const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[m]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 const money=v=>Number(v||0).toLocaleString('ru-RU',{maximumFractionDigits:2})+' ₽';
 const wordForm=(value,one,few,many)=>{const n=Math.abs(Number(value)||0),n100=n%100,n10=n%10;if(n100>=11&&n100<=14)return many;if(n10===1)return one;if(n10>=2&&n10<=4)return few;return many};
 
