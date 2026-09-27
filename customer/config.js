@@ -152,6 +152,11 @@ window.addEventListener('DOMContentLoaded',function(){
   phoneMask.defer=true;
   document.body.appendChild(phoneMask);
 
+  var callAuth=document.createElement('script');
+  callAuth.src='assets/auth-call.js?v=1';
+  callAuth.defer=true;
+  document.body.appendChild(callAuth);
+
   var s=document.createElement('script');
   s.src='assets/push.js?v=2';
   s.defer=true;
