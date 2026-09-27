@@ -12,6 +12,7 @@ $quote=file_get_contents($root.'/api/customer_order_quote.php');
 $orders=file_get_contents($root.'/inc/customer_orders.php');
 $checkout=file_get_contents($root.'/customer/assets/sixth-drink-checkout.js');
 $ui=file_get_contents($root.'/customer/assets/wheel.js');
+$premium=file_get_contents($root.'/customer/assets/wheel-premium.js');
 $config=file_get_contents($root.'/customer/config.js');
 $sw=file_get_contents($root.'/customer/sw.js');
 $refunds=file_get_contents($root.'/customer_refunds.php');
@@ -36,11 +37,15 @@ $checks=[
  'checkout quote keeps wheel exclusive from gift and points'=>str_contains($quote,"\$mode==='wheel'")&&str_contains($quote,"'wheel_offer'")&&str_contains($quote,"'wheel_discount'")&&str_contains($orders,"\$loyaltyMode==='wheel'"),
  'payment failure and full refund restore voucher'=>str_contains($orders,"customer_wheel_restore_order_discount(\$orderId,'платёж СБП не был создан'")&&str_contains($refunds,'customer_wheel_restore_order_discount')&&str_contains($webhook,'customer_wheel_restore_order_discount'),
  'PWA renders pure SVG prize icons'=>str_contains($ui,'function svgIcon')&&str_contains($ui,'function buildWheelSvg')&&str_contains($ui,'<path d=')&&str_contains($ui,'wheel-pointer'),
+ 'premium wheel replaces flat sectors with layered SVG'=>str_contains($premium,'function buildPremiumSvg')&&str_contains($premium,'premiumRim')&&str_contains($premium,'premiumStud')&&str_contains($premium,'linearGradient id="seg')&&str_contains($premium,'goldStuds()'),
+ 'premium prize art is vector and type-aware'=>str_contains($premium,'function premiumIcon')&&str_contains($premium,"type==='cup'")&&str_contains($premium,"type==='discount'")&&str_contains($premium,"type==='stamp'")&&str_contains($premium,"type==='crown'")&&str_contains($premium,"type==='sparkle'")&&str_contains($premium,"type==='bean'"),
+ 'premium wheel upgrades pointer hub home and result'=>str_contains($premium,'function enhancePointer')&&str_contains($premium,'function enhanceHub')&&str_contains($premium,'function enhanceHome')&&str_contains($premium,'function enhanceResult')&&str_contains($premium,'wheel-premium-hubmark'),
+ 'premium SVG respects dynamic admin prize colors and labels'=>str_contains($premium,'readSegments(svg)')&&str_contains($premium,'paths[index]?.getAttribute')&&str_contains($premium,'labelLines(s.title)')&&str_contains($premium,'shadeColor(s.color'),
  'PWA wheel uses long eased server-targeted spin'=>str_contains($ui,'5.1s cubic-bezier(.12,.78,.12,1)')&&str_contains($ui,'spin.prize_index')&&str_contains($ui,'6)*360')&&str_contains($ui,'wheelStage')&&str_contains($ui,'spinning'),
- 'PWA celebrates with confetti vibration and reduced motion'=>str_contains($ui,'wheel-confetti')&&str_contains($ui,'navigator.vibrate')&&str_contains($ui,'prefers-reduced-motion'),
+ 'PWA celebrates with confetti vibration and reduced motion'=>str_contains($ui,'wheel-confetti')&&str_contains($ui,'navigator.vibrate')&&str_contains($ui,'prefers-reduced-motion')&&str_contains($premium,'prefers-reduced-motion'),
  'wheel uses server result rather than client prize selection'=>str_contains($ui,"body:JSON.stringify({action:'spin'})")&&str_contains($ui,'const spin=d.spin||{}')&&str_contains($ui,'showResult(prize)'),
  'checkout selector includes wheel voucher'=>str_contains($checkout,"data-loyalty-mode=\"wheel\"")&&str_contains($checkout,'wheel_reward_id:wheelRewardId()')&&str_contains($checkout,'Оставить приз на потом'),
- 'config loads wheel and forwards selected reward'=>str_contains($config,"wheel.src='assets/wheel.js?v=1'")&&str_contains($config,"payload.wheel_reward_id=wheelRewardId()")&&str_contains($config,'customer_wheel_api.php'),
+ 'config loads base and premium wheel artwork'=>str_contains($config,"wheel.src='assets/wheel.js?v=1'")&&str_contains($config,"wheelPremium.src='assets/wheel-premium.js?v=1'")&&str_contains($config,"payload.wheel_reward_id=wheelRewardId()")&&str_contains($config,'customer_wheel_api.php'),
  'service worker cache remains network-fresh for wheel'=>str_contains($sw,"const CACHE='kapouch-pwa-v56'")&&str_contains($sw,"./assets/wheel.js?v=1")&&str_contains($sw,'customer_wheel_api.php')&&str_contains($sw,"url.pathname.endsWith('/assets/wheel.js')"),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"Customer wheel contract failed: {$label}\n");exit(1);}echo "OK: {$label}\n";}
