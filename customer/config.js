@@ -137,7 +137,7 @@ window.addEventListener('DOMContentLoaded',function(){
   document.head.appendChild(polishStyle);
 
   var polish=document.createElement('script');
-  polish.src='assets/pwa-polish.js?v=4';
+  polish.src='assets/pwa-polish.js?v=3';
   polish.defer=true;
   document.body.appendChild(polish);
 
