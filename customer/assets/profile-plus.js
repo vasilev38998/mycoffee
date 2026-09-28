@@ -28,3 +28,18 @@ async function load(){if(loading||!token()||profile.hidden)return;loading=true;t
 form.addEventListener('submit',async e=>{e.preventDefault();error.classList.remove('show');success.hidden=true;button.disabled=true;button.textContent='Сохраняем…';try{const d=await call('POST',{name:nameInput.value.trim(),email:emailInput.value.trim(),birth_date:birthdayInput.value.trim()});render(d.profile);success.hidden=false;setTimeout(()=>success.hidden=true,2500);const checkoutName=document.querySelector('#checkoutForm [name="name"]');if(checkoutName)checkoutName.value=String(d.profile?.customer?.name||'')}catch(err){error.textContent=err.message||'Не удалось сохранить профиль.';error.classList.add('show')}finally{button.disabled=false;button.textContent='Сохранить'}});
 const observer=new MutationObserver(()=>{if(!profile.hidden)load()});observer.observe(profile,{attributes:true,attributeFilter:['hidden']});window.addEventListener('focus',load);if(!profile.hidden)load();
 })();
+
+(function(){
+'use strict';
+if(window.__KAPOUCH_PROFILE_AVATAR_BOOTSTRAPPED)return;
+window.__KAPOUCH_PROFILE_AVATAR_BOOTSTRAPPED=true;
+function loadProfileAvatar(){
+    if(window.__KAPOUCH_PROFILE_AVATAR_LOADED||document.querySelector('script[data-kapouch-profile-avatar]'))return;
+    const script=document.createElement('script');
+    script.src='assets/profile-avatar.js?v=2';
+    script.defer=true;
+    script.dataset.kapouchProfileAvatar='1';
+    document.body.appendChild(script);
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loadProfileAvatar,{once:true});else loadProfileAvatar();
+})();
