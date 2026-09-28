@@ -35,7 +35,11 @@ function ensureCard(){
   if(!card){
     card=document.createElement('section');card.id='profileAvatarCard';card.className='profile-avatar-card';
     card.innerHTML='<button class="profile-avatar-preview" id="profileAvatarPreview" type="button" aria-label="Выбрать фотографию профиля">K</button><div class="profile-avatar-copy"><strong>Фото профиля</strong><span>Нажмите «Добавить фото» и выберите изображение с телефона.</span><div class="profile-avatar-actions"><button class="profile-avatar-pick" id="profileAvatarPick" type="button">Добавить фото</button><button class="profile-avatar-remove" id="profileAvatarRemove" type="button" hidden>Удалить</button></div><div class="profile-avatar-status" id="profileAvatarStatus" hidden></div><input id="profileAvatarInput" type="file" accept="image/jpeg,image/png,image/webp,image/*" hidden></div>';
-    const balance=profile.querySelector('.profile-balance');profile.insertBefore(card,balance||profile.firstChild);
+    const stack=profile.querySelector('.profile-primary-stack');
+    const balance=profile.querySelector('.profile-balance');
+    const directBalance=balance&&balance.parentNode===profile?balance:null;
+    const anchor=stack&&stack.parentNode===profile?stack:(directBalance||profile.firstChild);
+    if(anchor)profile.insertBefore(card,anchor);else profile.appendChild(card);
   }
   return wireCard(card);
 }
