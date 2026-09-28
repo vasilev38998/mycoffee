@@ -106,6 +106,11 @@ window.KAPOUCH_CUSTOMER_CONFIG = {
   };
 })();
 window.addEventListener('DOMContentLoaded',function(){
+  var cleanupStyle=document.createElement('style');
+  cleanupStyle.id='kapouchUiCleanup';
+  cleanupStyle.textContent='body.k-redesign-v2 .view[data-view="home"] #balanceCard{display:none!important}body.k-redesign-v2 .view[data-view="home"] #quickRepeatCard[hidden],body.k-redesign-v2 .view[data-view="home"] #quickRepeatCard:empty{display:none!important}.auth-alt-hint{display:none!important}';
+  document.head.appendChild(cleanupStyle);
+
   var authStyle=document.createElement('link');
   authStyle.rel='stylesheet';
   authStyle.href='assets/auth-required.css?v=1';
@@ -157,7 +162,7 @@ window.addEventListener('DOMContentLoaded',function(){
   document.body.appendChild(phoneMask);
 
   var callAuth=document.createElement('script');
-  callAuth.src='assets/auth-call.js?v=2';
+  callAuth.src='assets/auth-call.js?v=3';
   callAuth.defer=true;
   document.body.appendChild(callAuth);
 
