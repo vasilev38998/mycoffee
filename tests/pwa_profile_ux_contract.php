@@ -6,6 +6,7 @@ $profile=file_get_contents($root.'/customer/assets/profile-plus.js');
 $avatar=file_get_contents($root.'/customer/assets/profile-avatar.js');
 $loyalty=file_get_contents($root.'/customer/assets/loyalty-card.js');
 $status=file_get_contents($root.'/customer/assets/status-once.js');
+$authCall=file_get_contents($root.'/customer/assets/auth-call.js');
 $config=file_get_contents($root.'/customer/config.js');
 $sw=file_get_contents($root.'/customer/sw.js');
 $contrast=file_get_contents($root.'/customer/assets/contrast-fix.css');
@@ -28,6 +29,12 @@ $checks=[
     'fresh QR asset loaded'=>str_contains($config,'assets/loyalty-card.js?v=6'),
     'light contrast layer loaded'=>str_contains($config,'assets/contrast-fix.css?v=1'),
     'light tokens locked against legacy theme'=>str_contains($contrast,'--text:#251812!important')&&str_contains($contrast,'--surface:#fffaf4!important'),
+    'auth fallback explainer removed'=>!str_contains($authCall,'Резервный способ без SMS')&&str_contains($authCall,"selfStart.textContent='Позвонить самому'"),
+    'guest home empty card is hidden'=>str_contains($config,'#quickRepeatCard[hidden]')&&str_contains($config,'#quickRepeatCard:empty'),
+    'home bonus card stays removed'=>str_contains($config,'#balanceCard{display:none!important}'),
+    'stale auth helper is hidden'=>str_contains($config,'.auth-alt-hint{display:none!important}'),
+    'fresh call auth asset loaded'=>str_contains($config,'assets/auth-call.js?v=3'),
+    'fresh home polish asset loaded'=>str_contains($config,'assets/pwa-polish.js?v=4'),
     'service worker cache bumped'=>str_contains($sw,"kapouch-pwa-v41")&&str_contains($sw,'./assets/contrast-fix.css?v=1')&&str_contains($sw,'./assets/status-once.js?v=1')&&str_contains($sw,'./assets/hero-cup.svg?v=2'),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"PWA profile UX contract failed: {$label}\n");exit(1);}}
