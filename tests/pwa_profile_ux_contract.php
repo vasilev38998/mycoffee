@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 $root=dirname(__DIR__);
 $profile=file_get_contents($root.'/customer/assets/profile-plus.js');
+$avatar=file_get_contents($root.'/customer/assets/profile-avatar.js');
 $loyalty=file_get_contents($root.'/customer/assets/loyalty-card.js');
 $status=file_get_contents($root.'/customer/assets/status-once.js');
 $config=file_get_contents($root.'/customer/config.js');
@@ -13,6 +14,7 @@ $checks=[
     'separate profile data dropdown'=>str_contains($profile,"id='profileDataFold'")||str_contains($profile,"'profileDataFold'"),
     'separate profile statistics dropdown'=>str_contains($profile,"id='profileStatsFold'")||str_contains($profile,"'profileStatsFold'"),
     'old combined profile dropdown removed'=>!str_contains($profile,'Данные и статистика'),
+    'avatar insertion tolerates compact profile stack'=>str_contains($avatar,"profile.querySelector('.profile-primary-stack')")&&str_contains($avatar,'balance&&balance.parentNode===profile')&&str_contains($avatar,'stack&&stack.parentNode===profile'),
     'QR addressed to barista'=>str_contains($loyalty,'Покажите QR-код бариста'),
     'old scanner copy removed'=>!str_contains($loyalty,'Покажи QR сканеру на кассе'),
     'one-time notice storage'=>str_contains($status,'kapouch_status_strip_seen_v1'),
