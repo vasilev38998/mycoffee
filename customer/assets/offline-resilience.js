@@ -59,6 +59,13 @@ function setOffline(value,reason=''){
   try{sessionStorage.setItem('kapouch_effective_offline',offline?'1':'0')}catch(e){}
   render();
 }
+function clearPrivateOfflineState(){
+  try{
+    localStorage.removeItem('kapouch_offline_profile_v1');
+    localStorage.removeItem('kapouch_offline_loyalty_v1');
+    localStorage.removeItem('kapouch_current_order_snapshot_v1');
+  }catch(e){}
+}
 async function rawProbe(url){
   const r=await fetch(url+(url.includes('?')?'&':'?')+'connectivity_probe=1&_='+Date.now(),{cache:'no-store',headers:{Accept:'*/*'}});
   if(!r.ok)throw new Error('HTTP '+r.status);
@@ -98,6 +105,11 @@ function installCheckoutGuard(){
     lastFallbackAt=Date.now();setOffline(true,'checkout');
   },true);
 }
+function installLogoutCleanup(){
+  const button=$('logoutButton');if(!button||button.dataset.offlineCleanup==='1')return;
+  button.dataset.offlineCleanup='1';
+  button.addEventListener('click',clearPrivateOfflineState,true);
+}
 function acceptNetworkOk(){if(!navigator.onLine)return;if(lastFallbackAt&&Date.now()-lastFallbackAt<5000)return;setOffline(false,'')}
 function installServiceWorkerMessages(){
   if(!('serviceWorker'in navigator))return;
@@ -108,7 +120,7 @@ function installServiceWorkerMessages(){
   });
 }
 function start(){
-  injectStyle();installCheckoutGuard();installServiceWorkerMessages();
+  injectStyle();installCheckoutGuard();installLogoutCleanup();installServiceWorkerMessages();
   try{if(sessionStorage.getItem('kapouch_effective_offline')==='1')offline=true}catch(e){}
   window.addEventListener('offline',()=>{lastFallbackAt=Date.now();setOffline(true,'browser')});
   window.addEventListener('online',()=>setTimeout(()=>probe(false),500));
@@ -116,7 +128,7 @@ function start(){
   window.addEventListener('kapouch:network-online',acceptNetworkOk);
   window.addEventListener('kapouch:profile',decorateCachedData);
   window.addEventListener('hashchange',()=>requestAnimationFrame(()=>{placePanel();render()}));
-  new MutationObserver(()=>{placePanel();updateCheckout()}).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden','disabled']});
+  new MutationObserver(()=>{placePanel();updateCheckout();installLogoutCleanup()}).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden','disabled']});
   render();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
