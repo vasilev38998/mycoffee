@@ -6,6 +6,7 @@ const $=id=>document.getElementById(id);
 let offline=!navigator.onLine;
 let probing=false;
 let lastReason='';
+let lastFallbackAt=0;
 
 function injectStyle(){
   if($('kapouchOfflineStyle'))return;
@@ -25,7 +26,7 @@ function panel(){
   el.className='kapouch-offline-panel';
   el.setAttribute('role','status');
   el.innerHTML='<strong>Нет подключения</strong><p>Меню и сохранённые данные всё ещё доступны.<br>Заказ требует подключения к интернету.</p><button type="button" id="kapouchOfflineRetry">Повторить</button><small id="kapouchOfflineReason"></small>';
-  $('kapouchOfflineRetry').onclick=()=>probe(true);
+  const retry=el.querySelector('#kapouchOfflineRetry');if(retry)retry.onclick=()=>probe(true);
   return el;
 }
 function activeView(){return document.querySelector('.view.active')||document.querySelector('.view[data-view="home"]')}
@@ -71,17 +72,17 @@ async function probe(reloadOnSuccess){
       rawProbe(new URL('config.js',window.location.href).href),
       rawProbe(apiBase+'/customer_catalog.php')
     ]);
-    setOffline(false,'');
+    lastFallbackAt=0;setOffline(false,'');
     try{window.dispatchEvent(new CustomEvent('kapouch:connection-restored'))}catch(e){}
     if(reloadOnSuccess)location.reload();
     return true;
-  }catch(e){setOffline(true,'probe');return false}
+  }catch(e){lastFallbackAt=Date.now();setOffline(true,'probe');return false}
   finally{probing=false;if(btn){btn.disabled=false;btn.textContent='Повторить'}}
 }
 function decorateCachedData(event){
   const detail=event?.detail||{};
   if(!detail.offline)return;
-  setOffline(true,'cached-data');
+  lastFallbackAt=Date.now();setOffline(true,'cached-data');
   const target=event.type==='kapouch:profile'?$('profileOrders'):null;
   if(target&&!target.parentElement?.querySelector('.offline-data-note')){
     const title=target.previousElementSibling?.querySelector('h2');
@@ -94,24 +95,25 @@ function installCheckoutGuard(){
     if(!offline)return;
     e.preventDefault();e.stopImmediatePropagation();
     const err=$('checkoutError');if(err){err.textContent='Нет подключения. Корзина сохранена — оформите заказ, когда интернет восстановится.';err.classList.add('show')}
-    setOffline(true,'checkout');
+    lastFallbackAt=Date.now();setOffline(true,'checkout');
   },true);
 }
+function acceptNetworkOk(){if(!navigator.onLine)return;if(lastFallbackAt&&Date.now()-lastFallbackAt<5000)return;setOffline(false,'')}
 function installServiceWorkerMessages(){
   if(!('serviceWorker'in navigator))return;
   navigator.serviceWorker.addEventListener('message',event=>{
     const data=event.data||{};
-    if(data.type==='KAPOUCH_OFFLINE_FALLBACK')setOffline(true,String(data.resource||'cache'));
-    if(data.type==='KAPOUCH_NETWORK_OK'&&navigator.onLine)setOffline(false,'');
+    if(data.type==='KAPOUCH_OFFLINE_FALLBACK'){lastFallbackAt=Date.now();setOffline(true,String(data.resource||'cache'))}
+    if(data.type==='KAPOUCH_NETWORK_OK')acceptNetworkOk();
   });
 }
 function start(){
   injectStyle();installCheckoutGuard();installServiceWorkerMessages();
   try{if(sessionStorage.getItem('kapouch_effective_offline')==='1')offline=true}catch(e){}
-  window.addEventListener('offline',()=>setOffline(true,'browser'));
+  window.addEventListener('offline',()=>{lastFallbackAt=Date.now();setOffline(true,'browser')});
   window.addEventListener('online',()=>setTimeout(()=>probe(false),500));
-  window.addEventListener('kapouch:network-offline',e=>setOffline(true,String(e.detail?.resource||'network')));
-  window.addEventListener('kapouch:network-online',()=>{if(navigator.onLine)setOffline(false,'')});
+  window.addEventListener('kapouch:network-offline',e=>{lastFallbackAt=Date.now();setOffline(true,String(e.detail?.resource||'network'))});
+  window.addEventListener('kapouch:network-online',acceptNetworkOk);
   window.addEventListener('kapouch:profile',decorateCachedData);
   window.addEventListener('hashchange',()=>requestAnimationFrame(()=>{placePanel();render()}));
   new MutationObserver(()=>{placePanel();updateCheckout()}).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden','disabled']});
