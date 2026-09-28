@@ -33,7 +33,7 @@ $checks=[
     'historical drink refresh ignores refund linkage rows'=>str_contains($drink,'cs.gross_amount>0'),
     'PWA publishes catalog response to addons'=>str_contains($config,'KAPOUCH_CATALOG_SHOP')&&str_contains($config,"'kapouch:catalog'"),
     'MAX addon does not issue a second catalog request'=>!str_contains($standalone,'customer_catalog.php')&&str_contains($standalone,'KAPOUCH_CATALOG_SHOP'),
-    'service worker keeps last good catalog on 5xx'=>str_contains($sw,"kapouch-pwa-v43")&&str_contains($sw,'if(res.ok){const copy=res.clone()')&&str_contains($sw,'cached=>cached||res'),
+    'service worker keeps last good catalog on 5xx'=>str_contains($sw,"kapouch-pwa-v43")&&str_contains($sw,'catalogStrategy')&&str_contains($sw,'response.status>=500')&&str_contains($sw,'dataCache.match(CATALOG_KEY)'),
 ];
 
 foreach($checks as $label=>$ok){
