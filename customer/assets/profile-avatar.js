@@ -48,7 +48,7 @@ function renderAvatarBox(){
 function renderProfile(profile){const c=profile&&profile.customer?profile.customer:{};current={name:String(c.name||''),avatar_path:String(c.avatar_path||c.avatar_url||'')};renderAvatarBox()}
 function setStatus(text,error=false){const el=document.getElementById('profileAvatarStatus');if(!el)return;el.hidden=!text;el.textContent=text||'';el.classList.toggle('error',!!error)}
 function loadImage(file){return new Promise((resolve,reject)=>{const url=URL.createObjectURL(file),img=new Image();img.onload=()=>{URL.revokeObjectURL(url);resolve(img)};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Не удалось прочитать фотографию.'))};img.src=url})}
-async function squareBlob(file){
+async function squareFile(file){
   if(!file||file.size<=0)throw new Error('Выберите фотографию.');if(file.size>20*1024*1024)throw new Error('Фото должно быть не больше 20 МБ.');
   const img=await loadImage(file),sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;if(!sw||!sh)throw new Error('Некорректное изображение.');
   const side=Math.min(sw,sh),sx=Math.max(0,(sw-side)/2),sy=Math.max(0,(sh-side)/2),size=900,canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
@@ -70,7 +70,7 @@ async function refreshProfile(){
 async function upload(file){
   if(busy)return;busy=true;ensureCard();setButtonsDisabled(true);setStatus('Подготавливаем фото…');
   try{
-    const prepared=await squareBlob(file),form=new FormData();form.append('action','upload');form.append('avatar',prepared,'avatar.jpg');setStatus('Сохраняем фото…');
+    const prepared=await squareFile(file),form=new FormData();form.append('action','upload');form.append('avatar',prepared,'avatar.jpg');setStatus('Сохраняем фото…');
     const d=await request(form);current.avatar_path=String(d.avatar_path||d.avatar_url||'');renderAvatarBox();setStatus('Фото профиля обновлено ✓');await refreshProfile();setTimeout(()=>setStatus(''),2200);
   }catch(e){setStatus(e?.message||'Не удалось обновить фотографию.',true)}finally{busy=false;setButtonsDisabled(false)}
 }
