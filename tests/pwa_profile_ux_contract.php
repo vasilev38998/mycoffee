@@ -10,9 +10,12 @@ $authCall=file_get_contents($root.'/customer/assets/auth-call.js');
 $config=file_get_contents($root.'/customer/config.js');
 $sw=file_get_contents($root.'/customer/sw.js');
 $offline=file_get_contents($root.'/customer/assets/offline-resilience.js');
+$pwaNext=file_get_contents($root.'/customer/assets/pwa-next.js');
+$pwaPolish=file_get_contents($root.'/customer/assets/pwa-polish.js');
 $currentOrder=file_get_contents($root.'/customer/assets/current-order.js');
 $personalization=file_get_contents($root.'/customer/assets/personalization.js');
 $contrast=file_get_contents($root.'/customer/assets/contrast-fix.css');
+$manifest=file_get_contents($root.'/api/customer_manifest.php');
 preg_match('/function sanitizeProfile\(profile\)(.*?)function sanitizeLoyalty/s',$config,$snapshotMatch);
 $profileSnapshotBlock=$snapshotMatch[1]??'';
 
@@ -53,6 +56,14 @@ $checks=[
     'service worker never caches private customer APIs'=>str_contains($sw,'isPrivateApi')&&str_contains($sw,'if(isPrivateApi(url))return;'),
     'QR library is runtime cached for offline card rendering'=>str_contains($sw,'qrcodejs/1.0.0/qrcode.min.js')&&str_contains($sw,'THIRD_PARTY_CACHE'),
     'service worker cache remains compatible with installed PWA'=>str_contains($sw,"kapouch-pwa-v58")&&str_contains($sw,'./assets/contrast-fix.css?v=1')&&str_contains($sw,'./assets/status-once.js?v=1')&&str_contains($sw,'./assets/hero-cup.svg?v=2'),
+    'smart cart keeps a shadow copy and held unavailable lines'=>str_contains($pwaNext,"SHADOW_KEY='kapouch_cart_shadow_v1'")&&str_contains($pwaNext,"HELD_KEY='kapouch_cart_held_v1'")&&str_contains($pwaNext,'preserveDropped'),
+    'cart price changes are compared before checkout'=>str_contains($pwaNext,"BASELINE_KEY='kapouch_cart_price_baseline_v1'")&&str_contains($pwaNext,'comparePrices')&&str_contains($pwaNext,'Цены в корзине изменились'),
+    'offline search is explicitly available from cached menu'=>str_contains($pwaNext,"dataset.offlineSearchReady='1'")&&str_contains($pwaNext,'поиск работает по сохранённому меню'),
+    'slow connection mode avoids aggressive image prefetch'=>str_contains($pwaNext,'Медленное соединение')&&str_contains($pwaNext,'effectiveType')&&str_contains($sw,'preferLite()')&&str_contains($sw,'if(preferLite())return;'),
+    'PWA update is controlled by user'=>str_contains($pwaNext,'Доступно обновление Kapouch')&&str_contains($pwaNext,"waiting.postMessage({type:'SKIP_WAITING'})")&&str_contains($sw,"event.data?.type==='SKIP_WAITING'")&&!str_contains($sw,'cache.addAll(SHELL)).then(()=>self.skipWaiting())'),
+    'resilience plus module is loaded and precached'=>str_contains($pwaPolish,"script.src='assets/pwa-next.js?v=1'")&&str_contains($sw,'./assets/pwa-next.js?v=1'),
+    'ready order can set an app badge'=>str_contains($pwaNext,"status==='ready'")&&str_contains($pwaNext,'navigator.setAppBadge(1)'),
+    'manifest offers menu cart and profile shortcuts'=>str_contains($manifest,"'shortcuts'=>[")&&str_contains($manifest,"'url'=>'../customer/#menu'")&&str_contains($manifest,"'url'=>'../customer/#cart'")&&str_contains($manifest,"'url'=>'../customer/#profile'"),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"PWA profile UX contract failed: {$label}\n");exit(1);}}
 echo "PWA profile UX contract passed\n";

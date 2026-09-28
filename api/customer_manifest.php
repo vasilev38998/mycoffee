@@ -18,4 +18,27 @@ echo json_encode([
     'icons'=>[
         ['src'=>'../customer/assets/icon.svg?v=2','sizes'=>'any','type'=>'image/svg+xml','purpose'=>'any'],
     ],
+    'shortcuts'=>[
+        [
+            'name'=>'Открыть меню',
+            'short_name'=>'Меню',
+            'description'=>'Выбрать напиток в Kapouch',
+            'url'=>'../customer/#menu',
+            'icons'=>[['src'=>'../customer/assets/icon.svg?v=2','sizes'=>'any','type'=>'image/svg+xml']],
+        ],
+        [
+            'name'=>'Открыть корзину',
+            'short_name'=>'Корзина',
+            'description'=>'Продолжить заказ',
+            'url'=>'../customer/#cart',
+            'icons'=>[['src'=>'../customer/assets/icon.svg?v=2','sizes'=>'any','type'=>'image/svg+xml']],
+        ],
+        [
+            'name'=>'Открыть профиль',
+            'short_name'=>'Профиль',
+            'description'=>'Бонусы и заказы Kapouch',
+            'url'=>'../customer/#profile',
+            'icons'=>[['src'=>'../customer/assets/icon.svg?v=2','sizes'=>'any','type'=>'image/svg+xml']],
+        ],
+    ],
 ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
