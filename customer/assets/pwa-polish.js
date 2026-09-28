@@ -82,13 +82,9 @@ function cleanupHome(){
   }
   if(about&&footer&&!about.contains(footer))about.appendChild(footer);
 }
-function loadPwaNext(){
-  if(document.querySelector('script[data-kapouch-pwa-next]'))return;
-  const script=document.createElement('script');script.src='assets/pwa-next.js?v=1';script.defer=true;script.dataset.kapouchPwaNext='1';document.body.appendChild(script);
-}
 function refreshDom(){installHeroCup();normalizePickupLabels();normalizeVariantLabels();installNavIcons();cleanupHome();}
 function observe(){
-  refreshDom();loadHeroImage();loadPwaNext();
+  refreshDom();loadHeroImage();
   const root=document.getElementById('app')||document.body;
   if(root)new MutationObserver(()=>{normalizePickupLabels();normalizeVariantLabels();installNavIcons();cleanupHome();}).observe(root,{childList:true,subtree:true,characterData:true});
   setTimeout(refreshDom,250);setTimeout(refreshDom,1200);

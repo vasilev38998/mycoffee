@@ -45,7 +45,7 @@ $checks=[
  'wheel home icon is premium vector artwork'=>str_contains($polish,'data-kapouch-premium-wheel')&&str_contains($polish,'kwhRim')&&str_contains($polish,'kwhHub')&&str_contains($polish,'feDropShadow'),
  'checkout selector includes wheel voucher'=>str_contains($checkout,"data-loyalty-mode=\"wheel\"")&&str_contains($checkout,'wheel_reward_id:wheelRewardId()')&&str_contains($checkout,'Оставить приз на потом'),
  'config loads wheel polish and forwards selected reward'=>str_contains($config,"wheel.src='assets/wheel.js?v=1'")&&str_contains($config,"wheelPolish.src='assets/wheel-polish.js?v=1'")&&str_contains($config,"payload.wheel_reward_id=wheelRewardId()")&&str_contains($config,'customer_wheel_api.php'),
- 'service worker cache remains network-fresh for wheel'=>str_contains($sw,"const CACHE='kapouch-pwa-v58'")&&str_contains($sw,"./assets/wheel.js?v=1")&&str_contains($sw,"./assets/wheel-polish.js?v=1")&&str_contains($sw,'customer_wheel_api.php')&&str_contains($sw,"url.pathname.endsWith('/assets/wheel.js')")&&str_contains($sw,"url.pathname.endsWith('/assets/wheel-polish.js')"),
+ 'service worker cache remains network-fresh for wheel'=>str_contains($sw,"const CACHE='kapouch-pwa-v59'")&&str_contains($sw,"./assets/wheel.js?v=1")&&str_contains($sw,"./assets/wheel-polish.js?v=1")&&str_contains($sw,'customer_wheel_api.php')&&str_contains($sw,"url.pathname.endsWith('/assets/wheel.js')")&&str_contains($sw,"url.pathname.endsWith('/assets/wheel-polish.js')"),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"Customer wheel contract failed: {$label}\n");exit(1);}echo "OK: {$label}\n";}
 echo "CUSTOMER WHEEL CONTRACT PASSED\n";
