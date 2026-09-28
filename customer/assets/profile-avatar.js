@@ -45,16 +45,27 @@ function syncSurface(node,url){
   const letter=initial(current.name),img=node.querySelector('img[data-kapouch-profile-avatar]');
   if(url){
     if(!node.classList.contains('has-photo'))node.classList.add('has-photo');
-    if(!img||img.getAttribute('src')!==url){node.innerHTML='<img data-kapouch-profile-avatar="1" src="'+url+'" alt="">'}
+    if(!img||img.getAttribute('src')!==url)node.innerHTML='<img data-kapouch-profile-avatar="1" src="'+url+'" alt="">';
   }else{
     if(node.classList.contains('has-photo'))node.classList.remove('has-photo');
     if(node.textContent!==letter||node.children.length)node.textContent=letter;
   }
 }
-function syncGlobalAvatars(){const url=imageUrl(current.avatar_path||'');document.querySelectorAll('.home-avatar,[data-customer-avatar]').forEach(node=>syncSurface(node,url))}
+function syncGlobalAvatars(){
+  const url=imageUrl(current.avatar_path||''),home=document.querySelector('.home-avatar');
+  if(home)syncSurface(home,url);
+  document.querySelectorAll('[data-customer-avatar]').forEach(node=>syncSurface(node,url));
+}
+function syncPreview(preview,url){
+  if(!preview)return;
+  const letter=initial(current.name),img=preview.querySelector('img[data-profile-avatar-preview]');
+  preview.classList.toggle('has-photo',!!url);
+  if(url){if(!img||img.getAttribute('src')!==url)preview.innerHTML='<img data-profile-avatar-preview="1" src="'+url+'" alt="Фото профиля">'}
+  else if(preview.textContent!==letter||preview.children.length)preview.textContent=letter;
+}
 function renderAvatarBox(){
-  ensureCard();const path=current.avatar_path||'',url=imageUrl(path),preview=document.getElementById('profileAvatarPreview'),pick=document.getElementById('profileAvatarPick'),remove=document.getElementById('profileAvatarRemove');
-  if(preview){preview.classList.toggle('has-photo',!!url);preview.innerHTML=url?'<img src="'+url+'" alt="Фото профиля">':initial(current.name)}
+  ensureCard();const url=imageUrl(current.avatar_path||''),preview=document.getElementById('profileAvatarPreview'),pick=document.getElementById('profileAvatarPick'),remove=document.getElementById('profileAvatarRemove');
+  syncPreview(preview,url);
   if(pick)pick.textContent=url?'Изменить фото':'Добавить фото';if(remove)remove.hidden=!url;
   syncGlobalAvatars();
 }
