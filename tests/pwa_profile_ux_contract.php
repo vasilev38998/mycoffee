@@ -15,7 +15,7 @@ $checks=[
     'separate profile statistics dropdown'=>str_contains($profile,"id='profileStatsFold'")||str_contains($profile,"'profileStatsFold'"),
     'old combined profile dropdown removed'=>!str_contains($profile,'Данные и статистика'),
     'avatar controls live inside My data'=>str_contains($avatar,"#profileDataFold .profile-data-content")&&str_contains($avatar,"dataContent.insertBefore(card"),
-    'avatar is propagated to initial-letter surfaces'=>str_contains($avatar,"document.querySelectorAll('.home-avatar,[data-customer-avatar]')")&&str_contains($avatar,'syncGlobalAvatars()'),
+    'avatar is propagated to initial-letter surfaces'=>str_contains($avatar,"document.querySelector('.home-avatar')")&&str_contains($avatar,"document.querySelectorAll('[data-customer-avatar]')")&&str_contains($avatar,'syncGlobalAvatars()'),
     'avatar preview has no inherited button padding'=>str_contains($avatar,'padding:0!important')&&str_contains($avatar,'object-fit:cover!important')&&str_contains($avatar,'object-position:50% 50%!important'),
     'rectangular avatar is center-cropped to square'=>str_contains($avatar,'side=Math.min(sw,sh)')&&str_contains($avatar,'(sw-side)/2')&&str_contains($avatar,'(sh-side)/2')&&str_contains($avatar,'canvas.width=size;canvas.height=size'),
     'QR addressed to barista'=>str_contains($loyalty,'Покажите QR-код бариста'),
