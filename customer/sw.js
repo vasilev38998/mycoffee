@@ -19,13 +19,14 @@ const CURRENT_CACHES=new Set([CACHE,DATA_CACHE,IMAGE_CACHE,THIRD_PARTY_CACHE]);
 const SHELL=['./','./index.html','./legal.html','./payment-return.html','./config.js?v=13','./assets/app.css?v=5','./assets/variants.css?v=1','./assets/pwa-v2.css?v=1','./assets/pwa-v3.css?v=1','./assets/contrast-fix.css?v=1','./assets/pwa-polish.css?v=2','./assets/modifiers.css?v=3','./assets/payments.css?v=1','./assets/legal.css?v=2','./assets/redesign-v1.css?v=1','./assets/redesign-v2.css?v=2','./assets/redesign-v2-modules.css?v=2','./assets/redesign-v3-fixes.css?v=1','./assets/redesign-v4-polish.css?v=1','./assets/redesign-v4-polish.css?v=2','./assets/auth-required.css?v=1','./assets/sixth-drink-checkout.css?v=4','./assets/product-disclaimer.css?v=1','./assets/app.js?v=11','./assets/profile-plus.js?v=2','./assets/profile-compact.js?v=2','./assets/profile-avatar.js?v=2','./assets/loyalty-card.js?v=6','./assets/offline-resilience.js?v=1','./assets/status-once.js?v=1','./assets/phone-mask.js?v=1','./assets/auth-required.js?v=1','./assets/sixth-drink-checkout.js?v=7','./assets/product-disclaimer.js?v=1','./assets/pwa-polish.js?v=3','./assets/pwa-standalone.js?v=1','./assets/hero-cup.svg?v=2','./assets/hero-cup.svg?v=3','./assets/modifier-price-ui.js?v=1','./assets/payments.js?v=9','./assets/personalization.js?v=2','./assets/current-order.js?v=2','./assets/growth-suite.js?v=3','./assets/push.js?v=2','./assets/legal.js?v=4','./assets/redesign-v1.js?v=3','./assets/saved-order.js?v=1','./assets/pickup-countdown.js?v=1','./assets/wheel.js?v=1','./assets/wheel-polish.js?v=1','./assets/icon.svg','./assets/icon.svg?v=2'];
 const SCOPE_PATH=new URL(self.registration.scope).pathname;
 const CATALOG_KEY=new URL('./__offline/catalog.json',self.registration.scope).href;
+const WHEEL_API_PATH='/api/customer_wheel_api.php';
 const inAppScope=url=>url.origin===self.location.origin&&url.pathname.startsWith(SCOPE_PATH);
 const navShell=url=>url.pathname.endsWith('/legal.html')?'./legal.html':url.pathname.endsWith('/payment-return.html')?'./payment-return.html':'./index.html';
 const isProductImage=url=>url.pathname.includes('/customer/uploads/products/')||url.pathname.includes('/uploads/products/');
 const isQrLibrary=url=>url.hostname==='cdnjs.cloudflare.com'&&url.pathname.endsWith('/qrcodejs/1.0.0/qrcode.min.js');
 const isCatalog=url=>url.pathname.endsWith('/api/customer_catalog.php');
 const isPublicData=url=>url.pathname.endsWith('/api/customer_maps_public.php')||url.pathname.endsWith('/api/customer_legal.php');
-const isPrivateApi=url=>/\/api\/(?:customer_profile|customer_loyalty_card|customer_order_quote|customer_order_status|customer_reorder|customer_order_detail|customer_favorites|customer_wheel_api|customer_push_[^/]+)\.php$/.test(url.pathname);
+const isPrivateApi=url=>url.pathname.includes(WHEEL_API_PATH)||/\/api\/(?:customer_profile|customer_loyalty_card|customer_order_quote|customer_order_status|customer_reorder|customer_order_detail|customer_favorites|customer_wheel_api|customer_push_[^/]+)\.php$/.test(url.pathname);
 
 function fetchWithTimeout(request,ms){
   return Promise.race([
