@@ -177,8 +177,9 @@ window.addEventListener('DOMContentLoaded',function(){
   document.body.appendChild(compact);
 
   var profileAvatar=document.createElement('script');
-  profileAvatar.src='assets/profile-avatar.js?v=1';
+  profileAvatar.src='assets/profile-avatar.js?v=2';
   profileAvatar.defer=true;
+  profileAvatar.dataset.kapouchProfileAvatar='1';
   document.body.appendChild(profileAvatar);
 
   var statusOnce=document.createElement('script');
