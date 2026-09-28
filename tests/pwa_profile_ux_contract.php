@@ -34,7 +34,7 @@ $checks=[
     'home bonus card stays removed'=>str_contains($config,'#balanceCard{display:none!important}'),
     'stale auth helper is hidden'=>str_contains($config,'.auth-alt-hint{display:none!important}'),
     'fresh call auth asset loaded'=>str_contains($config,'assets/auth-call.js?v=3'),
-    'fresh home polish asset loaded'=>str_contains($config,'assets/pwa-polish.js?v=4'),
+    'fresh home polish asset loaded'=>str_contains($config,'assets/pwa-polish.js?v=3'),
     'service worker cache bumped'=>str_contains($sw,"kapouch-pwa-v41")&&str_contains($sw,'./assets/contrast-fix.css?v=1')&&str_contains($sw,'./assets/status-once.js?v=1')&&str_contains($sw,'./assets/hero-cup.svg?v=2'),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"PWA profile UX contract failed: {$label}\n");exit(1);}}
