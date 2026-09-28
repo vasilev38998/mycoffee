@@ -5,6 +5,23 @@ function customer_media_root(): string{return dirname(__DIR__).'/customer/upload
 function customer_media_public_prefix(): string{return 'uploads/products/';}
 
 /**
+ * Keep avatar support usable on installations that missed migration 044 during
+ * an older manual deployment. The normal migration runner remains authoritative;
+ * this is only a narrow, idempotent compatibility guard for the avatar column.
+ */
+function customer_media_ensure_avatar_schema(PDO $pdo): void
+{
+    $stmt=$pdo->query("SHOW COLUMNS FROM customer_accounts LIKE 'avatar_path'");
+    if($stmt&&$stmt->fetch())return;
+    try{
+        $pdo->exec("ALTER TABLE customer_accounts ADD COLUMN avatar_path VARCHAR(255) DEFAULT NULL AFTER birth_date");
+    }catch(Throwable $e){
+        $retry=$pdo->query("SHOW COLUMNS FROM customer_accounts LIKE 'avatar_path'");
+        if(!$retry||!$retry->fetch())throw $e;
+    }
+}
+
+/**
  * Resolve every product-image format that has existed in Kapouch to a safe
  * basename inside customer/uploads/products. This is deliberately strict:
  * external URLs and nested paths are never treated as local upload files.
