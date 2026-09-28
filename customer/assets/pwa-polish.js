@@ -55,11 +55,38 @@ function normalizeVariantLabels(){
     if(!match)return;const count=Number(match[1]);const next=count+' '+variantWord(count);if(text!==next)el.textContent=next;
   });
 }
-function refreshDom(){installHeroCup();normalizePickupLabels();normalizeVariantLabels();installNavIcons();}
+function ensureHomeCleanupStyle(){
+  if($('kapouchHomeCleanupStyle'))return;
+  const style=document.createElement('style');style.id='kapouchHomeCleanupStyle';style.textContent=`
+body.k-redesign-v2 .view[data-view="home"] #balanceCard{display:none!important}
+body.k-redesign-v2 .view[data-view="home"] .about-card.about-card-merged{margin-bottom:22px!important;padding-bottom:24px!important}
+body.k-redesign-v2 .view[data-view="home"] .about-card.about-card-merged>.pwa-legal-links{display:none!important}
+body.k-redesign-v2 .view[data-view="home"] .about-card.about-card-merged .home-legal-footer{margin:21px 0 0!important;padding:18px 0 0!important;border-top:1px solid rgba(74,43,18,.18)!important;color:#5c421f!important;font-size:10px!important;line-height:1.5!important}
+body.k-redesign-v2 .view[data-view="home"] .about-card.about-card-merged .home-legal-footer-title{margin:0 0 6px!important;color:#3f2915!important;font-size:11px!important;font-weight:950!important}
+body.k-redesign-v2 .view[data-view="home"] .about-card.about-card-merged .home-legal-footer-seller{color:#5a421f!important;font-size:10px!important;line-height:1.45!important}
+body.k-redesign-v2 .view[data-view="home"] .about-card.about-card-merged .home-legal-footer .pwa-legal-links{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px 16px!important;margin-top:12px!important}
+body.k-redesign-v2 .view[data-view="home"] .about-card.about-card-merged .home-legal-footer .pwa-legal-links a{color:#5b371b!important;font-size:10px!important;line-height:1.35!important;font-weight:750!important}
+body.k-redesign-v2 .view[data-view="home"] .about-card.about-card-merged .home-legal-footer-contact{margin-top:11px!important;color:#6a4d27!important;font-size:10px!important;line-height:1.45!important}
+@media(max-width:380px){body.k-redesign-v2 .view[data-view="home"] .about-card.about-card-merged .home-legal-footer .pwa-legal-links{grid-template-columns:1fr!important}}
+`;document.head.appendChild(style);
+}
+function cleanupHome(){
+  ensureHomeCleanupStyle();
+  const balance=$('balanceCard');if(balance){balance.hidden=true;balance.setAttribute('aria-hidden','true')}
+  const home=document.querySelector('.view[data-view="home"]');if(!home)return;
+  const about=home.querySelector('.about-card'),footer=$('homeLegalFooter');
+  if(about){
+    about.classList.add('about-card-merged');
+    const duplicateLinks=Array.from(about.children).find(el=>el.classList&&el.classList.contains('pwa-legal-links'));
+    if(duplicateLinks)duplicateLinks.remove();
+  }
+  if(about&&footer&&!about.contains(footer))about.appendChild(footer);
+}
+function refreshDom(){installHeroCup();normalizePickupLabels();normalizeVariantLabels();installNavIcons();cleanupHome();}
 function observe(){
   refreshDom();loadHeroImage();
   const root=document.getElementById('app')||document.body;
-  if(root)new MutationObserver(()=>{normalizePickupLabels();normalizeVariantLabels();installNavIcons();}).observe(root,{childList:true,subtree:true,characterData:true});
+  if(root)new MutationObserver(()=>{normalizePickupLabels();normalizeVariantLabels();installNavIcons();cleanupHome();}).observe(root,{childList:true,subtree:true,characterData:true});
   setTimeout(refreshDom,250);setTimeout(refreshDom,1200);
 }
 installNavIcons();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observe,{once:true});else observe();
