@@ -3,6 +3,7 @@ declare(strict_types=1);
 $root=dirname(__DIR__);
 $migration=file_get_contents($root.'/database/migrations/042_customer_wheel.sql');
 $manualMigration=file_get_contents($root.'/database/migrations/043_customer_wheel_manual_attempts.sql');
+$expandedMigration=file_get_contents($root.'/database/migrations/045_customer_wheel_prize_expansion.sql');
 $updater=file_get_contents($root.'/inc/updater.php');
 $wheel=file_get_contents($root.'/inc/customer_wheel.php');
 $api=file_get_contents($root.'/api/customer_wheel_api.php');
@@ -13,6 +14,7 @@ $orders=file_get_contents($root.'/inc/customer_orders.php');
 $checkout=file_get_contents($root.'/customer/assets/sixth-drink-checkout.js');
 $ui=file_get_contents($root.'/customer/assets/wheel.js');
 $polish=file_get_contents($root.'/customer/assets/wheel-polish.js');
+$attract=file_get_contents($root.'/customer/assets/wheel-attract.css');
 $sound=file_get_contents($root.'/customer/assets/wheel-sound.js');
 $config=file_get_contents($root.'/customer/config.js');
 $sw=file_get_contents($root.'/customer/sw.js');
@@ -22,7 +24,9 @@ $checks=[
  'wheel migration creates prizes and spin ledger'=>str_contains($migration,'CREATE TABLE IF NOT EXISTS customer_wheel_prizes')&&str_contains($migration,'CREATE TABLE IF NOT EXISTS customer_wheel_spins')&&str_contains($migration,'UNIQUE KEY uniq_customer_wheel_source_order'),
  'wheel supports requested prize families'=>str_contains($migration,"ENUM('points','stamp','free_drink','discount_percent')")&&str_contains($migration,"'Напиток в подарок'")&&str_contains($migration,"'−10% на напиток'"),
  'manual-attempt migration adds grant ledger and nullable order source'=>str_contains($manualMigration,'CREATE TABLE IF NOT EXISTS customer_wheel_attempt_grants')&&str_contains($manualMigration,'attempts_remaining')&&str_contains($manualMigration,'MODIFY source_order_id BIGINT UNSIGNED NULL')&&str_contains($manualMigration,'ADD COLUMN attempt_grant_id'),
- 'schema fast path includes latest customer migration'=>str_contains($updater,'KAPOUCH_SCHEMA_VERSION = 44')&&str_contains($updater,'KAPOUCH_SCHEMA_MIGRATION_COUNT = 43'),
+ 'expanded wheel adds four distinct new prizes'=>str_contains($expandedMigration,"'30 бонусов'")&&str_contains($expandedMigration,"'75 бонусов'")&&str_contains($expandedMigration,"'+2 к прогрессу'")&&str_contains($expandedMigration,"'−15% на напиток'")&&str_contains($expandedMigration,"'discount_percent',15,120,4,5,14"),
+ 'expanded prizes are idempotent'=>substr_count($expandedMigration,'WHERE NOT EXISTS')===4,
+ 'schema fast path includes latest customer migration'=>str_contains($updater,'KAPOUCH_SCHEMA_VERSION = 45')&&str_contains($updater,'KAPOUCH_SCHEMA_MIGRATION_COUNT = 44'),
  'spin eligibility requires completed PWA order and minimum total'=>str_contains($wheel,"o.source='customer-web'")&&str_contains($wheel,"o.status='completed'")&&str_contains($wheel,'o.total_amount>=?')&&str_contains($wheel,'ws.id IS NULL'),
  'manual attempts are counted granted and consumed transactionally'=>str_contains($wheel,'function customer_wheel_manual_attempts')&&str_contains($wheel,'function customer_wheel_grant_manual_attempts')&&str_contains($wheel,'function customer_wheel_take_manual_attempt')&&str_contains($wheel,'attempts_remaining=attempts_remaining-1')&&str_contains($wheel,'FOR UPDATE'),
  'manual attempts bypass order cooldown without moving regular cooldown'=>str_contains($wheel,'source_order_id IS NOT NULL ORDER BY id DESC LIMIT 1')&&str_contains($wheel,"elseif(\$manual>0)\$reason='manual'")&&str_contains($wheel,"\$manualGrantId=customer_wheel_take_manual_attempt")&&str_contains($wheel,"\$manualGrantId!==null?'manual':'order'"),
@@ -44,10 +48,11 @@ $checks=[
  'wheel uses server result rather than client prize selection'=>str_contains($ui,"body:JSON.stringify({action:'spin'})")&&str_contains($ui,'const spin=d.spin||{}')&&str_contains($ui,'showResult(prize)'),
  'wheel home copy has correct Russian declension'=>str_contains($polish,"word(n,'вращение','вращения','вращений')")&&str_contains($polish,"word(n,'подарочная попытка','подарочные попытки','подарочных попыток')"),
  'wheel home icon is premium vector artwork'=>str_contains($polish,'data-kapouch-premium-wheel')&&str_contains($polish,'kwhRim')&&str_contains($polish,'kwhHub')&&str_contains($polish,'feDropShadow'),
- 'wheel polish loads dedicated sound layer'=>str_contains($polish,"script.src='assets/wheel-sound.js?v=1'")&&str_contains($polish,"dataset.kapouchWheelSound='1'"),
+ 'wheel polish loads attraction and sound layers'=>str_contains($polish,"link.href='assets/wheel-attract.css?v=1'")&&str_contains($polish,"script.src='assets/wheel-sound.js?v=1'")&&str_contains($polish,"dataset.kapouchWheelAttract='1'")&&str_contains($polish,"dataset.kapouchWheelSound='1'"),
+ 'premium wheel has animated brass rim and stage energy'=>str_contains($attract,'repeating-conic-gradient')&&str_contains($attract,'wheelRimChase')&&str_contains($attract,'wheelStageEnergy')&&str_contains($attract,'wheelHubPulse')&&str_contains($attract,'prefers-reduced-motion'),
  'wheel sound uses gesture-unlocked Web Audio'=>str_contains($sound,'window.AudioContext||window.webkitAudioContext')&&str_contains($sound,"closest('#wheelSpinButton')")&&str_contains($sound,'ensureAudio()'),
  'wheel spin sound follows actual transform transition'=>str_contains($sound,"event?.target?.id==='wheelDisc'")&&str_contains($sound,"event.propertyName==='transform'")&&str_contains($sound,"addEventListener('transitionstart'")&&str_contains($sound,'startSpinTicks()'),
- 'wheel prize sound plays from successful wheel event'=>str_contains($sound,"window.addEventListener('kapouch:wheel',playPrizeSound)")&&str_contains($sound,'const notes=[523.25,659.25,783.99,1046.5]'),
+ 'wheel prize sound has landing thump and victory chord'=>str_contains($sound,"window.addEventListener('kapouch:wheel',playPrizeSound)")&&str_contains($sound,'tone(118,.13,.04')&&str_contains($sound,'const notes=[523.25,659.25,783.99,1046.5]'),
  'checkout selector includes wheel voucher'=>str_contains($checkout,"data-loyalty-mode=\"wheel\"")&&str_contains($checkout,'wheel_reward_id:wheelRewardId()')&&str_contains($checkout,'Оставить приз на потом'),
  'config loads wheel polish and forwards selected reward'=>str_contains($config,"wheel.src='assets/wheel.js?v=1'")&&str_contains($config,"wheelPolish.src='assets/wheel-polish.js?v=1'")&&str_contains($config,"payload.wheel_reward_id=wheelRewardId()")&&str_contains($config,'customer_wheel_api.php'),
  'service worker cache remains network-fresh for wheel'=>str_contains($sw,"const CACHE='kapouch-pwa-v59'")&&str_contains($sw,"./assets/wheel.js?v=1")&&str_contains($sw,"./assets/wheel-polish.js?v=1")&&str_contains($sw,'customer_wheel_api.php')&&str_contains($sw,"url.pathname.endsWith('/assets/wheel.js')")&&str_contains($sw,"url.pathname.endsWith('/assets/wheel-polish.js')"),
