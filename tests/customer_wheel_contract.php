@@ -13,6 +13,7 @@ $orders=file_get_contents($root.'/inc/customer_orders.php');
 $checkout=file_get_contents($root.'/customer/assets/sixth-drink-checkout.js');
 $ui=file_get_contents($root.'/customer/assets/wheel.js');
 $polish=file_get_contents($root.'/customer/assets/wheel-polish.js');
+$sound=file_get_contents($root.'/customer/assets/wheel-sound.js');
 $config=file_get_contents($root.'/customer/config.js');
 $sw=file_get_contents($root.'/customer/sw.js');
 $refunds=file_get_contents($root.'/customer_refunds.php');
@@ -43,6 +44,10 @@ $checks=[
  'wheel uses server result rather than client prize selection'=>str_contains($ui,"body:JSON.stringify({action:'spin'})")&&str_contains($ui,'const spin=d.spin||{}')&&str_contains($ui,'showResult(prize)'),
  'wheel home copy has correct Russian declension'=>str_contains($polish,"word(n,'вращение','вращения','вращений')")&&str_contains($polish,"word(n,'подарочная попытка','подарочные попытки','подарочных попыток')"),
  'wheel home icon is premium vector artwork'=>str_contains($polish,'data-kapouch-premium-wheel')&&str_contains($polish,'kwhRim')&&str_contains($polish,'kwhHub')&&str_contains($polish,'feDropShadow'),
+ 'wheel polish loads dedicated sound layer'=>str_contains($polish,"script.src='assets/wheel-sound.js?v=1'")&&str_contains($polish,"dataset.kapouchWheelSound='1'"),
+ 'wheel sound uses gesture-unlocked Web Audio'=>str_contains($sound,'window.AudioContext||window.webkitAudioContext')&&str_contains($sound,"closest('#wheelSpinButton')")&&str_contains($sound,'ensureAudio()'),
+ 'wheel spin sound follows actual transform transition'=>str_contains($sound,"event?.target?.id==='wheelDisc'")&&str_contains($sound,"event.propertyName==='transform'")&&str_contains($sound,"addEventListener('transitionstart'")&&str_contains($sound,'startSpinTicks()'),
+ 'wheel prize sound plays from successful wheel event'=>str_contains($sound,"window.addEventListener('kapouch:wheel',playPrizeSound)")&&str_contains($sound,'const notes=[523.25,659.25,783.99,1046.5]'),
  'checkout selector includes wheel voucher'=>str_contains($checkout,"data-loyalty-mode=\"wheel\"")&&str_contains($checkout,'wheel_reward_id:wheelRewardId()')&&str_contains($checkout,'Оставить приз на потом'),
  'config loads wheel polish and forwards selected reward'=>str_contains($config,"wheel.src='assets/wheel.js?v=1'")&&str_contains($config,"wheelPolish.src='assets/wheel-polish.js?v=1'")&&str_contains($config,"payload.wheel_reward_id=wheelRewardId()")&&str_contains($config,'customer_wheel_api.php'),
  'service worker cache remains network-fresh for wheel'=>str_contains($sw,"const CACHE='kapouch-pwa-v59'")&&str_contains($sw,"./assets/wheel.js?v=1")&&str_contains($sw,"./assets/wheel-polish.js?v=1")&&str_contains($sw,'customer_wheel_api.php')&&str_contains($sw,"url.pathname.endsWith('/assets/wheel.js')")&&str_contains($sw,"url.pathname.endsWith('/assets/wheel-polish.js')"),
