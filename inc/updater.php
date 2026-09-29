@@ -1,13 +1,13 @@
 <?php
 declare(strict_types=1);
 
-const KAPOUCH_APP_VERSION = '2026.09.18';
+const KAPOUCH_APP_VERSION = '2026.09.29';
 const KAPOUCH_LEGACY_BASELINE_MAX = 8;
 // Keep these constants in sync with database/migrations. CI verifies them.
 // They let ordinary requests prove that the schema is current with one small
 // DB query instead of reading and hashing every SQL file on every API poll.
-const KAPOUCH_SCHEMA_VERSION = 44;
-const KAPOUCH_SCHEMA_MIGRATION_COUNT = 43;
+const KAPOUCH_SCHEMA_VERSION = 45;
+const KAPOUCH_SCHEMA_MIGRATION_COUNT = 44;
 
 function kapouch_migrations_dir(): string
 {

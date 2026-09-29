@@ -31,9 +31,11 @@ function wheelTick(progress){
   if(now-lastTick<30)return;
   lastTick=now;
   const p=Math.max(0,Math.min(1,Number(progress)||0));
-  const pitch=920-p*260+(Math.random()-.5)*55;
-  tone(pitch,.024,.022,'square');
-  tone(pitch*.52,.03,.009,'triangle',.002);
+  const pitch=980-p*310+(Math.random()-.5)*62;
+  const volume=.024-p*.004;
+  tone(pitch,.022,volume,'square');
+  tone(pitch*.51,.032,.009,'triangle',.002);
+  if(p>.72&&Math.random()>.72)tone(170+p*35,.045,.006,'sine',.004);
 }
 function stopSpinTicks(){
   spinActive=false;
@@ -45,6 +47,8 @@ function startSpinTicks(){
   if(spinActive)return;
   stopSpinTicks();
   spinActive=true;
+  tone(156,.11,.026,'sine');
+  tone(312,.075,.013,'triangle',.018);
   const token=spinToken,started=performance.now(),duration=5100;
   const step=()=>{
     if(!spinActive||token!==spinToken||document.hidden)return;
@@ -52,7 +56,7 @@ function startSpinTicks(){
     if(elapsed>=duration){stopSpinTicks();return}
     const progress=Math.max(0,Math.min(1,elapsed/duration));
     wheelTick(progress);
-    const interval=54+Math.pow(progress,2.25)*285;
+    const interval=49+Math.pow(progress,2.2)*300;
     spinTimer=setTimeout(step,interval);
   };
   step();
@@ -61,10 +65,12 @@ function playPrizeSound(){
   stopSpinTicks();
   const ctx=ensureAudio();
   if(!ctx||ctx.state!=='running')return;
+  tone(118,.13,.04,'sine');
+  tone(236,.09,.022,'triangle',.01);
   const notes=[523.25,659.25,783.99,1046.5];
-  notes.forEach((frequency,index)=>tone(frequency,.28,index===3?.045:.035,'sine',index*.085));
-  tone(1318.51,.18,.022,'triangle',.38);
-  tone(1567.98,.22,.018,'triangle',.48);
+  notes.forEach((frequency,index)=>tone(frequency,.3,index===3?.047:.035,'sine',.07+index*.085));
+  tone(1318.51,.19,.023,'triangle',.45);
+  tone(1567.98,.24,.019,'triangle',.55);
 }
 function isWheelTransition(event){
   return event?.target?.id==='wheelDisc'&&event.propertyName==='transform';
