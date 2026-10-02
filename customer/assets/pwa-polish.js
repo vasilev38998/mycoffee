@@ -3,7 +3,7 @@
 const $=id=>document.getElementById(id);
 const cfg=window.KAPOUCH_CUSTOMER_CONFIG||{apiBase:'https://kapouch.store/api'};
 const apiBase=String(cfg.apiBase||'https://kapouch.store/api').replace(/\/$/,'');
-const defaultHero='assets/hero-cup.svg?v=2';
+const defaultHero='assets/hero-bean.webp?v=1';
 const svg={
   home:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 10.7 12 3l8.5 7.7v9.1a1.2 1.2 0 0 1-1.2 1.2h-5.2v-6.1H9.9V21H4.7a1.2 1.2 0 0 1-1.2-1.2z"/></svg>',
   menu:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>',
@@ -19,8 +19,12 @@ function installNavIcons(){
 }
 function installHeroCup(){
   const art=document.querySelector('.hero-art');if(!art)return;
-  if(art.dataset.heroSvgReady==='1'&&$('heroDrinkImage'))return;
-  art.innerHTML='<div class="hero-drink-frame"><img id="heroDrinkImage" class="hero-drink-image" src="'+defaultHero+'" alt="" width="360" height="420" decoding="async"></div>';
+  const current=$('heroDrinkImage');
+  if(current){
+    if(!current.classList.contains('custom-hero-image')&&current.getAttribute('src')!==defaultHero)current.src=defaultHero;
+    art.dataset.heroSvgReady='1';return;
+  }
+  art.innerHTML='<div class="hero-drink-frame"><img id="heroDrinkImage" class="hero-drink-image" src="'+defaultHero+'" alt="" width="420" height="362" decoding="async"></div>';
   art.dataset.heroSvgReady='1';
 }
 function setHeroImage(src){
