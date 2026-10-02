@@ -19,7 +19,7 @@ $checks=[
     'photo bean asset is a real WebP image'=>strlen($bean)>10000&&substr($bean,0,4)==='RIFF'&&substr($bean,8,4)==='WEBP',
     'hero no longer scans catalog product photos'=>!str_contains($polish,'bestCoffeeImage')&&!str_contains($polish,'img.product-photo'),
     'polish assets are cache-busted'=>str_contains($config,'assets/pwa-polish.css?v=2')&&str_contains($config,'assets/pwa-polish.js?v=3'),
-    'legacy SVG stays self-contained for compatibility'=>str_contains($svg,'<title id="title">Кофейное зерно Kapouch</title>')&&!preg_match('/<(?:image|script)\\b[^>]*(?:href|src)=["\\']https?:\\/\\//i',$svg),
+    'legacy SVG stays self-contained for compatibility'=>str_contains($svg,'<title id="title">Кофейное зерно Kapouch</title>')&&!preg_match("~<(?:image|script)\\b[^>]*(?:href|src)=[\"']https?://~i",$svg),
     'service worker caches and refreshes photo hero'=>str_contains($sw,"kapouch-pwa-v41")&&str_contains($sw,'./assets/hero-bean.webp?v=1')&&str_contains($sw,"url.pathname.endsWith('/assets/hero-bean.webp')")&&str_contains($sw,'./assets/pwa-polish.js?v=3'),
 ];
 foreach($checks as $label=>$ok){
