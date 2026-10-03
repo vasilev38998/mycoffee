@@ -1,5 +1,7 @@
 (function(){
 'use strict';
+if(window.__KAPOUCH_PWA_POLISH_BOOTSTRAPPED)return;
+window.__KAPOUCH_PWA_POLISH_BOOTSTRAPPED=true;
 const $=id=>document.getElementById(id);
 const cfg=window.KAPOUCH_CUSTOMER_CONFIG||{apiBase:'https://kapouch.store/api'};
 const apiBase=String(cfg.apiBase||'https://kapouch.store/api').replace(/\/$/,'');
@@ -87,11 +89,13 @@ function cleanupHome(){
   if(about&&footer&&!about.contains(footer))about.appendChild(footer);
 }
 function refreshDom(){installHeroCup();normalizePickupLabels();normalizeVariantLabels();installNavIcons();cleanupHome();}
+let refreshQueued=false;
+function scheduleRefresh(){if(refreshQueued)return;refreshQueued=true;requestAnimationFrame(()=>{refreshQueued=false;refreshDom();});}
 function observe(){
   refreshDom();loadHeroImage();
   const root=document.getElementById('app')||document.body;
-  if(root)new MutationObserver(()=>{normalizePickupLabels();normalizeVariantLabels();installNavIcons();cleanupHome();}).observe(root,{childList:true,subtree:true,characterData:true});
-  setTimeout(refreshDom,250);setTimeout(refreshDom,1200);
+  if(root)new MutationObserver(scheduleRefresh).observe(root,{childList:true,subtree:true,characterData:true});
+  setTimeout(scheduleRefresh,250);setTimeout(scheduleRefresh,1200);
 }
 installNavIcons();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observe,{once:true});else observe();
 })();

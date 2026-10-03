@@ -1,0 +1,55 @@
+name: Production uptime monitor
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-uptime-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check production endpoints
+        shell: bash
+        run: |
+          set -uo pipefail
+          targets=("https://kapouch.store/" "https://app.kapouch.store/")
+          failed=0
+          report="$RUNNER_TEMP/kapouch-uptime.txt"
+          : > "$report"
+          for url in "${targets[@]}"; do
+            host="${url#https://}"; host="${host%%/*}"
+            {
+              echo "## ${host}"
+              echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+              echo
+              echo '```text'
+              echo "DNS:"
+              getent ahostsv4 "$host" | sort -u || true
+              echo
+              echo "TLS:"
+              timeout 12 bash -c "echo | openssl s_client -connect '${host}:443' -servername '${host}' -brief 2>&1" || true
+              echo
+              echo "HTTP:"
+            } >> "$report"
+            if output="$(curl -fsS --connect-timeout 8 --max-time 20 --retry 1 --retry-all-errors --retry-delay 2 -o /dev/null -w 'status=%{http_code} remote_ip=%{remote_ip} dns=%{time_namelookup}s connect=%{time_connect}s tls=%{time_appconnect}s starttransfer=%{time_starttransfer}s total=%{time_total}s\n' "$url" 2>&1)"; then
+              echo "$output" >> "$report"
+            else
+              rc=$?
+              echo "curl_exit=${rc} ${output}" >> "$report"
+              failed=1
+            fi
+            echo '```' >> "$report"
+            echo >> "$report"
+          done
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          cat "$report"
+          exit "$failed"

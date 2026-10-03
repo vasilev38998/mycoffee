@@ -14,6 +14,10 @@ $pwaPolish=file_get_contents($root.'/customer/assets/pwa-polish.js');
 $currentOrder=file_get_contents($root.'/customer/assets/current-order.js');
 $personalization=file_get_contents($root.'/customer/assets/personalization.js');
 $contrast=file_get_contents($root.'/customer/assets/contrast-fix.css');
+$launchCss=file_get_contents($root.'/customer/assets/launch-polish.css');
+$update=file_get_contents($root.'/customer/assets/pwa-update.js');
+$push=file_get_contents($root.'/customer/assets/push.js');
+$index=file_get_contents($root.'/customer/index.html');
 $manifest=file_get_contents($root.'/api/customer_manifest.php');
 preg_match('/function sanitizeProfile\(profile\)(.*?)function sanitizeLoyalty/s',$config,$snapshotMatch);
 $profileSnapshotBlock=$snapshotMatch[1]??'';
@@ -54,8 +58,12 @@ $checks=[
     'service worker precaches popular product images'=>str_contains($sw,'prefetchPopularImages')&&str_contains($sw,'IMAGE_CACHE')&&str_contains($sw,'featured'),
     'service worker never caches private customer APIs'=>str_contains($sw,'isPrivateApi')&&str_contains($sw,'if(isPrivateApi(url))return;'),
     'QR library is runtime cached for offline card rendering'=>str_contains($sw,'qrcodejs/1.0.0/qrcode.min.js')&&str_contains($sw,'THIRD_PARTY_CACHE'),
-    'service worker uses isolated hotfix cache'=>str_contains($sw,"const CACHE='kapouch-pwa-v59'")&&str_contains($sw,"const PREVIOUS_CACHE='kapouch-pwa-v58'"),
-    'hotfix service worker activates immediately'=>str_contains($sw,'cache.addAll(SHELL)).then(()=>self.skipWaiting())'),
+    'service worker uses isolated launch cache'=>str_contains($sw,"const CACHE='kapouch-pwa-v60'")&&str_contains($sw,"const PREVIOUS_CACHE='kapouch-pwa-v59'"),
+    'service worker stages updates instead of replacing a live app'=>str_contains($sw,"self.addEventListener('install',event=>{event.waitUntil(precacheShell())})")&&!str_contains($sw,'precacheShell().then(()=>self.skipWaiting())')&&str_contains($sw,"event.data?.type==='SKIP_WAITING'"),
+    'update prompt is part of the shell'=>str_contains($index,'assets/pwa-update.js?v=1')&&str_contains($sw,'./assets/pwa-update.js?v=1')&&str_contains($update,'Доступно обновление Kapouch')&&str_contains($update,"type:'SKIP_WAITING'"),
+    'launch accessibility layer keeps focus and reduced motion support'=>str_contains($index,'assets/launch-polish.css?v=1')&&str_contains($launchCss,':focus-visible')&&str_contains($launchCss,'prefers-reduced-motion')&&str_contains($launchCss,'font-size:16px!important'),
+    'runtime polish observers are idempotent and throttled'=>str_contains($pwaPolish,'__KAPOUCH_PWA_POLISH_BOOTSTRAPPED')&&str_contains($pwaPolish,'requestAnimationFrame')&&str_contains($offline,'__KAPOUCH_OFFLINE_BOOTSTRAPPED')&&str_contains($offline,'requestAnimationFrame'),
+    'push bootstrap is idempotent and not loaded twice by static shell'=>str_contains($push,'__KAPOUCH_PUSH_BOOTSTRAPPED')&&!str_contains($index,'assets/push.js?v=2'),
     'heavy resilience plus runtime is no longer loaded'=>!str_contains($pwaPolish,'pwa-next.js')&&!str_contains($sw,'./assets/pwa-next.js'),
     'slow connection still avoids aggressive image prefetch'=>str_contains($sw,'preferLite()')&&str_contains($sw,'if(preferLite())return;'),
     'manifest offers menu cart and profile shortcuts'=>str_contains($manifest,"'shortcuts'=>[")&&str_contains($manifest,"'url'=>'../customer/#menu'")&&str_contains($manifest,"'url'=>'../customer/#cart'")&&str_contains($manifest,"'url'=>'../customer/#profile'"),

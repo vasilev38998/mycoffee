@@ -6,17 +6,19 @@ header('Content-Type: application/manifest+json; charset=UTF-8');
 header('Cache-Control: no-cache');
 $s=customer_pwa_settings();
 echo json_encode([
+    'id'=>'../customer/',
     'name'=>$s['app_name'],
     'short_name'=>$s['app_name'],
     'description'=>$s['tagline'],
     'start_url'=>'../customer/',
     'scope'=>'../customer/',
     'display'=>'standalone',
+    'display_override'=>['standalone','minimal-ui'],
     'orientation'=>'portrait',
-    'background_color'=>'#ffd523',
-    'theme_color'=>'#ffd523',
+    'background_color'=>'#f7f1e8',
+    'theme_color'=>'#f7f1e8',
     'icons'=>[
-        ['src'=>'../customer/assets/icon.svg?v=2','sizes'=>'any','type'=>'image/svg+xml','purpose'=>'any'],
+        ['src'=>'../customer/assets/icon.svg?v=2','sizes'=>'any','type'=>'image/svg+xml','purpose'=>'any maskable'],
     ],
     'shortcuts'=>[
         [

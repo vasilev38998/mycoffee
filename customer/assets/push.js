@@ -1,5 +1,7 @@
 (function(){
 'use strict';
+if(window.__KAPOUCH_PUSH_BOOTSTRAPPED)return;
+window.__KAPOUCH_PUSH_BOOTSTRAPPED=true;
 const cfg=window.KAPOUCH_CUSTOMER_CONFIG||{apiBase:'../api'};const apiBase=String(cfg.apiBase||'../api').replace(/\/$/,'');
 const button=document.getElementById('pushToggleButton'),text=document.getElementById('pushStatusText'),error=document.getElementById('pushError');if(!button||!text)return;
 function authToken(){return localStorage.getItem('kapouch_customer_auth_token')||'';}

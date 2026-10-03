@@ -1,5 +1,7 @@
 (function(){
 'use strict';
+if(window.__KAPOUCH_OFFLINE_BOOTSTRAPPED)return;
+window.__KAPOUCH_OFFLINE_BOOTSTRAPPED=true;
 const cfg=window.KAPOUCH_CUSTOMER_CONFIG||{apiBase:'https://kapouch.store/api'};
 const apiBase=String(cfg.apiBase||'https://kapouch.store/api').replace(/\/$/,'');
 const $=id=>document.getElementById(id);
@@ -7,6 +9,7 @@ let offline=!navigator.onLine;
 let probing=false;
 let lastReason='';
 let lastFallbackAt=0;
+let uiQueued=false;
 
 function injectStyle(){
   if($('kapouchOfflineStyle'))return;
@@ -119,6 +122,7 @@ function installServiceWorkerMessages(){
     if(data.type==='KAPOUCH_NETWORK_OK')acceptNetworkOk();
   });
 }
+function scheduleUi(){if(uiQueued)return;uiQueued=true;requestAnimationFrame(()=>{uiQueued=false;placePanel();updateCheckout();installLogoutCleanup();});}
 function start(){
   injectStyle();installCheckoutGuard();installLogoutCleanup();installServiceWorkerMessages();
   try{if(sessionStorage.getItem('kapouch_effective_offline')==='1')offline=true}catch(e){}
@@ -127,8 +131,8 @@ function start(){
   window.addEventListener('kapouch:network-offline',e=>{lastFallbackAt=Date.now();setOffline(true,String(e.detail?.resource||'network'))});
   window.addEventListener('kapouch:network-online',acceptNetworkOk);
   window.addEventListener('kapouch:profile',decorateCachedData);
-  window.addEventListener('hashchange',()=>requestAnimationFrame(()=>{placePanel();render()}));
-  new MutationObserver(()=>{placePanel();updateCheckout();installLogoutCleanup()}).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden','disabled']});
+  window.addEventListener('hashchange',scheduleUi);
+  new MutationObserver(scheduleUi).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden']});
   render();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();

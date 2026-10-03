@@ -1,0 +1,14 @@
+/* Launch-readiness polish: stable taps, readable forms, visible focus and reduced motion. */
+html{scroll-padding-bottom:112px;-webkit-text-size-adjust:100%}
+body{overscroll-behavior-y:none}
+button,a,input,textarea,select{font:inherit}
+button,a{-webkit-tap-highlight-color:transparent}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible,[role="button"]:focus-visible{outline:3px solid rgba(205,126,38,.42);outline-offset:3px}
+.bottom-nav button,.mini-cart,.search-toggle,.sheet-close,.hero-menu-button,.accent-button,.text-button,.quick-add,.qty-control button{touch-action:manipulation}
+.bottom-nav{padding-bottom:max(9px,env(safe-area-inset-bottom))!important}
+.bottom-nav button{min-height:58px}
+.mini-cart,.search-toggle,.sheet-close,.quick-add,.qty-control button{min-width:44px;min-height:44px}
+.product-card h3,.profile-row strong,.current-order-line span,.home-legal-footer a,.links-card a{overflow-wrap:anywhere}
+.product-photo,.product-detail-image,.hero-drink-image{color:transparent}
+@media(max-width:600px){.search-box input,.checkout-form input,.checkout-form textarea,.auth-form input,.profile-compact-details .auth-form input,.pickup-time-field select{font-size:16px!important}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}.view{animation:none!important}.hero-drink-frame{transform:none!important}}
