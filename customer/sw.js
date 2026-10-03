@@ -1,6 +1,6 @@
-const CACHE='kapouch-pwa-v60';
-const PREVIOUS_CACHE='kapouch-pwa-v59';
-const PREVIOUS_PREVIOUS_CACHE='kapouch-pwa-v58';
+const CACHE='kapouch-pwa-v61';
+const PREVIOUS_CACHE='kapouch-pwa-v60';
+const PREVIOUS_PREVIOUS_CACHE='kapouch-pwa-v59';
 const LEGACY_V56_CACHE='kapouch-pwa-v56';
 const SIXTH_DRINK_CONTRACT_CACHE='kapouch-pwa-v44';
 const LOCAL_NAMES_CONTRACT_CACHE='kapouch-pwa-v43';
@@ -39,13 +39,22 @@ async function prefetchPopularImages(response){if(preferLite())return;const urls
 async function precacheShell(){const cache=await caches.open(CACHE);for(const path of SHELL){const href=new URL(path,self.registration.scope).href,request=new Request(href,{cache:'reload'}),response=await fetch(request);if(!response.ok)throw new TypeError('precache failed '+response.status+' '+path);await cache.put(request,response.clone())}}
 async function catalogStrategy(request){
   const dataCache=await caches.open(DATA_CACHE),cached=await dataCache.match(CATALOG_KEY);
-  const network=fetchWithTimeout(request,4500).then(async response=>{if(response.ok){await dataCache.put(CATALOG_KEY,response.clone());prefetchPopularImages(response.clone()).catch(()=>{});notifyClients('catalog','KAPOUCH_NETWORK_OK').catch(()=>{});}return response;});
+  const network=fetchWithTimeout(request,4500).then(async response=>{
+    if(response.ok){
+      await dataCache.put(CATALOG_KEY,response.clone());
+      prefetchPopularImages(response.clone()).catch(()=>{});
+      notifyClients('catalog','KAPOUCH_NETWORK_OK').catch(()=>{});
+    }else if(response.status>=500){
+      notifyClients('catalog').catch(()=>{});
+    }
+    return response;
+  });
   if(cached){
     try{
       const response=await Promise.race([network,new Promise(resolve=>setTimeout(()=>resolve(null),900))]);
-      if(response){if(response.status>=500){notifyClients('catalog').catch(()=>{});return markOfflineJson(cached)}return response;}
+      if(response){if(response.status>=500)return markOfflineJson(cached);return response;}
       network.catch(()=>notifyClients('catalog').catch(()=>{}));
-      return markOfflineJson(cached);
+      return cached;
     }catch(e){notifyClients('catalog').catch(()=>{});return markOfflineJson(cached)}
   }
   try{return await network}catch(e){throw e}
