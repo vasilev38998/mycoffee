@@ -58,7 +58,7 @@ $checks=[
     'service worker precaches popular product images'=>str_contains($sw,'prefetchPopularImages')&&str_contains($sw,'IMAGE_CACHE')&&str_contains($sw,'featured'),
     'service worker never caches private customer APIs'=>str_contains($sw,'isPrivateApi')&&str_contains($sw,'if(isPrivateApi(url))return;'),
     'QR library is runtime cached for offline card rendering'=>str_contains($sw,'qrcodejs/1.0.0/qrcode.min.js')&&str_contains($sw,'THIRD_PARTY_CACHE'),
-    'service worker uses isolated launch cache'=>str_contains($sw,"const CACHE='kapouch-pwa-v60'")&&str_contains($sw,"const PREVIOUS_CACHE='kapouch-pwa-v59'"),
+    'service worker uses isolated hotfix cache'=>str_contains($sw,"const CACHE='kapouch-pwa-v61'")&&str_contains($sw,"const PREVIOUS_CACHE='kapouch-pwa-v60'"),
     'service worker stages updates instead of replacing a live app'=>str_contains($sw,"self.addEventListener('install',event=>{event.waitUntil(precacheShell())})")&&!str_contains($sw,'precacheShell().then(()=>self.skipWaiting())')&&str_contains($sw,"event.data?.type==='SKIP_WAITING'"),
     'update prompt is part of the shell'=>str_contains($index,'assets/pwa-update.js?v=1')&&str_contains($sw,'./assets/pwa-update.js?v=1')&&str_contains($update,'Доступно обновление Kapouch')&&str_contains($update,"type:'SKIP_WAITING'"),
     'launch accessibility layer keeps focus and reduced motion support'=>str_contains($index,'assets/launch-polish.css?v=1')&&str_contains($launchCss,':focus-visible')&&str_contains($launchCss,'prefers-reduced-motion')&&str_contains($launchCss,'font-size:16px!important'),
