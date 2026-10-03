@@ -36,6 +36,9 @@ jobs:
       - name: PWA profile UX contract
         run: php tests/pwa_profile_ux_contract.php
 
+      - name: PWA launch readiness contract
+        run: php tests/pwa_launch_readiness_contract.php
+
       - name: Customer subdomain contract
         run: php tests/customer_subdomain_contract.php
 
@@ -66,7 +69,7 @@ jobs:
       - name: PWA admin customization contract
         run: php tests/pwa_admin_customization_contract.php
 
-      - name: PWA local names, no-zoom and MAX contract
+      - name: PWA local names, accessible zoom and MAX contract
         run: php tests/pwa_local_names_nozoom_max_contract.php
 
       - name: PWA saved order and pickup countdown contract
