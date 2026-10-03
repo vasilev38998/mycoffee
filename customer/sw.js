@@ -1,6 +1,6 @@
-const CACHE='kapouch-pwa-v59';
-const PREVIOUS_CACHE='kapouch-pwa-v58';
-const PREVIOUS_PREVIOUS_CACHE='kapouch-pwa-v57';
+const CACHE='kapouch-pwa-v60';
+const PREVIOUS_CACHE='kapouch-pwa-v59';
+const PREVIOUS_PREVIOUS_CACHE='kapouch-pwa-v58';
 const LEGACY_V56_CACHE='kapouch-pwa-v56';
 const SIXTH_DRINK_CONTRACT_CACHE='kapouch-pwa-v44';
 const LOCAL_NAMES_CONTRACT_CACHE='kapouch-pwa-v43';
@@ -17,7 +17,7 @@ const DATA_CACHE='kapouch-data-v1';
 const IMAGE_CACHE='kapouch-images-v1';
 const THIRD_PARTY_CACHE='kapouch-third-party-v1';
 const CURRENT_CACHES=new Set([CACHE,DATA_CACHE,IMAGE_CACHE,THIRD_PARTY_CACHE]);
-const SHELL=['./','./index.html','./legal.html','./payment-return.html','./config.js?v=13','./assets/app.css?v=5','./assets/variants.css?v=1','./assets/pwa-v2.css?v=1','./assets/pwa-v3.css?v=1','./assets/contrast-fix.css?v=1','./assets/pwa-polish.css?v=2','./assets/modifiers.css?v=3','./assets/payments.css?v=1','./assets/legal.css?v=2','./assets/redesign-v1.css?v=1','./assets/redesign-v2.css?v=2','./assets/redesign-v2-modules.css?v=2','./assets/redesign-v3-fixes.css?v=1','./assets/redesign-v4-polish.css?v=1','./assets/redesign-v4-polish.css?v=2','./assets/auth-required.css?v=1','./assets/sixth-drink-checkout.css?v=4','./assets/product-disclaimer.css?v=1','./assets/app.js?v=11','./assets/profile-plus.js?v=2','./assets/profile-compact.js?v=2','./assets/profile-avatar.js?v=2','./assets/loyalty-card.js?v=6','./assets/offline-resilience.js?v=1','./assets/status-once.js?v=1','./assets/phone-mask.js?v=1','./assets/auth-required.js?v=1','./assets/sixth-drink-checkout.js?v=7','./assets/product-disclaimer.js?v=1','./assets/pwa-polish.js?v=3','./assets/pwa-standalone.js?v=1','./assets/hero-cup.svg?v=2','./assets/hero-cup.svg?v=3','./assets/hero-bean.webp?v=1','./assets/modifier-price-ui.js?v=1','./assets/payments.js?v=9','./assets/personalization.js?v=2','./assets/current-order.js?v=2','./assets/growth-suite.js?v=3','./assets/push.js?v=2','./assets/legal.js?v=4','./assets/redesign-v1.js?v=3','./assets/saved-order.js?v=1','./assets/pickup-countdown.js?v=1','./assets/wheel.js?v=1','./assets/wheel-polish.js?v=1','./assets/icon.svg','./assets/icon.svg?v=2'];
+const SHELL=['./','./index.html','./legal.html','./payment-return.html','./config.js?v=13','./assets/app.css?v=5','./assets/variants.css?v=1','./assets/pwa-v2.css?v=1','./assets/pwa-v3.css?v=1','./assets/contrast-fix.css?v=1','./assets/pwa-polish.css?v=2','./assets/launch-polish.css?v=1','./assets/modifiers.css?v=3','./assets/payments.css?v=1','./assets/legal.css?v=2','./assets/redesign-v1.css?v=1','./assets/redesign-v2.css?v=2','./assets/redesign-v2-modules.css?v=2','./assets/redesign-v3-fixes.css?v=1','./assets/redesign-v4-polish.css?v=1','./assets/redesign-v4-polish.css?v=2','./assets/auth-required.css?v=1','./assets/sixth-drink-checkout.css?v=4','./assets/product-disclaimer.css?v=1','./assets/app.js?v=11','./assets/profile-plus.js?v=2','./assets/profile-compact.js?v=2','./assets/profile-avatar.js?v=2','./assets/loyalty-card.js?v=6','./assets/offline-resilience.js?v=1','./assets/status-once.js?v=1','./assets/phone-mask.js?v=1','./assets/auth-required.js?v=1','./assets/sixth-drink-checkout.js?v=7','./assets/product-disclaimer.js?v=1','./assets/pwa-polish.js?v=3','./assets/pwa-standalone.js?v=1','./assets/pwa-update.js?v=1','./assets/hero-cup.svg?v=2','./assets/hero-cup.svg?v=3','./assets/hero-bean.webp?v=1','./assets/modifier-price-ui.js?v=1','./assets/payments.js?v=9','./assets/personalization.js?v=2','./assets/current-order.js?v=2','./assets/growth-suite.js?v=3','./assets/push.js?v=2','./assets/legal.js?v=4','./assets/redesign-v1.js?v=3','./assets/saved-order.js?v=1','./assets/pickup-countdown.js?v=1','./assets/wheel.js?v=1','./assets/wheel-polish.js?v=1','./assets/icon.svg','./assets/icon.svg?v=2'];
 const SCOPE_PATH=new URL(self.registration.scope).pathname;
 const CATALOG_KEY=new URL('./__offline/catalog.json',self.registration.scope).href;
 const WHEEL_API_PATH='/api/customer_wheel_api.php';
@@ -36,12 +36,30 @@ async function trimCache(name,maxEntries){const cache=await caches.open(name),ke
 async function markOfflineJson(response){try{const data=await response.clone().json();data.offline=true;data.cached_at=Date.now();return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Kapouch-Offline':'1'}})}catch(e){return response}}
 async function popularImageUrls(response){try{const data=await response.json(),products=Array.isArray(data?.products)?data.products:[];const featured=products.filter(p=>p&&p.featured).slice(0,8),rows=featured.length?featured:products.slice(0,8),out=[];for(const p of rows){if(p?.image)out.push(String(p.image));for(const v of Array.isArray(p?.variants)?p.variants:[])if(v?.image)out.push(String(v.image));if(out.length>=16)break}return [...new Set(out)].slice(0,16).map(src=>{try{return new URL(src,self.registration.scope).href}catch(e){return ''}}).filter(Boolean)}catch(e){return []}}
 async function prefetchPopularImages(response){if(preferLite())return;const urls=await popularImageUrls(response.clone()),cache=await caches.open(IMAGE_CACHE);await Promise.all(urls.map(async url=>{try{if(await cache.match(url))return;const target=new URL(url),req=new Request(url,{mode:target.origin===self.location.origin?'same-origin':'no-cors',credentials:'omit',cache:'no-store'}),res=await fetch(req);if(res.ok||res.type==='opaque')await cache.put(url,res.clone())}catch(e){}}));await trimCache(IMAGE_CACHE,48)}
-async function catalogStrategy(request){const dataCache=await caches.open(DATA_CACHE);try{const response=await fetchWithTimeout(request,4500);if(response.ok){await dataCache.put(CATALOG_KEY,response.clone());prefetchPopularImages(response.clone()).catch(()=>{});notifyClients('catalog','KAPOUCH_NETWORK_OK').catch(()=>{});return response}if(response.status>=500){const cached=await dataCache.match(CATALOG_KEY);if(cached){notifyClients('catalog').catch(()=>{});return markOfflineJson(cached)}}return response}catch(e){const cached=await dataCache.match(CATALOG_KEY);if(cached){notifyClients('catalog').catch(()=>{});return markOfflineJson(cached)}throw e}}
-async function navigationStrategy(request,url){const shell=navShell(url),cache=await caches.open(CACHE);try{const response=await fetchWithTimeout(new Request(request,{cache:'no-store'}),3500);if(response.ok){cache.put(shell,response.clone()).catch(()=>{});notifyClients('navigation','KAPOUCH_NETWORK_OK').catch(()=>{});return response}if(response.status>=500){const cached=await cache.match(shell)||await cache.match('./');if(cached){notifyClients('navigation').catch(()=>{});return cached}}return response}catch(e){const cached=await cache.match(shell)||await cache.match('./');if(cached){notifyClients('navigation').catch(()=>{});return cached}throw e}}
+async function precacheShell(){const cache=await caches.open(CACHE);for(const path of SHELL){const href=new URL(path,self.registration.scope).href,request=new Request(href,{cache:'reload'}),response=await fetch(request);if(!response.ok)throw new TypeError('precache failed '+response.status+' '+path);await cache.put(request,response.clone())}}
+async function catalogStrategy(request){
+  const dataCache=await caches.open(DATA_CACHE),cached=await dataCache.match(CATALOG_KEY);
+  const network=fetchWithTimeout(request,4500).then(async response=>{if(response.ok){await dataCache.put(CATALOG_KEY,response.clone());prefetchPopularImages(response.clone()).catch(()=>{});notifyClients('catalog','KAPOUCH_NETWORK_OK').catch(()=>{});}return response;});
+  if(cached){
+    try{
+      const response=await Promise.race([network,new Promise(resolve=>setTimeout(()=>resolve(null),900))]);
+      if(response){if(response.status>=500){notifyClients('catalog').catch(()=>{});return markOfflineJson(cached)}return response;}
+      network.catch(()=>notifyClients('catalog').catch(()=>{}));
+      return markOfflineJson(cached);
+    }catch(e){notifyClients('catalog').catch(()=>{});return markOfflineJson(cached)}
+  }
+  try{return await network}catch(e){throw e}
+}
+async function navigationStrategy(request,url){
+  const shell=navShell(url),cache=await caches.open(CACHE),cached=await cache.match(shell)||await cache.match('./');
+  if(cached)return cached;
+  const response=await fetchWithTimeout(new Request(request,{cache:'no-store'}),3500);if(response.ok)cache.put(shell,response.clone()).catch(()=>{});return response;
+}
+async function cacheFirst(request,cacheName){const cache=await caches.open(cacheName),cached=await cache.match(request);if(cached)return cached;const response=await fetch(request);if(response.ok||response.type==='opaque')await cache.put(request,response.clone());return response}
 async function staleWhileRevalidate(request,cacheName){const cache=await caches.open(cacheName),cached=await cache.match(request);if(cached&&cacheName===IMAGE_CACHE&&preferLite())return cached;const network=fetch(request).then(async response=>{if(response.ok||response.type==='opaque'){await cache.put(request,response.clone());if(cacheName===IMAGE_CACHE)trimCache(IMAGE_CACHE,48).catch(()=>{})}return response}).catch(()=>null);if(cached){network.catch(()=>{});return cached}const response=await network;if(response)return response;throw new TypeError('offline')}
 async function networkFirstPublic(request,url){const cache=await caches.open(DATA_CACHE),key=new Request(new URL('./__offline/public'+url.pathname,self.registration.scope).href);try{const response=await fetchWithTimeout(request,4500);if(response.ok)cache.put(key,response.clone()).catch(()=>{});return response}catch(e){const cached=await cache.match(key);if(cached){notifyClients('public-data').catch(()=>{});return cached}throw e}}
 
-self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()))});
+self.addEventListener('install',event=>{event.waitUntil(precacheShell())});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('kapouch-')&&!CURRENT_CACHES.has(k)).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
 self.addEventListener('message',event=>{if(event.data?.type==='SKIP_WAITING')self.skipWaiting()});
 self.addEventListener('fetch',event=>{
@@ -54,11 +72,7 @@ self.addEventListener('fetch',event=>{
   if(isPublicData(url)){event.respondWith(networkFirstPublic(req,url));return}
   if(isProductImage(url)){event.respondWith(staleWhileRevalidate(req,IMAGE_CACHE));return}
   if(isQrLibrary(url)){event.respondWith(staleWhileRevalidate(req,THIRD_PARTY_CACHE));return}
-  if(inAppScope(url)){
-    const networkFirst=url.pathname.endsWith('/config.js')||url.pathname.endsWith('/assets/payments.js')||url.pathname.endsWith('/assets/profile-plus.js')||url.pathname.endsWith('/assets/profile-avatar.js')||url.pathname.endsWith('/assets/offline-resilience.js')||url.pathname.endsWith('/assets/redesign-v4-polish.css')||url.pathname.endsWith('/assets/redesign-v3-fixes.js')||url.pathname.endsWith('/assets/pwa-polish.js')||url.pathname.endsWith('/assets/hero-cup.svg')||url.pathname.endsWith('/assets/hero-bean.webp')||url.pathname.endsWith('/assets/saved-order.js')||url.pathname.endsWith('/assets/pickup-countdown.js')||url.pathname.endsWith('/assets/wheel.js')||url.pathname.endsWith('/assets/wheel-polish.js')||url.pathname.endsWith('/assets/sixth-drink-checkout.js')||url.pathname.endsWith('/assets/icon.svg');
-    if(networkFirst){event.respondWith((async()=>{const cache=await caches.open(CACHE);try{const response=await fetchWithTimeout(new Request(req,{cache:'no-store'}),4000);if(response.ok)cache.put(req,response.clone()).catch(()=>{});return response}catch(e){const cached=await cache.match(req);if(cached){notifyClients('asset').catch(()=>{});return cached}throw e}})());return}
-    event.respondWith(staleWhileRevalidate(req,CACHE));
-  }
+  if(inAppScope(url)){event.respondWith(cacheFirst(req,CACHE));}
 });
 self.addEventListener('push',event=>{let data={title:'Kapouch',body:'У вас новое уведомление',url:'./'};try{if(event.data)data={...data,...event.data.json()}}catch(e){if(event.data)data.body=event.data.text()}event.waitUntil(self.registration.showNotification(data.title||'Kapouch',{body:data.body||'',icon:data.icon||'./assets/icon.svg?v=2',badge:data.badge||'./assets/icon.svg?v=2',tag:data.tag||'kapouch',renotify:true,data:{url:data.url||'./'},vibrate:[180,80,180]}))});
 self.addEventListener('notificationclick',event=>{event.notification.close();const target=new URL(event.notification.data?.url||'./',self.registration.scope).href;event.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(list=>{for(const client of list){if('focus'in client){client.navigate(target);return client.focus()}}return clients.openWindow?clients.openWindow(target):undefined}))});
