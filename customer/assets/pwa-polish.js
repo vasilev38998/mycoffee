@@ -5,7 +5,8 @@ window.__KAPOUCH_PWA_POLISH_BOOTSTRAPPED=true;
 const $=id=>document.getElementById(id);
 const cfg=window.KAPOUCH_CUSTOMER_CONFIG||{apiBase:'https://kapouch.store/api'};
 const apiBase=String(cfg.apiBase||'https://kapouch.store/api').replace(/\/$/,'');
-const defaultHero='assets/hero-bean.webp?v=1';
+const defaultHero='assets/hero-bean.webp?v=2';
+const allowCustomHero=cfg.allowCustomHero===true;
 const svg={
   home:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 10.7 12 3l8.5 7.7v9.1a1.2 1.2 0 0 1-1.2 1.2h-5.2v-6.1H9.9V21H4.7a1.2 1.2 0 0 1-1.2-1.2z"/></svg>',
   menu:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>',
@@ -31,10 +32,12 @@ function installHeroCup(){
 }
 function setHeroImage(src){
   installHeroCup();const image=$('heroDrinkImage');if(!image)return;
-  const custom=String(src||'').trim();image.src=custom||defaultHero;image.classList.toggle('custom-hero-image',Boolean(custom));
+  const custom=allowCustomHero?String(src||'').trim():'';
+  image.src=custom||defaultHero;image.classList.toggle('custom-hero-image',Boolean(custom));
   if(custom)image.onerror=()=>{image.onerror=null;image.src=defaultHero;image.classList.remove('custom-hero-image')};
 }
 async function loadHeroImage(){
+  if(!allowCustomHero){setHeroImage('');return;}
   try{const r=await fetch(apiBase+'/customer_catalog.php?hero='+Date.now(),{cache:'no-store',headers:{Accept:'application/json'}});const d=await r.json().catch(()=>null);if(r.ok&&d?.ok)setHeroImage(d.shop?.hero_image||'');}
   catch(e){setHeroImage('')}
 }
