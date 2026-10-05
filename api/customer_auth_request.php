@@ -14,8 +14,8 @@ try{
     $ipLimit=kapouch_rate_limit_hit('customer_auth_request_ip',kapouch_client_ip(),30,3600);
     if(!$ipLimit['allowed']){header('Retry-After: '.(int)$ipLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много запросов подтверждения. Попробуйте позже.']);}
     $data=customer_api_json();$rawPhone=(string)($data['phone']??'');$phone=customer_phone_canonical_ru($rawPhone);
-    $method=strtolower(trim((string)($data['method']??'call')));
-    if(!in_array($method,['call','self_call'],true))customer_api_reply(422,['ok'=>false,'error'=>'Неизвестный способ подтверждения номера.']);
+    $method=strtolower(trim((string)($data['method']??'self_call')));
+    if(!in_array($method,['self_call','call'],true))customer_api_reply(422,['ok'=>false,'error'=>'Неизвестный способ подтверждения номера.']);
     $phoneLimit=kapouch_rate_limit_hit('customer_auth_request_phone',$phone,10,3600);
     if(!$phoneLimit['allowed']){header('Retry-After: '.(int)$phoneLimit['retry_after']);customer_api_reply(429,['ok'=>false,'error'=>'Слишком много запросов подтверждения для этого номера. Попробуйте позже.']);}
     $lock=kapouch_local_lock('customer_auth_code:'.$phone);
@@ -24,7 +24,7 @@ try{
     customer_api_reply(200,['ok'=>true,'auth'=>$auth]);
 }catch(JsonException $e){customer_api_reply(400,['ok'=>false,'error'=>'Некорректный JSON.']);}
 catch(RuntimeException $e){
-    $message=str_replace('или используйте SMS','или выберите «Позвонить самому»',$e->getMessage());
+    $message=str_replace('или используйте SMS','или используйте входящий звонок',$e->getMessage());
     customer_api_reply(422,['ok'=>false,'error'=>$message]);
 }catch(Throwable $e){
     if(function_exists('db_capacity_error')&&db_capacity_error($e)){header('Retry-After: 20');customer_api_reply(503,['ok'=>false,'error'=>'Сервис временно перегружен. Повторите через несколько секунд.']);}
