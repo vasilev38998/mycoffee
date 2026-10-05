@@ -68,7 +68,7 @@ jobs:
         with:
           gradle-version: '4.4'
 
-      - name: Validate Evotor 1.2.29 source contract
+      - name: Validate Evotor 1.2.30 source contract
         run: |
           set -euo pipefail
           BUILD=evotor-app/app/build.gradle
@@ -80,6 +80,8 @@ jobs:
           LOYALTY_DISCOUNT=evotor-app/app/src/main/java/ru/kapouch/evotor/LoyaltyDiscountApi.java
           DISCOUNT_SERVICE=evotor-app/app/src/main/java/ru/kapouch/evotor/KapouchDiscountService.java
           DISCOUNT_TRIGGER=evotor-app/app/src/main/java/ru/kapouch/evotor/ReceiptDiscountTrigger.java
+          CUSTOMER_SESSION=evotor-app/app/src/main/java/ru/kapouch/evotor/CustomerReceiptSession.java
+          RECEIPT_SESSION_RECEIVER=evotor-app/app/src/main/java/ru/kapouch/evotor/ReceiptSessionReceiver.java
           NOTIFICATIONS=evotor-app/app/src/main/java/ru/kapouch/evotor/OrderNotifications.java
           ALERT_PLAYER=evotor-app/app/src/main/java/ru/kapouch/evotor/BaristaAlertPlayer.java
           BRIDGE=api/evotor_bridge.php
@@ -95,8 +97,8 @@ jobs:
           OLD_HEX_B='f36dc1fef61b95e380fff55a283bd471af8e4eee5b614f66e881a49a8812973b'
 
           grep -q "minSdkVersion 22" "$BUILD"
-          grep -q "versionCode 36" "$BUILD"
-          grep -q "versionName '1.2.29'" "$BUILD"
+          grep -q "versionCode 37" "$BUILD"
+          grep -q "versionName '1.2.30'" "$BUILD"
           grep -q "integration-library:v0.4.36" "$BUILD"
 
           # New-order alarm contract: one tone every 15 seconds, indefinitely
@@ -129,7 +131,7 @@ jobs:
           grep -q 'catch (IOException primary)' "$LOYALTY"
           grep -q 'bridgeAction(context, order, action)' "$ORDER"
           grep -q 'bridgeLookup(context, code, terminalToken, bootstrapToken)' "$LOYALTY"
-          grep -q 'Kapouch-Orders-Evotor/1.2.29' "$LOYALTY_DISCOUNT"
+          grep -q 'Kapouch-Orders-Evotor/1.2.30' "$LOYALTY_DISCOUNT"
           grep -q 'https://kapouch.store/evotor-loyalty-discount' "$LOYALTY_DISCOUNT"
 
           grep -q '"complete", "ВЫДАН"' "$MAIN"
@@ -165,14 +167,22 @@ jobs:
           grep -q 'KapouchDiscountService' "$MANIFEST"
           grep -q 'LoyaltyBarcodeConsumedActivity' "$MANIFEST"
           grep -q 'CustomerLinkService' "$MANIFEST"
+          grep -q 'ReceiptSessionReceiver' "$MANIFEST"
+          grep -q 'evotor.intent.action.receipt.sell.RECEIPT_CLOSED' "$MANIFEST"
+          grep -q 'evotor.intent.action.receipt.sell.CLEARED' "$MANIFEST"
           grep -q 'extends SellIntegrationService' "$SELL"
           grep -q 'CustomerScanReceiver.KAPOUCH_PREFIX' "$SELL"
           grep -q 'extends IntegrationActivity' "$CONSUMER"
           grep -q 'extends IntentService' "$LINK"
           grep -q 'extends IntegrationService' "$DISCOUNT_SERVICE"
           grep -q 'ReceiptDiscountEventResult' "$DISCOUNT_SERVICE"
+          grep -q 'CustomerReceiptSession.activeCodeForReceipt' "$DISCOUNT_SERVICE"
           grep -q 'ACTION_TRIGGER_RECEIPT_DISCOUNT_EVENT' "$DISCOUNT_TRIGGER"
           grep -q 'KEY_LOYALTY_CARD_ID' "$DISCOUNT_TRIGGER"
+          grep -q 'CustomerReceiptSession.bindToCurrentReceipt' "$DISCOUNT_TRIGGER"
+          grep -q 'KEY_ACTIVE_RECEIPT_UUID' "$CUSTOMER_SESSION"
+          grep -q '!normalizedReceiptUuid.equals(storedReceiptUuid)' "$CUSTOMER_SESSION"
+          grep -q 'CustomerReceiptSession.clear' "$RECEIPT_SESSION_RECEIVER"
 
           for cert in isrg_root_x1 isrg_root_x2 isrg_root_ye isrg_root_yr digicert_global_root_ca; do
             test -s "$RAW/$cert.pem"
@@ -203,7 +213,7 @@ jobs:
 
           test -s "$APK"
           "$AAPT" dump badging "$APK" | tee /tmp/evotor-badging.txt
-          grep -q "package: name='ru.kapouch.evotor' versionCode='36' versionName='1.2.29'" /tmp/evotor-badging.txt
+          grep -q "package: name='ru.kapouch.evotor' versionCode='37' versionName='1.2.30'" /tmp/evotor-badging.txt
           grep -q "sdkVersion:'22'" /tmp/evotor-badging.txt
           grep -q "targetSdkVersion:'25'" /tmp/evotor-badging.txt
 
@@ -212,11 +222,15 @@ jobs:
           grep -q 'ru.evotor.permission.TRIGGER_RECEIPT_DISCOUNT_EVENT' /tmp/evotor-manifest.txt
           grep -q 'KapouchSellIntegrationService' /tmp/evotor-manifest.txt
           grep -q 'KapouchDiscountService' /tmp/evotor-manifest.txt
+          grep -q 'ReceiptSessionReceiver' /tmp/evotor-manifest.txt
+          grep -q 'evotor.intent.action.receipt.sell.RECEIPT_CLOSED' /tmp/evotor-manifest.txt
+          grep -q 'evotor.intent.action.receipt.sell.CLEARED' /tmp/evotor-manifest.txt
 
           unzip -p "$APK" classes.dex | strings > /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch-Orders-Evotor/1.2.24' /tmp/evotor-dex-strings.txt
-          grep -q 'Kapouch-Orders-Evotor/1.2.29' /tmp/evotor-dex-strings.txt
+          grep -q 'Kapouch-Orders-Evotor/1.2.30' /tmp/evotor-dex-strings.txt
           grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt
+          grep -q 'active_customer_receipt_uuid' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-loyalty-discount' /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_A" /tmp/evotor-dex-strings.txt
           grep -Fq "$HEX_B" /tmp/evotor-dex-strings.txt
