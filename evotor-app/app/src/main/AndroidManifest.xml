@@ -56,15 +56,22 @@
             android:name=".KapouchSellIntegrationService"
             android:enabled="true"
             android:exported="true"
+            android:permission="ru.evotor.permission.SELL_INTEGRATION_SERVICE">
+            <intent-filter>
+                <action android:name="ru.evotor.event.sell.BARCODE_RECEIVED" />
+                <category android:name="android.intent.category.EVOTOR" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".KapouchCustomerCardActionService"
+            android:enabled="true"
+            android:exported="true"
             android:label="Карта Kapouch"
             android:permission="ru.evotor.permission.SELL_INTEGRATION_SERVICE">
             <meta-data
                 android:name="ru.evotor.sales_screen.BACKGROUND_COLOR"
                 android:value="#D5A300" />
-            <intent-filter>
-                <action android:name="ru.evotor.event.sell.BARCODE_RECEIVED" />
-                <category android:name="android.intent.category.EVOTOR" />
-            </intent-filter>
             <intent-filter>
                 <action android:name="ru.evotor.event.sell.DISCOUNT_SCREEN_ADDITIONAL_ITEMS" />
                 <category android:name="android.intent.category.DEFAULT" />
