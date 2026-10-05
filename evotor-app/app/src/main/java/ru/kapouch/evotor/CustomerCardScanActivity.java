@@ -1,6 +1,5 @@
 package ru.kapouch.evotor;
 
-import android.app.Activity;
 import android.content.IntentFilter;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -12,6 +11,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import ru.evotor.framework.core.IntegrationActivity;
+
 /**
  * Dedicated loyalty-card scan mode.
  *
@@ -20,7 +21,7 @@ import android.widget.Toast;
  * treating the QR as a product barcode. This avoids the native "code not found in
  * product database" lookup/message that Evotor performs on the Sell screen.
  */
-public final class CustomerCardScanActivity extends Activity {
+public final class CustomerCardScanActivity extends IntegrationActivity {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private CustomerScanReceiver receiver;
     private boolean registered;
@@ -84,6 +85,15 @@ public final class CustomerCardScanActivity extends Activity {
     protected void onPause() {
         stopScanner();
         super.onPause();
+    }
+
+    @Override
+    public void finish() {
+        // The payment-screen action was opened through Evotor's integration
+        // protocol. Return an empty success bundle so the request is always
+        // completed cleanly after scan or cancel.
+        setIntegrationResult(new Bundle());
+        super.finish();
     }
 
     private void startScanner() {
