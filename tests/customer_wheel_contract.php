@@ -55,7 +55,7 @@ $checks=[
  'wheel prize sound has landing thump and victory chord'=>str_contains($sound,"window.addEventListener('kapouch:wheel',playPrizeSound)")&&str_contains($sound,'tone(118,.13,.04')&&str_contains($sound,'const notes=[523.25,659.25,783.99,1046.5]'),
  'checkout selector includes wheel voucher'=>str_contains($checkout,"data-loyalty-mode=\"wheel\"")&&str_contains($checkout,'wheel_reward_id:wheelRewardId()')&&str_contains($checkout,'Оставить приз на потом'),
  'config loads wheel polish and forwards selected reward'=>str_contains($config,"wheel.src='assets/wheel.js?v=1'")&&str_contains($config,"wheelPolish.src='assets/wheel-polish.js?v=1'")&&str_contains($config,"payload.wheel_reward_id=wheelRewardId()")&&str_contains($config,'customer_wheel_api.php'),
- 'service worker keeps wheel private API uncached and shell-stable'=>str_contains($sw,"const CACHE='kapouch-pwa-v61'")&&str_contains($sw,"./assets/wheel.js?v=1")&&str_contains($sw,"./assets/wheel-polish.js?v=1")&&str_contains($sw,'customer_wheel_api.php')&&str_contains($sw,'if(isPrivateApi(url))return;')&&str_contains($sw,'cacheFirst(req,CACHE)'),
+ 'service worker keeps wheel private API uncached and shell-stable'=>str_contains($sw,"const CACHE='kapouch-pwa-v62'")&&str_contains($sw,"./assets/wheel.js?v=1")&&str_contains($sw,"./assets/wheel-polish.js?v=1")&&str_contains($sw,'customer_wheel_api.php')&&str_contains($sw,'if(isPrivateApi(url))return;')&&str_contains($sw,'cacheFirst(req,CACHE)'),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"Customer wheel contract failed: {$label}\n");exit(1);}echo "OK: {$label}\n";}
 echo "CUSTOMER WHEEL CONTRACT PASSED\n";
