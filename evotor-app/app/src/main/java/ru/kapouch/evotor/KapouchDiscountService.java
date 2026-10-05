@@ -1,7 +1,6 @@
 package ru.kapouch.evotor;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.support.annotation.NonNull;
@@ -20,9 +19,11 @@ import ru.evotor.framework.receipt.Receipt;
 import ru.evotor.framework.receipt.ReceiptApi;
 
 /**
- * Calculates Kapouch's drink reward when Evotor asks for a discount on the
- * current SELL receipt. The loyalty card id is forwarded by newer Evotor
- * firmware; a short-lived local copy is used as a compatibility fallback.
+ * Calculates Kapouch's drink reward for the current SELL receipt.
+ *
+ * A scanned loyalty card is scoped to the receipt UUID. This is deliberately
+ * stricter than the old 30-minute fallback: a card from a completed/cleared
+ * receipt must never be reused on the next customer.
  */
 public final class KapouchDiscountService extends IntegrationService {
     private static final long ACTIVE_CARD_TTL_MS = 30L * 60L * 1000L;
@@ -40,15 +41,6 @@ public final class KapouchDiscountService extends IntegrationService {
                     return;
                 }
 
-                String loyaltyCode = bundle.getString("loyaltyCardId", "");
-                if (loyaltyCode == null || !loyaltyCode.startsWith(CustomerScanReceiver.KAPOUCH_PREFIX)) {
-                    loyaltyCode = recentSavedCode();
-                }
-                if (loyaltyCode == null || !loyaltyCode.startsWith(CustomerScanReceiver.KAPOUCH_PREFIX)) {
-                    callback.skip();
-                    return;
-                }
-
                 Receipt receipt;
                 try {
                     receipt = ReceiptApi.getReceipt(getApplicationContext(), Receipt.Type.SELL);
@@ -60,9 +52,34 @@ public final class KapouchDiscountService extends IntegrationService {
                     callback.skip();
                     return;
                 }
+
+                String currentReceiptUuid = receipt.getHeader().getUuid();
+                if (currentReceiptUuid == null || currentReceiptUuid.trim().isEmpty()) {
+                    callback.skip();
+                    return;
+                }
                 String requestedReceiptUuid = discountEvent.getReceiptUuid();
                 if (requestedReceiptUuid != null && !requestedReceiptUuid.isEmpty()
-                        && !requestedReceiptUuid.equals(receipt.getHeader().getUuid())) {
+                        && !requestedReceiptUuid.equals(currentReceiptUuid)) {
+                    callback.skip();
+                    return;
+                }
+
+                // The local session is the source of truth for ownership of the
+                // scanned QR. It can bind once to a newly-created receipt, but a
+                // different receipt UUID immediately invalidates the old card.
+                String loyaltyCode = CustomerReceiptSession.activeCodeForReceipt(
+                        getApplicationContext(), currentReceiptUuid, ACTIVE_CARD_TTL_MS);
+                if (loyaltyCode == null || !loyaltyCode.startsWith(CustomerScanReceiver.KAPOUCH_PREFIX)) {
+                    callback.skip();
+                    return;
+                }
+
+                String eventCode = bundle.getString("loyaltyCardId", "");
+                if (eventCode != null && eventCode.startsWith(CustomerScanReceiver.KAPOUCH_PREFIX)
+                        && !eventCode.equals(loyaltyCode)) {
+                    // Evotor must not revive an identifier left over from the
+                    // previous receipt if it differs from our current session.
                     callback.skip();
                     return;
                 }
@@ -97,20 +114,13 @@ public final class KapouchDiscountService extends IntegrationService {
                 // reward and removes one stamp for the gifted drink.
                 callback.onResult(new ReceiptDiscountEventResult(resultingDiscount, null, Collections.emptyList()));
                 if (!quote.alreadyApplied) {
-                    final String receiptUuid = receipt.getHeader().getUuid();
+                    final String receiptUuid = currentReceiptUuid;
                     final Context app = getApplicationContext();
                     new Thread(() -> LoyaltyDiscountApi.confirm(app, receiptUuid), "kapouch-discount-confirm").start();
                 }
             }
         });
         return processors;
-    }
-
-    private String recentSavedCode() {
-        SharedPreferences prefs = getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE);
-        long activeAt = prefs.getLong(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_AT, 0L);
-        if (activeAt <= 0L || System.currentTimeMillis() - activeAt > ACTIVE_CARD_TTL_MS) return "";
-        return prefs.getString(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_CODE, "");
     }
 
     private void saveLast(String title, String description) {
