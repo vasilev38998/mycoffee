@@ -77,25 +77,26 @@ public class CustomerScanReceiver extends BroadcastReceiver {
                             .putString(KEY_ACTIVE_CUSTOMER_BALANCE, balance)
                             .putString(KEY_ACTIVE_CUSTOMER_CODE, code)
                             .putLong(KEY_ACTIVE_CUSTOMER_AT, System.currentTimeMillis())
+                            .remove(CustomerReceiptSession.KEY_ACTIVE_RECEIPT_UUID)
                             .putString(MainActivity.KEY_LAST_TITLE, "Клиент Kapouch определён")
                             .putString(MainActivity.KEY_LAST_DESCRIPTION, message)
                             .putLong(MainActivity.KEY_LAST_AT, System.currentTimeMillis())
                             .apply();
 
-                    // If a SELL receipt is already open, Evotor receives the
-                    // Kapouch discount request immediately. No manual tap on the
-                    // discount icon is required.
+                    // If a SELL receipt is already open, bind this card to that
+                    // receipt and ask Evotor to recalculate the discount now.
                     ReceiptDiscountTrigger.trigger(appContext, code, null);
                 } else {
                     message = "Kapouch: " + result.error;
+                    CustomerReceiptSession.clear(appContext);
                     prefs.edit()
-                            .remove(KEY_ACTIVE_CUSTOMER_CODE)
                             .putString(MainActivity.KEY_LAST_TITLE, "QR-карта Kapouch")
                             .putString(MainActivity.KEY_LAST_DESCRIPTION, result.error)
                             .putLong(MainActivity.KEY_LAST_AT, System.currentTimeMillis())
                             .apply();
                 }
             } catch (RuntimeException e) {
+                CustomerReceiptSession.clear(appContext);
                 String detail = e.getMessage();
                 if (detail == null || detail.trim().isEmpty()) detail = e.getClass().getSimpleName();
                 message = "Kapouch: " + detail;

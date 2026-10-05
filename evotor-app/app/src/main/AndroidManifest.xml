@@ -80,6 +80,16 @@
             android:exported="false" />
 
         <receiver
+            android:name=".ReceiptSessionReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="evotor.intent.action.receipt.sell.RECEIPT_CLOSED" />
+                <action android:name="evotor.intent.action.receipt.sell.CLEARED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".PushReceiver"
             android:enabled="true"
             android:exported="true"
