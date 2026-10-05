@@ -9,7 +9,7 @@ $trigger=file_get_contents($root.'/evotor-app/app/src/main/java/ru/kapouch/evoto
 $build=file_get_contents($root.'/evotor-app/app/build.gradle');
 
 $checks=[
-    'Evotor app version bumped for terminal update'=>str_contains($build,'versionCode 37')&&str_contains($build,"versionName '1.2.30'"),
+    'Evotor app version bumped for terminal update'=>str_contains($build,'versionCode 38')&&str_contains($build,"versionName '1.2.31'"),
     'receipt lifecycle receiver is registered'=>str_contains($manifest,'android:name=".ReceiptSessionReceiver"'),
     'closed receipt clears loyalty session'=>str_contains($manifest,'evotor.intent.action.receipt.sell.RECEIPT_CLOSED')&&str_contains($receiver,'CustomerReceiptSession.clear'),
     'manually cleared receipt clears loyalty session'=>str_contains($manifest,'evotor.intent.action.receipt.sell.CLEARED'),
