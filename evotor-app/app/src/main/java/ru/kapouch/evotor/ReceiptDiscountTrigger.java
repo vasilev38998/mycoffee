@@ -47,7 +47,18 @@ final class ReceiptDiscountTrigger {
             finish(listener, false, "Не удалось прочитать открытый чек");
             return;
         }
-        if (receipt == null || receipt.getHeader() == null || receipt.getPositions() == null || receipt.getPositions().isEmpty()) {
+        if (receipt == null || receipt.getHeader() == null) {
+            // The scan is still remembered as unbound and may attach once when
+            // Evotor creates the receipt and requests the discount.
+            CustomerReceiptSession.bindToCurrentReceipt(app, loyaltyCode);
+            finish(listener, false, "Откройте чек — карта применится только к нему");
+            return;
+        }
+
+        // Bind before checking positions: the receipt header already gives us the
+        // boundary that prevents this customer from leaking into the next check.
+        CustomerReceiptSession.bindToCurrentReceipt(app, loyaltyCode);
+        if (receipt.getPositions() == null || receipt.getPositions().isEmpty()) {
             finish(listener, false, "Открытый чек пуст — скидка применится при переходе к оплате");
             return;
         }
