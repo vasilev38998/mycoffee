@@ -34,7 +34,7 @@ $checks=[
  'Evotor reminder runs every 15 seconds'=>str_contains($notifications,'REMINDER_DELAY_MS = 15_000L'),
  'Evotor reminder continues while order is new'=>str_contains($notifications,'return order != null && "new".equals(order.status);')&&!str_contains($notifications,'MAX_REMINDERS'),
  'each Evotor reminder cycle plays one explicit tone'=>str_contains($player,'play(context, 1);')&&!str_contains($player,'play(context, 3);'),
- 'Evotor APK version is bumped'=>str_contains($gradle,'versionCode 37')&&str_contains($gradle,"versionName '1.2.30'"),
+ 'Evotor APK version is bumped'=>str_contains($gradle,'versionCode 38')&&str_contains($gradle,"versionName '1.2.31'"),
  'birthday column migration exists'=>str_contains($m40,'ADD COLUMN birth_date DATE'),
  'existing customers are excluded from retroactive welcome bonus'=>str_contains($m41,'welcome_bonus_granted_at')&&str_contains($m41,'UPDATE customer_accounts'),
  'welcome bonus is idempotent and configurable'=>str_contains($welcome,"app_setting('customer_welcome_bonus','100')")&&str_contains($welcome,'welcome_bonus_granted_at=NOW()'),
