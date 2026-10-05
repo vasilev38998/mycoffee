@@ -83,6 +83,7 @@ jobs:
           CUSTOMER_SESSION=evotor-app/app/src/main/java/ru/kapouch/evotor/CustomerReceiptSession.java
           RECEIPT_SESSION_RECEIVER=evotor-app/app/src/main/java/ru/kapouch/evotor/ReceiptSessionReceiver.java
           CUSTOMER_SCAN=evotor-app/app/src/main/java/ru/kapouch/evotor/CustomerCardScanActivity.java
+          CUSTOMER_ACTION=evotor-app/app/src/main/java/ru/kapouch/evotor/KapouchCustomerCardActionService.java
           NOTIFICATIONS=evotor-app/app/src/main/java/ru/kapouch/evotor/OrderNotifications.java
           ALERT_PLAYER=evotor-app/app/src/main/java/ru/kapouch/evotor/BaristaAlertPlayer.java
           BRIDGE=api/evotor_bridge.php
@@ -166,6 +167,7 @@ jobs:
           grep -q 'ru.evotor.event.sell.DISCOUNT_SCREEN_ADDITIONAL_ITEMS' "$MANIFEST"
           grep -q 'evo.v2.receipt.sell.receiptDiscount' "$MANIFEST"
           grep -q 'KapouchSellIntegrationService' "$MANIFEST"
+          grep -q 'KapouchCustomerCardActionService' "$MANIFEST"
           grep -q 'KapouchDiscountService' "$MANIFEST"
           grep -q 'LoyaltyBarcodeConsumedActivity' "$MANIFEST"
           grep -q 'CustomerCardScanActivity' "$MANIFEST"
@@ -175,10 +177,17 @@ jobs:
           grep -q 'evotor.intent.action.receipt.sell.CLEARED' "$MANIFEST"
           grep -q 'extends SellIntegrationService' "$SELL"
           grep -q 'CustomerScanReceiver.KAPOUCH_PREFIX' "$SELL"
-          grep -q 'DiscountScreenAdditionalItemsEvent' "$SELL"
-          grep -q 'CustomerCardScanActivity.class' "$SELL"
-          grep -q 'Intent.FLAG_ACTIVITY_NEW_TASK' "$SELL"
+          if grep -q 'DiscountScreenAdditionalItemsEvent' "$SELL"; then
+            echo 'Legacy Evotor SDK cannot compile DiscountScreenAdditionalItemsEvent.' >&2
+            exit 1
+          fi
+          grep -q 'extends IntegrationService' "$CUSTOMER_ACTION"
+          grep -q 'ru.evotor.event.sell.DISCOUNT_SCREEN_ADDITIONAL_ITEMS' "$CUSTOMER_ACTION"
+          grep -q 'callback.startActivity' "$CUSTOMER_ACTION"
+          grep -q 'CustomerCardScanActivity.class' "$CUSTOMER_ACTION"
           grep -q 'extends IntegrationActivity' "$CONSUMER"
+          grep -q 'extends IntegrationActivity' "$CUSTOMER_SCAN"
+          grep -q 'setIntegrationResult(new Bundle())' "$CUSTOMER_SCAN"
           grep -q 'CustomerScanReceiver.ACTION_SCANNED' "$CUSTOMER_SCAN"
           grep -q 'ru.evotor.devices.SCANNER_SENDER' "$CUSTOMER_SCAN"
           grep -q 'registerReceiver' "$CUSTOMER_SCAN"
@@ -231,6 +240,7 @@ jobs:
           grep -q 'ru.evotor.event.sell.DISCOUNT_SCREEN_ADDITIONAL_ITEMS' /tmp/evotor-manifest.txt
           grep -q 'ru.evotor.permission.TRIGGER_RECEIPT_DISCOUNT_EVENT' /tmp/evotor-manifest.txt
           grep -q 'KapouchSellIntegrationService' /tmp/evotor-manifest.txt
+          grep -q 'KapouchCustomerCardActionService' /tmp/evotor-manifest.txt
           grep -q 'CustomerCardScanActivity' /tmp/evotor-manifest.txt
           grep -q 'KapouchDiscountService' /tmp/evotor-manifest.txt
           grep -q 'ReceiptSessionReceiver' /tmp/evotor-manifest.txt
@@ -241,6 +251,7 @@ jobs:
           grep -q 'Kapouch-Orders-Evotor/1.2.24' /tmp/evotor-dex-strings.txt
           grep -q 'Kapouch-Orders-Evotor/1.2.31' /tmp/evotor-dex-strings.txt
           grep -q 'KAPOUCH:LOYALTY:' /tmp/evotor-dex-strings.txt
+          grep -q 'KapouchCustomerCardActionService' /tmp/evotor-dex-strings.txt
           grep -q 'CustomerCardScanActivity' /tmp/evotor-dex-strings.txt
           grep -q 'active_customer_receipt_uuid' /tmp/evotor-dex-strings.txt
           grep -q 'evotor-loyalty-discount' /tmp/evotor-dex-strings.txt
