@@ -84,6 +84,9 @@ jobs:
       - name: Evotor order push queue contract
         run: php tests/evotor_order_push_queue_contract.php
 
+      - name: Evotor loyalty receipt reset contract
+        run: php tests/evotor_loyalty_receipt_reset_contract.php
+
       - name: PWA payment return contract
         run: |
           set -euo pipefail
