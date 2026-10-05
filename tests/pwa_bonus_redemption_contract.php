@@ -36,7 +36,7 @@ $checks=[
   'fetch wrapper injects explicit loyalty mode into checkout'=>str_contains($config,'function attachLoyaltyMode')&&str_contains($config,'payload.loyalty_mode=loyaltyMode()')&&str_contains($config,'init=attachLoyaltyMode(input,init)'),
   'checkout handles zero due without demanding SBP URL'=>str_contains($checkout,"finalMethod=String(order.payment_method||method)")&&str_contains($checkout,"if(finalMethod==='sbp')"),
   'choice and point controls have styles'=>str_contains($uiCss,'.loyalty-choice-option')&&str_contains($uiCss,'.loyalty-spend-controls')&&str_contains($uiCss,'.loyalty-spend-head'),
-  'fresh checkout assets are loaded'=>str_contains($config,'sixth-drink-checkout.js?v=7')&&str_contains($config,'sixth-drink-checkout.css?v=4')&&str_contains($index,'config.js?v=13')&&str_contains($index,'payments.js?v=9'),
+  'fresh checkout assets are loaded'=>str_contains($config,'sixth-drink-checkout.js?v=7')&&str_contains($config,'sixth-drink-checkout.css?v=4')&&str_contains($index,'config.js?v=14')&&str_contains($index,'payments.js?v=9'),
   'service worker shell keeps loyalty assets fresh'=>str_contains($sw,"kapouch-pwa-v56")&&str_contains($sw,'./assets/sixth-drink-checkout.js?v=7')&&str_contains($sw,'./assets/sixth-drink-checkout.css?v=4')&&str_contains($sw,'./assets/payments.js?v=9'),
 ];
 foreach($checks as $label=>$ok){if(!$ok){fwrite(STDERR,"PWA bonus redemption contract failed: {$label}\n");exit(1);}}
