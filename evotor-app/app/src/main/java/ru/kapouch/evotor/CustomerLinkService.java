@@ -41,6 +41,7 @@ public final class CustomerLinkService extends IntentService {
             linked = result != null && result.ok;
             message = saveResult(result, code);
         } catch (RuntimeException e) {
+            CustomerReceiptSession.clear(getApplicationContext());
             String detail = e.getMessage();
             if (detail == null || detail.trim().isEmpty()) detail = e.getClass().getSimpleName();
             message = "Kapouch: " + detail;
@@ -61,15 +62,13 @@ public final class CustomerLinkService extends IntentService {
 
     private String saveResult(LoyaltyApi.Result result, String code) {
         if (result == null) {
+            CustomerReceiptSession.clear(getApplicationContext());
             saveLastMessage("QR-карта Kapouch", "Kapouch не вернул результат проверки клиента.");
             return "Kapouch: не удалось проверить клиента";
         }
 
         if (!result.ok) {
-            getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
-                    .edit()
-                    .remove(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_CODE)
-                    .apply();
+            CustomerReceiptSession.clear(getApplicationContext());
             String error = result.error == null || result.error.trim().isEmpty()
                     ? "Не удалось проверить клиента."
                     : result.error;
@@ -97,6 +96,7 @@ public final class CustomerLinkService extends IntentService {
                 .putString(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_BALANCE, balance)
                 .putString(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_CODE, code)
                 .putLong(CustomerScanReceiver.KEY_ACTIVE_CUSTOMER_AT, now)
+                .remove(CustomerReceiptSession.KEY_ACTIVE_RECEIPT_UUID)
                 .putString(MainActivity.KEY_LAST_TITLE, "Клиент Kapouch определён")
                 .putString(MainActivity.KEY_LAST_DESCRIPTION, message)
                 .putLong(MainActivity.KEY_LAST_AT, now)
