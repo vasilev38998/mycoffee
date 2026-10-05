@@ -23,7 +23,7 @@ $checks=[
     'Evotor loyalty discount endpoint is public and sessionless'=>str_contains($access,"'evotor_loyalty_discount.php'")&&str_contains($access,'kapouch_sessionless_pages'),
     'Evotor discount has extensionless Apache route'=>str_contains($htaccess,'evotor-loyalty-discount')&&str_contains($htaccess,'api/evotor_loyalty_discount.php'),
     'Evotor APK uses extensionless discount transport'=>str_contains($discount,'https://kapouch.store/evotor-loyalty-discount')&&!str_contains($discount,'https://kapouch.store/api/evotor_loyalty_discount.php'),
-    'Evotor APK bumped for terminal install'=>str_contains($build,'versionCode 37')&&str_contains($build,"versionName '1.2.30'")&&str_contains($discount,'Kapouch-Orders-Evotor/1.2.30'),
+    'Evotor APK bumped for terminal install'=>str_contains($build,'versionCode 38')&&str_contains($build,"versionName '1.2.31'")&&str_contains($discount,'Kapouch-Orders-Evotor/1.2.31'),
     'Evotor alert repeats every 15 seconds until accepted'=>str_contains($notifications,'REMINDER_DELAY_MS = 15_000L')&&str_contains($notifications,'return order != null && "new".equals(order.status);')&&!str_contains($notifications,'MAX_REMINDERS'),
     'Evotor alert uses one explicit tone per reminder'=>str_contains($alertPlayer,'play(context, 1);')&&!str_contains($alertPlayer,'play(context, 3);')&&str_contains($notifications,'channel.setSound(null, null)'),
     'Evotor discount quote coalesces loyalty refresh'=>str_contains($discountApi,'customer_loyalty_refresh_customer_if_due($customerId,20,15)')&&!str_contains($discountApi,'customer_drink_loyalty_refresh_customer($customerId,100)'),

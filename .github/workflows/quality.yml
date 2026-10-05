@@ -87,6 +87,9 @@ jobs:
       - name: Evotor loyalty receipt reset contract
         run: php tests/evotor_loyalty_receipt_reset_contract.php
 
+      - name: Evotor loyalty scan mode contract
+        run: php tests/evotor_loyalty_scan_mode_contract.php
+
       - name: PWA payment return contract
         run: |
           set -euo pipefail
