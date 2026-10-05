@@ -4,6 +4,7 @@ import android.content.Intent;
 
 import java.util.Collections;
 
+import ru.evotor.framework.receipt.formation.event.DiscountScreenAdditionalItemsEvent;
 import ru.evotor.framework.receipt.formation.event.ReturnPositionsForBarcodeRequestedEvent;
 import ru.evotor.framework.receipt.formation.event.handler.service.SellIntegrationService;
 
@@ -43,5 +44,18 @@ public final class KapouchSellIntegrationService extends SellIntegrationService 
         return new ReturnPositionsForBarcodeRequestedEvent.Result(
                 Collections.emptyList(),
                 true);
+    }
+
+    @Override
+    public Void handleEvent(DiscountScreenAdditionalItemsEvent event) {
+        // The stock Sell screen always performs its own product lookup for every
+        // physical scan, including a loyalty QR. There is no supported flag that
+        // disables that lookup for one barcode. Give the cashier a dedicated
+        // scan mode from Evotor's payment screen instead: while our activity is
+        // foreground, the Sell screen is paused and the QR goes only to Kapouch.
+        Intent intent = new Intent(this, CustomerCardScanActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        return null;
     }
 }
