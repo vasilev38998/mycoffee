@@ -20,7 +20,7 @@ $checks=[
   'interactive controls keep practical touch targets'=>str_contains($launchCss,'min-width:44px')&&str_contains($launchCss,'min-height:44px'),
   'product dialog has dialog semantics'=>str_contains($index,'role="dialog"')&&str_contains($index,'aria-modal="true"')&&str_contains($index,'aria-labelledby="productName"'),
   'status and errors expose live regions'=>str_contains($index,'id="orderStatusStrip" role="status" aria-live="polite"')&&str_contains($index,'id="checkoutError" role="alert"'),
-  'service worker stages updates'=>str_contains($sw,"const CACHE='kapouch-pwa-v61'")&&str_contains($sw,"const PREVIOUS_CACHE='kapouch-pwa-v60'")&&str_contains($sw,'precacheShell()')&&!str_contains($sw,'precacheShell().then(()=>self.skipWaiting())'),
+  'service worker stages updates'=>str_contains($sw,"const CACHE='kapouch-pwa-v62'")&&str_contains($sw,"const PREVIOUS_CACHE='kapouch-pwa-v61'")&&str_contains($sw,'precacheShell()')&&!str_contains($sw,'precacheShell().then(()=>self.skipWaiting())'),
   'update prompt can explicitly activate waiting worker'=>str_contains($update,"type:'SKIP_WAITING'")&&str_contains($sw,"event.data?.type==='SKIP_WAITING'")&&str_contains($index,'assets/pwa-update.js?v=1'),
   'navigation uses consistent cached shell'=>str_contains($sw,'async function navigationStrategy')&&str_contains($sw,'if(cached)return cached;'),
   'versioned app assets use cache-first stability'=>str_contains($sw,'async function cacheFirst')&&str_contains($sw,'if(inAppScope(url)){event.respondWith(cacheFirst(req,CACHE));}'),
