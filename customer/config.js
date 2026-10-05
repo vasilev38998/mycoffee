@@ -220,7 +220,7 @@ window.addEventListener('DOMContentLoaded',function(){
   document.body.appendChild(phoneMask);
 
   var callAuth=document.createElement('script');
-  callAuth.src='assets/auth-call.js?v=3';
+  callAuth.src='assets/auth-call.js?v=4';
   callAuth.defer=true;
   document.body.appendChild(callAuth);
 
